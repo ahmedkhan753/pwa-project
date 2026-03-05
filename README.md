@@ -8,11 +8,14 @@ Professional Progressive Web App (PWA) for vehicle appraisers. Synchronized with
 - **Infrastructure:** Docker, FastAPI (Backend Ready)
 
 ## Quick Start
-1. `npm install`
-2. `npm run dev`
 
-## Core Features
-1. **Offline-First Persistence:** Session data is never lost thanks to local storage syncing.
-2. **Optimized Images:** Automatic base64 compression for high-resolution photo uploads.
-3. **11-Step Inspection Workflow:** Intuitive wizard for complete vehicle appraisal.
-4. **Mobile Optimized:** Designed for one-handed operation in the field.
+### Local Development
+1. `npm install`
+2. `npm run dev` (Access at [http://localhost:3000](http://localhost:3000))
+
+### Docker Workflow
+1. `docker-compose up --build` (Access at [http://localhost:3000](http://localhost:3000))
+
+## Troubleshooting
+- If `'next' is not recognized`, ensure you have run `npm install` successfully.
+- If `docker-compose` fails, ensure the `docker-compose.yml` file is present in the root.
