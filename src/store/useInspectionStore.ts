@@ -56,17 +56,17 @@ export const useInspectionStore = create<InspectionState>()(
         (set) => ({
             currentStep: 1,
             data: initialData,
-            setStep: (step) => set({ currentStep: step }),
-            updateData: (stepName, data) =>
-                set((state) => ({
+            setStep: (step: number) => set({ currentStep: step }),
+            updateData: (stepName: keyof StepData, data: any) =>
+                set((state: InspectionState) => ({
                     data: { ...state.data, [stepName]: data }
                 })),
-            addPhoto: (base64) =>
-                set((state) => ({
+            addPhoto: (base64: string) =>
+                set((state: InspectionState) => ({
                     data: { ...state.data, photos: [...state.data.photos, base64] }
                 })),
             copyTireData: () =>
-                set((state) => {
+                set((state: InspectionState) => {
                     const { wheel1 } = state.data.tires;
                     // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { treadDepth, ...otherData } = wheel1;
