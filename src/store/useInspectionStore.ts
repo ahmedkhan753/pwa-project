@@ -1,27 +1,26 @@
-```typescript
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type StepData = {
-  vehicleData: {
-    vin?: string;
-    model?: string;
-    [key: string]: any;
-  };
-  equipment: Record<string, any>;
-  paint: Record<string, any>;
-  tires: {
-    wheel1: { treadDepth: string; brand?: string; size?: string; condition?: string; [key: string]: any };
-    wheel2: { treadDepth: string; brand?: string; size?: string; condition?: string; [key: string]: any };
-    wheel3: { treadDepth: string; brand?: string; size?: string; condition?: string; [key: string]: any };
-    wheel4: { treadDepth: string; brand?: string; size?: string; condition?: string; [key: string]: any };
-  };
-  photos: string[]; // base64 strings
-  exterior: Record<string, any>;
-  interior: Record<string, any>;
-  mech1: Record<string, any>;
-  mech2: Record<string, any>;
-  notes: string;
+    vehicleData: {
+        vin?: string;
+        model?: string;
+        [key: string]: any;
+    };
+    equipment: Record<string, any>;
+    paint: Record<string, any>;
+    tires: {
+        wheel1: { treadDepth: string; brand?: string; size?: string; condition?: string;[key: string]: any };
+        wheel2: { treadDepth: string; brand?: string; size?: string; condition?: string;[key: string]: any };
+        wheel3: { treadDepth: string; brand?: string; size?: string; condition?: string;[key: string]: any };
+        wheel4: { treadDepth: string; brand?: string; size?: string; condition?: string;[key: string]: any };
+    };
+    photos: string[]; // base64 strings
+    exterior: Record<string, any>;
+    interior: Record<string, any>;
+    mech1: Record<string, any>;
+    mech2: Record<string, any>;
+    notes: string;
 };
 
 interface InspectionState {
