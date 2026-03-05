@@ -1,0 +1,37 @@
+"use client";
+
+import { useState } from "react";
+
+interface TireMaskInputProps {
+    value: string;
+    onChange: (value: string) => void;
+    label: string;
+}
+
+export function TireMaskInput({ value, onChange, label }: TireMaskInputProps) {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/[^0-9]/g, '');
+        if (val.length > 2) val = val.substring(0, 2);
+
+        if (val.length === 2) {
+            val = `${val[0]},${val[1]}`;
+        }
+
+        onChange(val);
+    };
+
+    return (
+        <div className="flex flex-col gap-1 mb-4">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{label}</label>
+            <input
+                type="text"
+                inputMode="decimal"
+                value={value}
+                onChange={handleInputChange}
+                placeholder="X,X"
+                className="text-2xl font-mono py-3 px-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 outline-none transition-colors"
+            />
+            <p className="text-[10px] text-gray-400">Format: 5,4 (mm)</p>
+        </div>
+    );
+}
