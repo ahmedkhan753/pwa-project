@@ -2,24 +2,49 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { ProgressBar } from "./ProgressBar";
-import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Send, Save } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
 
 const STEPS = [
-    "Vehicle Data", "Equipment", "Paint", "Tires", "Photos",
-    "Exterior", "Interior", "Mech 1", "Mech 2", "Notes", "Summary"
+    { num: 1, short: "Dane", label: "Dane Pojazdu" },
+    { num: 2, short: "Kompl.", label: "Kompletność" },
+    { num: 3, short: "Wypos.", label: "Wyposażenie" },
+    { num: 4, short: "Lakier", label: "Pomiar Lakieru" },
+    { num: 5, short: "Opony", label: "Opony" },
+    { num: 6, short: "Zdjęcia", label: "Zdjęcia" },
+    { num: 7, short: "Zewn.", label: "Uszkodz. Zewn." },
+    { num: 8, short: "Wewn.", label: "Uszkodz. Wewn." },
+    { num: 9, short: "Mech.", label: "Mechanika" },
+    { num: 10, short: "Uwagi", label: "Uwagi i Wycena" },
+    { num: 11, short: "Wyślij", label: "Podsumowanie" },
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
-    const { currentStep, setStep, data } = useInspectionStore();
+    const { currentStep, maxVisitedStep, setStep } = useInspectionStore();
     const totalSteps = STEPS.length;
+    const [showSaved, setShowSaved] = useState(false);
 
-    const isStepValid = () => {
-        if (currentStep === 1) {
-            return !!data.vehicleData?.vin && !!data.vehicleData?.model;
-        }
-        // For other steps, we can add more validation
-        return true;
-    };
+    // Auto-save indicator
+    useEffect(() => {
+        const handleStorage = () => {
+            setShowSaved(true);
+            setTimeout(() => setShowSaved(false), 1500);
+        };
+        window.addEventListener("storage", handleStorage);
+        // Also show on any store update
+        const timer = setInterval(() => {
+            const saved = localStorage.getItem("inspection-storage");
+            if (saved) {
+                setShowSaved(true);
+                setTimeout(() => setShowSaved(false), 1500);
+            }
+        }, 30000);
+        return () => {
+            window.removeEventListener("storage", handleStorage);
+            clearInterval(timer);
+        };
+    }, []);
 
     const next = () => {
         if (currentStep < totalSteps) setStep(currentStep + 1);
@@ -29,35 +54,99 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         if (currentStep > 1) setStep(currentStep - 1);
     };
 
+    const goToStep = (step: number) => {
+        if (step <= maxVisitedStep || step === currentStep + 1) {
+            setStep(step);
+        }
+    };
+
     return (
-        <div className="flex flex-col min-h-screen max-w-lg mx-auto bg-white shadow-lg overflow-x-hidden">
-            <header className="sticky top-0 z-10 bg-white p-4 border-b">
+        <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden">
+            {/* ── Header ─────────────────────────────────────── */}
+            <header className="sticky top-0 z-30 bg-[#0f172a] text-white px-4 pt-3 pb-2 shadow-lg">
                 <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-lg font-bold">Step {currentStep}: {STEPS[currentStep - 1]}</h2>
-                    <span className="text-sm font-medium text-gray-500">{currentStep} / {totalSteps}</span>
+                    <div>
+                        <h2 className="text-base font-bold tracking-tight">
+                            {STEPS[currentStep - 1].label}
+                        </h2>
+                        <p className="text-xs text-blue-300 font-medium">
+                            Krok {currentStep} z {totalSteps}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {showSaved && (
+                            <span className="flex items-center gap-1 text-xs text-emerald-400 animate-fade-in">
+                                <Save size={12} />
+                                Zapisano
+                            </span>
+                        )}
+                    </div>
                 </div>
+
+                {/* Step Dots */}
+                <div className="flex items-center gap-1 justify-between mb-2 overflow-x-auto py-1 no-scrollbar">
+                    {STEPS.map((step) => (
+                        <button
+                            key={step.num}
+                            onClick={() => goToStep(step.num)}
+                            aria-label={`Go to step ${step.num}: ${step.label}`}
+                            className={cn(
+                                "step-dot",
+                                step.num === currentStep && "active",
+                                step.num < currentStep && "completed",
+                                step.num > currentStep && "upcoming",
+                                step.num > maxVisitedStep && step.num !== currentStep + 1 && "opacity-40 cursor-not-allowed"
+                            )}
+                        >
+                            {step.num}
+                        </button>
+                    ))}
+                </div>
+
                 <ProgressBar currentStep={currentStep} totalSteps={totalSteps} />
             </header>
 
-            <main className="flex-1 p-4 overflow-y-auto pb-24">
+            {/* ── Main Content ───────────────────────────────── */}
+            <main className="flex-1 p-4 overflow-y-auto pb-28 animate-fade-in" key={currentStep}>
                 {children}
             </main>
 
-            <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-md p-4 border-t flex justify-between gap-4">
+            {/* ── Bottom Navigation ──────────────────────────── */}
+            <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-3 flex gap-3 safe-area-bottom">
                 <button
                     onClick={prev}
                     disabled={currentStep === 1}
-                    className="flex-1 py-3 px-4 rounded-xl font-semibold border border-gray-300 disabled:opacity-30 active:bg-gray-100 transition-colors"
+                    aria-label="Previous step"
+                    className={cn(
+                        "flex-1 py-3.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]",
+                        currentStep === 1
+                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                            : "bg-surface border-2 border-border text-foreground hover:bg-gray-50 active:bg-gray-100"
+                    )}
                 >
-                    Previous
+                    <ChevronLeft size={18} />
+                    Wstecz
                 </button>
-                <button
-                    onClick={next}
-                    disabled={!isStepValid()}
-                    className="flex-1 py-3 px-4 rounded-xl font-semibold bg-blue-600 text-white disabled:bg-gray-300 disabled:text-gray-500 active:bg-blue-700 transition-colors"
-                >
-                    {currentStep === totalSteps ? "Finish" : "Next"}
-                </button>
+
+                {currentStep === totalSteps ? (
+                    <button
+                        onClick={() => { }}
+                        aria-label="Submit inspection"
+                        className="flex-1 py-3.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-[0.98]"
+                    >
+                        <Send size={18} />
+                        WYŚLIJ
+                    </button>
+                ) : (
+                    <button
+                        onClick={next}
+                        aria-label="Next step"
+                        className="flex-1 py-3.5 px-4 rounded-xl font-bold text-sm bg-primary text-white flex items-center justify-center gap-2 shadow-md hover:bg-primary-hover transition-all duration-200 active:scale-[0.98]"
+                    >
+                        Dalej
+                        <ChevronRight size={18} />
+                    </button>
+                )}
             </footer>
         </div>
     );

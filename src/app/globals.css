@@ -2,27 +2,300 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Premium Design Tokens ────────────────────────────── */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* Core palette */
   --primary: #2563eb;
-  --secondary: #64748b;
+  --primary-hover: #1d4ed8;
+  --primary-light: #dbeafe;
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-light: #fef3c7;
+
+  /* Surfaces */
+  --background: #f1f5f9;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-glass: rgba(255, 255, 255, 0.85);
+
+  /* Text */
+  --foreground: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+
+  /* Status */
+  --success: #16a34a;
+  --success-light: #dcfce7;
+  --danger: #dc2626;
+  --danger-light: #fee2e2;
+  --warning: #ea580c;
+  --warning-light: #fff7ed;
+
+  /* Borders */
   --border: #e2e8f0;
+  --border-focus: #2563eb;
   --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #020617;
-    --foreground: #f8fafc;
     --primary: #3b82f6;
-    --secondary: #94a3b8;
-    --border: #1e293b;
+    --primary-hover: #2563eb;
+    --primary-light: #1e3a5f;
+    --accent: #fbbf24;
+    --accent-hover: #f59e0b;
+    --accent-light: #422006;
+
+    --background: #0f172a;
+    --surface: #1e293b;
+    --surface-raised: #334155;
+    --surface-glass: rgba(30, 41, 59, 0.85);
+
+    --foreground: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    --success: #22c55e;
+    --success-light: #14532d;
+    --danger: #ef4444;
+    --danger-light: #450a0a;
+    --warning: #f97316;
+    --warning-light: #431407;
+
+    --border: #334155;
+    --border-focus: #3b82f6;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    --shadow-glow: 0 0 0 3px rgba(59, 130, 246, 0.2);
   }
+}
+
+/* ─── Base Styles ─────────────────────────────────────── */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100dvh;
+}
+
+/* ─── Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 999px;
+}
+
+/* ─── Input Focus Glow ────────────────────────────────── */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--border-focus) !important;
+  box-shadow: var(--shadow-glow) !important;
+}
+
+/* ─── Glassmorphism Card ──────────────────────────────── */
+.glass-card {
+  background: var(--surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* ─── Section Card ────────────────────────────────────── */
+.section-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Status Badges ───────────────────────────────────── */
+.badge-success {
+  background: var(--success-light);
+  color: var(--success);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-danger {
+  background: var(--danger-light);
+  color: var(--danger);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-warning {
+  background: var(--warning-light);
+  color: var(--warning);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ─── Smooth Animations ───────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* ─── High Contrast Outdoor Toggle ────────────────────── */
+.toggle-tak {
+  background: var(--success);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(22, 163, 74, 0.3);
+}
+
+.toggle-nie {
+  background: var(--danger);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+}
+
+.toggle-nd {
+  background: var(--text-muted);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* ─── Paint Status Colors ─────────────────────────────── */
+.paint-ok {
+  fill: #22c55e;
+  stroke: #16a34a;
+}
+
+.paint-repainted {
+  fill: #f59e0b;
+  stroke: #d97706;
+}
+
+.paint-putty {
+  fill: #ef4444;
+  stroke: #dc2626;
+}
+
+.paint-empty {
+  fill: #e2e8f0;
+  stroke: #94a3b8;
+}
+
+/* ─── Photo Slot ──────────────────────────────────────── */
+.photo-slot {
+  aspect-ratio: 4/3;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--surface);
+}
+
+.photo-slot:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.photo-slot.filled {
+  border-style: solid;
+  border-color: var(--success);
+}
+
+/* ─── Signature Canvas ────────────────────────────────── */
+.signature-canvas-wrapper {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+  position: relative;
+  touch-action: none;
+}
+
+/* ─── Step Dot Navigation ─────────────────────────────── */
+.step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.step-dot.active {
+  background: var(--primary);
+  color: #ffffff;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.step-dot.completed {
+  background: var(--success);
+  color: #ffffff;
+}
+
+.step-dot.upcoming {
+  background: var(--border);
+  color: var(--text-muted);
 }
