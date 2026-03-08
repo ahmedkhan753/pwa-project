@@ -2,7 +2,7 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { ProgressBar } from "./ProgressBar";
-import { ChevronLeft, ChevronRight, Send, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
@@ -21,7 +21,7 @@ const STEPS = [
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
-    const { currentStep, maxVisitedStep, setStep } = useInspectionStore();
+    const { currentStep, maxVisitedStep, setStep, logout, selectJob } = useInspectionStore();
     const totalSteps = STEPS.length;
     const [showSaved, setShowSaved] = useState(false);
 
@@ -75,11 +75,25 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     </div>
                     <div className="flex items-center gap-2">
                         {showSaved && (
-                            <span className="flex items-center gap-1 text-xs text-emerald-400 animate-fade-in">
-                                <Save size={12} />
+                            <span className="flex items-center gap-1 text-[10px] text-emerald-400 animate-fade-in bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                <Save size={10} />
                                 Zapisano
                             </span>
                         )}
+                        <button
+                            onClick={() => selectJob(null)}
+                            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-400"
+                            title="Dashboard"
+                        >
+                            <Home size={18} />
+                        </button>
+                        <button
+                            onClick={logout}
+                            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-red-400"
+                            title="Wyloguj"
+                        >
+                            <LogOut size={18} />
+                        </button>
                     </div>
                 </div>
 

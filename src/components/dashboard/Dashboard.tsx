@@ -77,10 +77,11 @@ export const Dashboard: React.FC = () => {
                     </button>
                     <button
                         onClick={logout}
-                        className="p-2 hover:bg-slate-800 rounded-xl transition-colors"
                         title="Wyloguj"
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-slate-800 rounded-xl transition-colors text-red-400"
                     >
-                        <LogOut className="w-5 h-5 text-red-400" />
+                        <LogOut className="w-5 h-5" />
+                        <span className="text-xs font-bold">Wyloguj</span>
                     </button>
                 </div>
             </header>
