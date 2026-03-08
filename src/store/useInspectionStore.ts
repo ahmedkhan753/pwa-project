@@ -1,6 +1,23 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+// ─── Auth & Jobs Types ──────────────────────────────────────
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface InspectionJob {
+  id: string;
+  clientName: string;
+  vin: string;
+  plates: string;
+  phone: string;
+  appointmentTime: string;
+  status: 'pending' | 'completed';
+}
+
 // ─── Toggle Type ───────────────────────────────────────────
 export type ToggleValue = 'TAK' | 'NIE' | 'ND' | null;
 
@@ -104,7 +121,7 @@ export interface FullEquipment {
 // ─── Step 4: Paint Measurement ─────────────────────────────
 export interface PaintZone {
   value: string;  // µm reading
-  status: 'ok' | 'repainted' | 'putty' | '' ;
+  status: 'ok' | 'repainted' | 'putty' | '';
 }
 
 export interface PaintMeasurement {
@@ -198,6 +215,7 @@ export interface MechanicalChecklist {
   // Test drive
   testDriveConducted: ToggleValue;
   testDriveImpossible: ToggleValue;
+  testDriveImpossibleText: string;
   testDriveComment: string;
 }
 
@@ -251,7 +269,34 @@ interface InspectionState {
   currentStep: number;
   maxVisitedStep: number;
   data: StepData;
+  // Auth
+  auth: {
+    isAuthenticated: boolean;
+    token: string | null;
+    user: AuthUser | null;
+    loading: boolean;
+    error: string | null;
+  };
+  // Jobs
+  jobs: {
+    list: InspectionJob[];
+    currentJobId: string | null;
+    loading: boolean;
+    error: string | null;
+  };
+
+  // Actions
   setStep: (step: number) => void;
+  // Auth Actions
+  setAuth: (auth: Partial<InspectionState['auth']>) => void;
+  login: (email: string, token: string, user: AuthUser) => void;
+  logout: () => void;
+  // Job Actions
+  setJobsLoading: (loading: boolean) => void;
+  setJobs: (jobs: InspectionJob[]) => void;
+  setJobsError: (error: string | null) => void;
+  selectJob: (jobId: string | null) => void;
+
   updateField: <K extends keyof StepData>(
     step: K,
     field: string,
@@ -396,7 +441,7 @@ const initialData: StepData = {
     steeringPump: null, exhaustSystem: null, airConditioning: null,
     heatingSystem: null, electricalSystem: null, batteryCondition: null,
     lightsAll: null, wipers: null, horn: null,
-    testDriveConducted: null, testDriveImpossible: null, testDriveComment: '',
+    testDriveConducted: null, testDriveImpossible: null, testDriveImpossibleText: '', testDriveComment: '',
   },
   notesValuation: {
     registrationDocPresented: null, vehicleCardPresented: null,
@@ -421,12 +466,92 @@ export const useInspectionStore = create<InspectionState>()(
       currentStep: 1,
       maxVisitedStep: 1,
       data: initialData,
+      auth: {
+        isAuthenticated: false,
+        token: null,
+        user: null,
+        loading: false,
+        error: null,
+      },
+      jobs: {
+        list: [],
+        currentJobId: null,
+        loading: false,
+        error: null,
+      },
 
       setStep: (step: number) =>
         set((state) => ({
           currentStep: step,
           maxVisitedStep: Math.max(state.maxVisitedStep, step),
         })),
+
+      // ── Auth Actions ──
+      setAuth: (authUpdate) =>
+        set((state) => ({ auth: { ...state.auth, ...authUpdate } })),
+
+      login: (email, token, user) =>
+        set(() => ({
+          auth: {
+            isAuthenticated: true,
+            token,
+            user,
+            loading: false,
+            error: null,
+          },
+        })),
+
+      logout: () =>
+        set(() => ({
+          auth: {
+            isAuthenticated: false,
+            token: null,
+            user: null,
+            loading: false,
+            error: null,
+          },
+          jobs: { list: [], currentJobId: null, loading: false, error: null },
+          currentStep: 1,
+          maxVisitedStep: 1,
+          data: initialData,
+        })),
+
+      // ── Job Actions ──
+      setJobsLoading: (loading) =>
+        set((state) => ({ jobs: { ...state.jobs, loading } })),
+
+      setJobs: (list) =>
+        set((state) => ({ jobs: { ...state.jobs, list, loading: false, error: null } })),
+
+      setJobsError: (error) =>
+        set((state) => ({ jobs: { ...state.jobs, error, loading: false } })),
+
+      selectJob: (jobId) =>
+        set((state) => {
+          if (!jobId) {
+            return {
+              jobs: { ...state.jobs, currentJobId: null },
+              currentStep: 1,
+              data: initialData,
+            };
+          }
+
+          const job = state.jobs.list.find((j) => j.id === jobId);
+          if (!job) return state;
+
+          // Pre-fill Step 1 with job data
+          const newData = { ...initialData };
+          newData.vehicleData.basicInfo.userOwner = job.clientName;
+          newData.vehicleData.vin = job.vin;
+          newData.vehicleData.registrationPlates = job.plates;
+          // Optionally add more pre-filled fields here
+
+          return {
+            jobs: { ...state.jobs, currentJobId: jobId },
+            currentStep: 1,
+            data: newData,
+          };
+        }),
 
       updateField: (step, field, value) =>
         set((state) => ({
