@@ -1,9 +1,4 @@
-"use client";
-
-import { useInspectionStore } from "@/store/useInspectionStore";
-import { SignaturePad } from "../SignaturePad";
-import { CheckCircle2, AlertCircle, Trash2, Send, Car } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { submissionQueue } from "@/lib/submissionQueue";
 
 export function SummaryStep() {
     const { data, updateField, setSignature, reset } = useInspectionStore();
@@ -12,21 +7,26 @@ export function SummaryStep() {
 
     const hasSignatures = !!(summary.signatureAppraiser && summary.signatureClient);
 
-    const handleSubmit = () => {
-        // Build JSON payload for Bitrix24
-        const payload = {
-            ...data,
-            submittedAt: new Date().toISOString(),
-        };
-        console.log('Submission payload:', payload);
-        updateField('finalSummary', 'submittedAt', new Date().toISOString());
-        updateField('finalSummary', 'submissionStatus', 'submitted');
-        alert('Inspekcja wysłana pomyślnie!');
+    const handleSubmit = async () => {
+        updateField('finalSummary', 'submissionStatus', 'pending');
+
+        const success = await submissionQueue.submitReport(data);
+
+        if (success) {
+            updateField('finalSummary', 'submissionStatus', 'submitted');
+            updateField('finalSummary', 'submittedAt', new Date().toISOString());
+            alert('Raport wysłany pomyślnie!');
+        } else {
+            updateField('finalSummary', 'submissionStatus', 'error');
+            submissionQueue.startBackgroundRetry();
+            alert('Wystąpił problem z połączeniem. Raport zostanie wysłany automatycznie w tle, gdy sygnał powróci.');
+        }
     };
 
     const handleReset = () => {
         if (confirm('Czy na pewno chcesz usunąć wszystkie dane? Ta operacja jest nieodwracalna.')) {
             reset();
+            window.location.reload();
         }
     };
 
