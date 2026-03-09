@@ -1,3 +1,9 @@
+"use client";
+
+import { useInspectionStore } from "@/store/useInspectionStore";
+import { SignaturePad } from "../SignaturePad";
+import { CheckCircle2, AlertCircle, Trash2, Send, Car } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { submissionQueue } from "@/lib/submissionQueue";
 
 export function SummaryStep() {
