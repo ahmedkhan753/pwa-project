@@ -1,5 +1,10 @@
 "use client";
 
+import { useInspectionStore } from "@/store/useInspectionStore";
+import { ProgressBar } from "./ProgressBar";
+import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
 import { SummaryReviewModal } from "./SummaryReviewModal";
 
 const STEPS = [
