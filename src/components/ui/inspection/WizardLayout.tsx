@@ -1,10 +1,6 @@
 "use client";
 
-import { useInspectionStore } from "@/store/useInspectionStore";
-import { ProgressBar } from "./ProgressBar";
-import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { SummaryReviewModal } from "./SummaryReviewModal";
 
 const STEPS = [
     { num: 1, short: "Dane", label: "Dane Pojazdu" },
@@ -24,6 +20,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const { currentStep, maxVisitedStep, setStep, logout, selectJob } = useInspectionStore();
     const totalSteps = STEPS.length;
     const [showSaved, setShowSaved] = useState(false);
+    const [showReviewModal, setShowReviewModal] = useState(false);
 
     // Auto-save indicator
     useEffect(() => {
@@ -47,6 +44,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     }, []);
 
     const next = () => {
+        if (currentStep === 10) {
+            setShowReviewModal(true);
+            return;
+        }
         if (currentStep < totalSteps) setStep(currentStep + 1);
     };
 
@@ -55,9 +56,18 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     };
 
     const goToStep = (step: number) => {
+        if (step === 11 && currentStep < 11) {
+            setShowReviewModal(true);
+            return;
+        }
         if (step <= maxVisitedStep || step === currentStep + 1) {
             setStep(step);
         }
+    };
+
+    const handleConfirmReview = () => {
+        setShowReviewModal(false);
+        setStep(11);
     };
 
     return (
@@ -162,6 +172,12 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     </button>
                 )}
             </footer>
+
+            <SummaryReviewModal
+                isOpen={showReviewModal}
+                onClose={() => setShowReviewModal(false)}
+                onContinue={handleConfirmReview}
+            />
         </div>
     );
 }
