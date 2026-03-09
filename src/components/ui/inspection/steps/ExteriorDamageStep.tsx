@@ -84,10 +84,10 @@ export function ExteriorDamageStep() {
 
             <button
                 onClick={handleAdd}
-                className="w-full py-3.5 border-2 border-dashed border-primary text-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary-light transition-colors active:scale-[0.98]"
+                className="w-full py-5 border-2 border-dashed border-primary text-primary rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-primary-light transition-all active:scale-[0.95]"
                 aria-label="Add exterior damage"
             >
-                <Plus size={18} />
+                <Plus size={20} className="stroke-[3]" />
                 Dodaj uszkodzenie
             </button>
         </div>
