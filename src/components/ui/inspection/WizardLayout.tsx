@@ -141,19 +141,19 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             </main>
 
             {/* ── Bottom Navigation ──────────────────────────── */}
-            <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-3 flex gap-3 safe-area-bottom">
+            <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-4 flex gap-4 safe-area-bottom shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
                 <button
                     onClick={prev}
                     disabled={currentStep === 1}
                     aria-label="Previous step"
                     className={cn(
-                        "flex-1 py-3.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]",
+                        "flex-1 py-5 px-6 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.95]",
                         currentStep === 1
                             ? "bg-gray-100 text-gray-300 cursor-not-allowed"
-                            : "bg-surface border-2 border-border text-foreground hover:bg-gray-50 active:bg-gray-100"
+                            : "bg-white border-2 border-slate-200 text-slate-700 hover:border-primary/50 shadow-sm"
                     )}
                 >
-                    <ChevronLeft size={18} />
+                    <ChevronLeft size={20} className="stroke-[3]" />
                     Wstecz
                 </button>
 
@@ -161,19 +161,19 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     <button
                         onClick={() => { }}
                         aria-label="Submit inspection"
-                        className="flex-1 py-3.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-[0.98]"
+                        className="flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 text-white flex items-center justify-center gap-2 shadow-xl shadow-orange-500/20 active:scale-[0.95] uppercase ring-2 ring-orange-400 ring-offset-2"
                     >
-                        <Send size={18} />
-                        WYŚLIJ
+                        <Send size={20} className="stroke-[3]" />
+                        WYŚLIJ RAPORT
                     </button>
                 ) : (
                     <button
                         onClick={next}
                         aria-label="Next step"
-                        className="flex-1 py-3.5 px-4 rounded-xl font-bold text-sm bg-primary text-white flex items-center justify-center gap-2 shadow-md hover:bg-primary-hover transition-all duration-200 active:scale-[0.98]"
+                        className="flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest bg-primary text-white flex items-center justify-center gap-2 shadow-xl shadow-primary/20 hover:bg-primary-hover active:scale-[0.95] uppercase ring-4 ring-primary/10"
                     >
                         Dalej
-                        <ChevronRight size={18} />
+                        <ChevronRight size={20} className="stroke-[3]" />
                     </button>
                 )}
             </footer>
