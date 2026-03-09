@@ -126,7 +126,7 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                 <div className="flex gap-4 mt-4 justify-center items-center">
                     <div className="flex items-center gap-1.5">
                         <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm" />
-                        <span className="text-[10px] font-bold text-secondary tracking-tight"><150µm</span>
+                        <span className="text-[10px] font-bold text-secondary tracking-tight">{"<150µm"}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <div className="w-3 h-3 rounded-full bg-amber-500 shadow-sm" />
@@ -134,7 +134,7 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                     </div>
                     <div className="flex items-center gap-1.5">
                         <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm" />
-                        <span className="text-[10px] font-bold text-secondary tracking-tight">>300µm</span>
+                        <span className="text-[10px] font-bold text-secondary tracking-tight">{">300µm"}</span>
                     </div>
                 </div>
             </div>

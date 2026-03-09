@@ -40,6 +40,7 @@ export function InteriorDamageStep() {
             type: '',
             size: '',
             description: '',
+            action: '',
             photos: [],
         };
         addDamage('interiorDamage', entry);

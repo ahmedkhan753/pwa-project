@@ -41,6 +41,7 @@ export function ExteriorDamageStep() {
             type: '',
             size: '',
             description: '',
+            action: '',
             photos: [],
         };
         addDamage('exteriorDamage', entry);

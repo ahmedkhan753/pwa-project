@@ -81,6 +81,24 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
                         </select>
                     </div>
 
+                    {/* Action Select */}
+                    <div>
+                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
+                            Działanie
+                        </label>
+                        <select
+                            value={entry.action}
+                            onChange={(e) => onUpdate({ action: e.target.value as any })}
+                            aria-label="Damage action"
+                            className="w-full py-3 px-4 rounded-xl border-2 border-border bg-surface text-foreground font-medium appearance-none"
+                        >
+                            <option value="">Wybierz działanie...</option>
+                            <option value="Naprawa">Naprawa</option>
+                            <option value="Wymiana">Wymiana</option>
+                            <option value="Polerowanie">Polerowanie</option>
+                        </select>
+                    </div>
+
                     {/* Size */}
                     <div>
                         <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
@@ -113,8 +131,13 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
 
                     {/* Damage Photos */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-2 block">
-                            Zdjęcia uszkodzenia
+                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-2 flex items-center justify-between">
+                            <span>Zdjęcia uszkodzenia</span>
+                            {entry.photos.length < 2 && (
+                                <span className="text-[10px] text-danger font-bold animate-pulse">
+                                    Min. 2 zdjęcia wymagane
+                                </span>
+                            )}
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                             {entry.photos.map((photo, i) => (

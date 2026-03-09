@@ -13,8 +13,10 @@ export function TireMaskInput({ value, onChange, label }: TireMaskInputProps) {
         let val = e.target.value.replace(/[^0-9]/g, '');
         if (val.length > 2) val = val.substring(0, 2);
 
-        if (val.length === 2) {
-            val = `${val[0]},${val[1]}`;
+        if (val.length >= 1) {
+            const first = val[0];
+            const second = val[1] || '';
+            val = second ? `${first},${second}` : first;
         }
 
         onChange(val);

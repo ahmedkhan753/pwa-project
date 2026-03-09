@@ -1,4 +1,4 @@
-export async function compressImage(file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> {
+export async function compressImage(file: File, maxWidth = 1600, maxHeight = 1600, quality = 0.6): Promise<string> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -27,7 +27,8 @@ export async function compressImage(file: File, maxWidth = 800, maxHeight = 800,
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, width, height);
 
-                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                // Use WebP for better compression in localStorage
+                const dataUrl = canvas.toDataURL('image/webp', quality);
                 resolve(dataUrl);
             };
             img.onerror = reject;
