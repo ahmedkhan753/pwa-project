@@ -183,6 +183,7 @@ export interface DamageEntry {
   type: string;
   size: string;
   description: string;
+  action: 'Naprawa' | 'Wymiana' | 'Polerowanie' | '';
   photos: string[];  // base64
 }
 
@@ -621,16 +622,17 @@ export const useInspectionStore = create<InspectionState>()(
       copyTiresToAxle: (source, target) =>
         set((state) => {
           const src = state.data.tires[source];
-          const { treadDepth: _ignore, ...copyData } = src;
+          // We only copy Brand, Size, and Type (exclude treadDepth and DOT)
+          const { brand, size, type } = src;
           const newTires = { ...state.data.tires };
 
           if (target === 'front' || target === 'all') {
-            newTires.frontLeft = { ...copyData, treadDepth: newTires.frontLeft.treadDepth };
-            newTires.frontRight = { ...copyData, treadDepth: newTires.frontRight.treadDepth };
+            newTires.frontLeft = { ...newTires.frontLeft, brand, size, type };
+            newTires.frontRight = { ...newTires.frontRight, brand, size, type };
           }
           if (target === 'rear' || target === 'all') {
-            newTires.rearLeft = { ...copyData, treadDepth: newTires.rearLeft.treadDepth };
-            newTires.rearRight = { ...copyData, treadDepth: newTires.rearRight.treadDepth };
+            newTires.rearLeft = { ...newTires.rearLeft, brand, size, type };
+            newTires.rearRight = { ...newTires.rearRight, brand, size, type };
           }
 
           return { data: { ...state.data, tires: newTires } };

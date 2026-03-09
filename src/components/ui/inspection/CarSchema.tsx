@@ -10,40 +10,40 @@ interface CarSchemaProps {
     onZoneUpdate: (zone: string, data: PaintZone) => void;
 }
 
-const ZONES: { id: string; label: string; x: number; y: number; w: number; h: number }[] = [
+const ZONES: { id: string; label: string; x: number; y: number; w: number; h: number; path?: string }[] = [
     // Top-down view coordinates (percentage based)
-    { id: "hood", label: "Maska", x: 35, y: 2, w: 30, h: 14 },
-    { id: "frontBumper", label: "Zderzak przód", x: 30, y: 0, w: 40, h: 3 },
-    { id: "leftFrontFender", label: "Błotnik LP", x: 10, y: 4, w: 24, h: 12 },
-    { id: "rightFrontFender", label: "Błotnik PP", x: 66, y: 4, w: 24, h: 12 },
-    { id: "leftFrontDoor", label: "Drzwi LP", x: 10, y: 18, w: 24, h: 15 },
-    { id: "rightFrontDoor", label: "Drzwi PP", x: 66, y: 18, w: 24, h: 15 },
-    { id: "leftAColumn", label: "Słupek A L", x: 6, y: 16, w: 5, h: 4 },
-    { id: "rightAColumn", label: "Słupek A P", x: 89, y: 16, w: 5, h: 4 },
-    { id: "leftBColumn", label: "Słupek B L", x: 6, y: 33, w: 5, h: 4 },
-    { id: "rightBColumn", label: "Słupek B P", x: 89, y: 33, w: 5, h: 4 },
-    { id: "roof", label: "Dach", x: 35, y: 20, w: 30, h: 25 },
-    { id: "leftRearDoor", label: "Drzwi LT", x: 10, y: 35, w: 24, h: 15 },
-    { id: "rightRearDoor", label: "Drzwi PT", x: 66, y: 35, w: 24, h: 15 },
-    { id: "leftCColumn", label: "Słupek C L", x: 6, y: 50, w: 5, h: 4 },
-    { id: "rightCColumn", label: "Słupek C P", x: 89, y: 50, w: 5, h: 4 },
-    { id: "leftRearFender", label: "Błotnik LT", x: 10, y: 52, w: 24, h: 14 },
-    { id: "rightRearFender", label: "Błotnik PT", x: 66, y: 52, w: 24, h: 14 },
-    { id: "leftSill", label: "Próg L", x: 5, y: 22, w: 5, h: 38 },
-    { id: "rightSill", label: "Próg P", x: 90, y: 22, w: 5, h: 38 },
-    { id: "trunk", label: "Klapa bagażnika", x: 35, y: 68, w: 30, h: 14 },
-    { id: "rearBumper", label: "Zderzak tył", x: 30, y: 82, w: 40, h: 3 },
+    { id: "frontBumper", label: "Zderzak przód", x: 30, y: 0, w: 40, h: 5 },
+    { id: "hood", label: "Maska", x: 30, y: 6, w: 40, h: 18 },
+    { id: "leftFrontFender", label: "Błotnik LP", x: 10, y: 5, w: 18, h: 18 },
+    { id: "rightFrontFender", label: "Błotnik PP", x: 72, y: 5, w: 18, h: 18 },
+    { id: "leftFrontDoor", label: "Drzwi LP", x: 10, y: 24, w: 18, h: 22 },
+    { id: "rightFrontDoor", label: "Drzwi PP", x: 72, y: 24, w: 18, h: 22 },
+    { id: "leftAColumn", label: "Słup A L", x: 28, y: 24, w: 4, h: 6 },
+    { id: "rightAColumn", label: "Słup A P", x: 68, y: 24, w: 4, h: 6 },
+    { id: "roof", label: "Dach", x: 32, y: 25, w: 36, h: 36 },
+    { id: "leftBColumn", label: "Słup B L", x: 28, y: 44, w: 4, h: 6 },
+    { id: "rightBColumn", label: "Słup B P", x: 68, y: 44, w: 4, h: 6 },
+    { id: "leftRearDoor", label: "Drzwi LT", x: 10, y: 47, w: 18, h: 22 },
+    { id: "rightRearDoor", label: "Drzwi PT", x: 72, y: 47, w: 18, h: 22 },
+    { id: "leftCColumn", label: "Słup C L", x: 28, y: 64, w: 4, h: 6 },
+    { id: "rightCColumn", label: "Słup C P", x: 68, y: 64, w: 4, h: 6 },
+    { id: "leftRearFender", label: "Błotnik LT", x: 10, y: 70, w: 18, h: 18 },
+    { id: "rightRearFender", label: "Błotnik PT", x: 72, y: 70, w: 18, h: 18 },
+    { id: "leftSill", label: "Próg L", x: 5, y: 25, w: 4, h: 45 },
+    { id: "rightSill", label: "Próg P", x: 91, y: 25, w: 4, h: 45 },
+    { id: "trunk", label: "Klapa tył", x: 30, y: 64, w: 40, h: 15 },
+    { id: "rearBumper", label: "Zderzak tył", x: 30, y: 80, w: 40, h: 5 },
 ];
 
 function getZoneColor(zone: PaintZone): string {
-    if (!zone.value) return "fill-gray-200 dark:fill-gray-700 stroke-gray-400";
+    if (!zone.value) return "fill-gray-100 dark:fill-gray-800 stroke-gray-300";
     const val = parseInt(zone.value);
-    if (zone.status === 'putty') return "paint-putty";
-    if (zone.status === 'repainted') return "paint-repainted";
-    if (val > 0 && val <= 200) return "paint-ok";
-    if (val > 200 && val <= 500) return "paint-repainted";
-    if (val > 500) return "paint-putty";
-    return "paint-ok";
+    if (zone.status === 'putty') return "fill-red-500 stroke-red-600";
+    if (zone.status === 'repainted') return "fill-amber-500 stroke-amber-600";
+    if (val > 0 && val < 150) return "fill-green-500 stroke-green-600";
+    if (val >= 150 && val <= 300) return "fill-amber-500 stroke-amber-600";
+    if (val > 300) return "fill-red-500 stroke-red-600";
+    return "fill-green-500 stroke-green-600";
 }
 
 export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
@@ -70,42 +70,51 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
     return (
         <div className="space-y-4">
             {/* Car Diagram */}
-            <div className="relative bg-surface rounded-2xl border border-border p-4 overflow-hidden">
-                <svg viewBox="0 0 100 88" className="w-full" style={{ maxHeight: '420px' }}>
-                    {/* Car body outline */}
-                    <rect x="8" y="1" width="84" height="85" rx="12" ry="12"
-                        fill="none" stroke="var(--border)" strokeWidth="0.5" />
+            <div className="relative bg-surface rounded-2xl border border-border p-4 overflow-hidden shadow-sm">
+                <svg viewBox="0 0 100 90" className="w-full" style={{ maxHeight: '420px' }}>
+                    {/* Car silhouette background */}
+                    <path
+                        d="M30 2 Q30 0 50 0 Q70 0 70 2 L75 5 Q88 8 90 20 L92 70 Q90 85 75 88 L50 90 L25 88 Q10 85 8 70 L10 20 Q12 8 25 5 Z"
+                        fill="none" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="2,2 opacity-20"
+                    />
+
                     {/* Clickable zones */}
                     {ZONES.map((zone) => {
                         const zoneData = paint[zone.id] || { value: '', status: '' };
+                        const isFilled = !!zoneData.value;
+
                         return (
-                            <g key={zone.id} onClick={() => openModal(zone.id)} className="cursor-pointer">
+                            <g key={zone.id} onClick={() => openModal(zone.id)} className="cursor-pointer group">
                                 <rect
                                     x={zone.x} y={zone.y}
                                     width={zone.w} height={zone.h}
-                                    rx="1.5" ry="1.5"
+                                    rx="2" ry="2"
                                     className={cn(
-                                        "transition-all duration-200 stroke-[0.4]",
-                                        getZoneColor(zoneData)
+                                        "transition-all duration-300 stroke-[0.3]",
+                                        getZoneColor(zoneData),
+                                        "group-active:scale-[0.98]"
                                     )}
-                                    opacity={0.85}
+                                    opacity={isFilled ? 0.9 : 0.4}
                                 />
                                 <text
-                                    x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 - 1}
+                                    x={zone.x + zone.w / 2} y={zone.y + (isFilled ? zone.h / 2 - 1.5 : zone.h / 2)}
                                     textAnchor="middle"
                                     dominantBaseline="middle"
-                                    className="fill-foreground text-[2px] font-bold pointer-events-none select-none"
+                                    className={cn(
+                                        "font-bold pointer-events-none select-none",
+                                        isFilled ? "fill-white text-[2px]" : "fill-secondary text-[1.8px]"
+                                    )}
                                 >
                                     {zone.label}
                                 </text>
-                                {zoneData.value && (
+                                {isFilled && (
                                     <text
-                                        x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 + 2.5}
+                                        x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 + 2}
                                         textAnchor="middle"
                                         dominantBaseline="middle"
-                                        className="fill-foreground text-[2.5px] font-bold pointer-events-none select-none"
+                                        className="fill-white text-[2.5px] font-black pointer-events-none select-none"
                                     >
-                                        {zoneData.value} µm
+                                        {zoneData.value}
                                     </text>
                                 )}
                             </g>
@@ -114,18 +123,18 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                 </svg>
 
                 {/* Legend */}
-                <div className="flex gap-3 mt-3 justify-center flex-wrap">
-                    <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-sm bg-green-500" />
-                        <span className="text-[10px] text-secondary">OK (≤200µm)</span>
+                <div className="flex gap-4 mt-4 justify-center items-center">
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm" />
+                        <span className="text-[10px] font-bold text-secondary tracking-tight"><150µm</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-sm bg-amber-500" />
-                        <span className="text-[10px] text-secondary">Lakierowane</span>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-full bg-amber-500 shadow-sm" />
+                        <span className="text-[10px] font-bold text-secondary tracking-tight">150-300µm</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-sm bg-red-500" />
-                        <span className="text-[10px] text-secondary">Szpachlowane</span>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm" />
+                        <span className="text-[10px] font-bold text-secondary tracking-tight">>300µm</span>
                     </div>
                 </div>
             </div>
