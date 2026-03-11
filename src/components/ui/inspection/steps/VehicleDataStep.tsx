@@ -2,11 +2,14 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { ScanLine, Car, User, Building2, MapPin, Calendar, UserCheck } from "lucide-react";
+import { useState } from "react";
+import { VinScanner } from "../VinScanner";
 
 export function VehicleDataStep() {
     const { data, updateField } = useInspectionStore();
     const v = data.vehicleData;
     const bi = v.basicInfo;
+    const [showScanner, setShowScanner] = useState(false);
 
     const handleChange = (field: string, value: string) => {
         updateField('vehicleData', field, value);
@@ -61,6 +64,8 @@ export function VehicleDataStep() {
                             className="flex-1 py-3 px-4 font-mono text-lg tracking-widest rounded-xl border-2 border-border bg-surface text-foreground uppercase"
                         />
                         <button
+                            type="button"
+                            onClick={() => setShowScanner(true)}
                             className="px-4 py-3 bg-primary text-white rounded-xl flex items-center gap-1 font-bold text-sm active:scale-95 transition-transform"
                             aria-label="Scan VIN with camera"
                         >
@@ -72,6 +77,13 @@ export function VehicleDataStep() {
                         <p className="text-xs text-danger mt-1 font-medium">VIN musi mieć 17 znaków ({v.vin.length}/17)</p>
                     )}
                 </div>
+
+                {showScanner && (
+                    <VinScanner
+                        onScan={(vin) => handleChange('vin', vin)}
+                        onClose={() => setShowScanner(false)}
+                    />
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                     <FormField label="Nr rejestracyjny" value={v.registrationPlates} onChange={(val) => handleChange('registrationPlates', val)} placeholder="XX 12345" />
