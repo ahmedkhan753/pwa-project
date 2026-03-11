@@ -1,4 +1,4 @@
-zq'use client';
+'use client';
 
 import React, { useEffect } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
