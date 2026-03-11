@@ -1,4 +1,4 @@
-'use client';
+zq'use client';
 
 import React, { useEffect } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
@@ -17,7 +17,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+import { registerPushNotifications } from "@/lib/push-notifications";
+
 export const Dashboard: React.FC = () => {
+    useEffect(() => {
+        registerPushNotifications();
+    }, []);
+
     const {
         auth,
         jobs,
