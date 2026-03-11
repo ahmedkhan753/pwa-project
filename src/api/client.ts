@@ -17,62 +17,46 @@ const getAuthToken = () => {
 
 export const apiClient = {
     async login(email: string, password: string) {
-        // In a real app, this would be a fetch to BASE_URL + '/auth/login'
-        // For now, we simulate a successful login handshake
         console.log('Logging in...', { email });
 
-        // Simulate network delay
-        await new Promise(r => setTimeout(r, 1000));
+        try {
+            const response = await fetch(`${BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
 
-        // Mock response
-        if (email.includes('error')) throw new Error('Invalid credentials');
-
-        return {
-            token: 'mock-jwt-token-' + Date.now(),
-            user: {
-                id: '1',
-                email: email,
-                name: 'Appraiser Marek',
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Invalid credentials');
             }
-        };
+
+            return await response.json();
+        } catch (error: any) {
+            console.error('Login failed:', error);
+            throw error;
+        }
     },
 
     async fetchJobs(): Promise<InspectionJob[]> {
         const token = getAuthToken();
         console.log('Fetching jobs with token:', token);
 
-        await new Promise(r => setTimeout(r, 800));
+        try {
+            const response = await fetch(`${BASE_URL}/jobs/appraiser`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
 
-        // Mock data from Bitrix24
-        return [
-            {
-                id: 'job_1',
-                clientName: 'Jan Kowalski',
-                vin: 'WVGZZZ5NZLW123456',
-                plates: 'WA 12345',
-                phone: '+48600100200',
-                appointmentTime: '2024-03-20 10:00',
-                status: 'pending'
-            },
-            {
-                id: 'job_2',
-                clientName: 'Anna Nowak',
-                vin: 'TMKDA7NE1L098765',
-                plates: 'PO 98765',
-                phone: '+48700800900',
-                appointmentTime: '2024-03-20 14:30',
-                status: 'pending'
-            },
-            {
-                id: 'job_3',
-                clientName: 'Firma ABC Sp. z o.o.',
-                vin: 'SJNFAA1U0B333221',
-                plates: 'KR 55555',
-                phone: '+123456789',
-                appointmentTime: '2024-03-21 09:00',
-                status: 'pending'
-            }
-        ];
+            if (!response.ok) throw new Error('Failed to fetch jobs');
+            return await response.json();
+        } catch (error) {
+            console.error('Fetch jobs failed:', error);
+            // Return empty array or throw error based on requirement
+            throw error;
+        }
     },
 
     async submitInspection(data: any) {
