@@ -1,6 +1,9 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
     ports:
       - "3000:3000"
     environment:
