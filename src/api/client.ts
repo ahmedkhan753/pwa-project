@@ -26,14 +26,26 @@ export const apiClient = {
                 body: JSON.stringify({ email, password }),
             });
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Invalid credentials');
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                const text = await response.text();
+                console.error("Non-JSON response received:", text.substring(0, 100));
+                throw new Error("Serwer API jest niedostępny (Błąd 404/500). Skonfiguruj NEXT_PUBLIC_API_URL.");
             }
 
-            return await response.json();
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Błędne dane logowania');
+            }
+
+            return data;
         } catch (error: any) {
             console.error('Login failed:', error);
+            // If it's the specific JSON parse error, re-throw with generic message
+            if (error.message.includes('Unexpected token')) {
+                throw new Error("Błąd komunikacji z serwerem (Niepoprawny format JSON).");
+            }
             throw error;
         }
     },
