@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { submissionQueue } from "@/lib/submissionQueue";
 
 export function SummaryStep() {
-    const { data, updateField, setSignature, reset } = useInspectionStore();
+    const { data, updateField, setSignature, reset, jobs } = useInspectionStore();
     const summary = data.finalSummary;
     const v = data.vehicleData;
 
@@ -16,9 +16,9 @@ export function SummaryStep() {
     const handleSubmit = async () => {
         updateField('finalSummary', 'submissionStatus', 'pending');
 
-        const success = await submissionQueue.submitReport(data);
+        const result = await submissionQueue.submitReport(data, jobs.currentJobId || 'offline');
 
-        if (success) {
+        if (result.status === 'submitted') {
             updateField('finalSummary', 'submissionStatus', 'submitted');
             updateField('finalSummary', 'submittedAt', new Date().toISOString());
             alert('Raport wysłany pomyślnie!');
