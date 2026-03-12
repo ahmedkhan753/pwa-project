@@ -1,59 +1,100 @@
 import { useInspectionStore, StepData } from "@/store/useInspectionStore";
-import { mapToBitrix24 } from "./bitrixMapper";
-import { apiClient } from "@/api/client";
+import { apiClient, SubmissionResult } from "@/api/client";
 
 const RETRY_INTERVAL = 60000; // 60 seconds
+const MAX_RETRIES = 10;
 
 /**
  * Background submission service to handle retries for failed reports.
+ * Leverages the Zustand store's localStorage persistence for offline resilience.
  */
 class SubmissionQueue {
     private isProcessing = false;
+    private retryCount = 0;
 
-    async submitReport(data: StepData): Promise<boolean> {
-        const payload = mapToBitrix24(data);
-
+    /**
+     * Submit a full inspection report to the backend (→ Bitrix24).
+     * The backend handles image upload + CRM deal creation.
+     */
+    async submitReport(data: StepData, jobId: string): Promise<SubmissionResult> {
         try {
-            // In a real app, this would be an API call to Bitrix24 or a proxy backend
-            // For now, we simulate the handshake
-            console.log("Attempting to submit report to Bitrix24...", payload);
+            console.log("Submitting inspection to Bitrix24 via backend...", { jobId });
 
-            // Simulating API call
-            // await apiClient.submitInspection(payload);
+            const result = await apiClient.submitInspection({
+                ...data,
+                jobId,
+                images: [], // Images are embedded in the photos/damages already
+            });
 
-            return true;
-        } catch (error) {
-            console.error("Submission failed, will retry in background:", error);
-            return false;
+            return result;
+        } catch (error: any) {
+            console.error("Submission failed:", error);
+            return {
+                status: 'retry',
+                error: error.message || 'Unknown error',
+                message: 'Submission failed. Data preserved for retry.',
+            };
         }
     }
 
+    /**
+     * Start a background retry loop.
+     * Checks the store for pending/error submissions and retries them.
+     */
     startBackgroundRetry() {
         if (this.isProcessing) return;
         this.isProcessing = true;
+        this.retryCount = 0;
 
         const checkAndRetry = async () => {
             const state = useInspectionStore.getState();
-            if (state.data.finalSummary.submissionStatus === 'error' ||
-                state.data.finalSummary.submissionStatus === 'pending') {
+            const status = state.data.finalSummary.submissionStatus;
 
-                const success = await this.submitReport(state.data);
-
-                if (success) {
-                    state.updateField('finalSummary', 'submissionStatus', 'submitted');
-                    state.updateField('finalSummary', 'submittedAt', new Date().toISOString());
-                    this.isProcessing = false;
-                    return; // Stop retrying if successful
-                }
-            } else {
+            // Only retry if status is 'error' or 'pending'
+            if (status !== 'error' && status !== 'pending') {
                 this.isProcessing = false;
-                return; // Stop if status changed
+                console.log("Submission queue: No pending submissions, stopping retry loop.");
+                return;
             }
 
+            // Check max retries
+            if (this.retryCount >= MAX_RETRIES) {
+                console.error(`Submission queue: Max retries (${MAX_RETRIES}) reached. Giving up.`);
+                this.isProcessing = false;
+                return;
+            }
+
+            this.retryCount++;
+            console.log(`Submission queue: Retry attempt ${this.retryCount}/${MAX_RETRIES}`);
+
+            const jobId = state.jobs.currentJobId || 'unknown';
+            const result = await this.submitReport(state.data, jobId);
+
+            if (result.status === 'submitted') {
+                // Success — update the store
+                state.updateField('finalSummary', 'submissionStatus', 'submitted');
+                state.updateField('finalSummary', 'submittedAt', new Date().toISOString());
+                console.log("Submission queue: Report submitted successfully!");
+                this.isProcessing = false;
+                return;
+            }
+
+            // Failed — schedule another retry
+            console.warn(`Submission queue: Retry failed. Next attempt in ${RETRY_INTERVAL / 1000}s`);
             setTimeout(checkAndRetry, RETRY_INTERVAL);
         };
 
+        // Start the first retry
         checkAndRetry();
+    }
+
+    /**
+     * Stop the background retry loop.
+     */
+    stopRetry() {
+        this.isProcessing = false;
+        this.retryCount = 0;
+        console.log("Submission queue: Retry loop stopped.");
     }
 }
 

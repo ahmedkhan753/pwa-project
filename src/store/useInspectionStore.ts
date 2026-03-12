@@ -10,6 +10,7 @@ export interface AuthUser {
 
 export interface InspectionJob {
   id: string;
+  bitrixTaskId?: string;
   clientName: string;
   vin: string;
   plates: string;

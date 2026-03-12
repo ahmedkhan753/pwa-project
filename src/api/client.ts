@@ -1,4 +1,4 @@
-import { InspectionJob } from "@/store/useInspectionStore";
+import { InspectionJob, StepData } from "@/store/useInspectionStore";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
@@ -14,6 +14,27 @@ const getAuthToken = () => {
     }
     return null;
 };
+
+const getAuthEmail = () => {
+    try {
+        const storage = localStorage.getItem('inspection-storage');
+        if (storage) {
+            const parsed = JSON.parse(storage);
+            return parsed.state.auth.user?.email || '';
+        }
+    } catch (e) {
+        return '';
+    }
+    return '';
+};
+
+export interface SubmissionResult {
+    status: 'submitted' | 'retry';
+    dealId?: string;
+    filesUploaded?: number;
+    error?: string;
+    message: string;
+}
 
 export const apiClient = {
     async login(email: string, password: string) {
@@ -42,7 +63,6 @@ export const apiClient = {
             return data;
         } catch (error: any) {
             console.error('Login failed:', error);
-            // If it's the specific JSON parse error, re-throw with generic message
             if (error.message.includes('Unexpected token')) {
                 throw new Error("Błąd komunikacji z serwerem (Niepoprawny format JSON).");
             }
@@ -52,29 +72,34 @@ export const apiClient = {
 
     async fetchJobs(): Promise<InspectionJob[]> {
         const token = getAuthToken();
-        console.log('Fetching jobs with token:', token);
+        const email = getAuthEmail();
+        console.log('Fetching tasks from Bitrix24...', { email });
 
         try {
-            const response = await fetch(`${BASE_URL}/jobs/appraiser`, {
+            const params = new URLSearchParams();
+            if (email) params.append('email', email);
+
+            const response = await fetch(`${BASE_URL}/api/tasks?${params.toString()}`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
             });
 
-            if (!response.ok) throw new Error('Failed to fetch jobs');
+            if (!response.ok) throw new Error('Failed to fetch tasks');
             return await response.json();
         } catch (error) {
-            console.error('Fetch jobs failed:', error);
-            // Return empty array or throw error based on requirement
+            console.error('Fetch tasks failed:', error);
             throw error;
         }
     },
 
-    async submitInspection(data: any) {
+    async submitInspection(data: StepData & { jobId: string; images?: string[] }): Promise<SubmissionResult> {
         const token = getAuthToken();
+        console.log('Submitting inspection to Bitrix24...', { jobId: data.jobId });
+
         try {
-            const response = await fetch(`${BASE_URL}/api/inspection`, {
+            const response = await fetch(`${BASE_URL}/api/submit-inspection`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -82,19 +107,35 @@ export const apiClient = {
                 },
                 body: JSON.stringify(data),
             });
-            if (!response.ok) throw new Error('Submission failed');
-            return await response.json();
-        } catch (error) {
+
+            const result = await response.json();
+
+            if (result.status === 'submitted') {
+                console.log('Inspection submitted successfully:', result);
+                return result;
+            }
+
+            if (result.status === 'retry') {
+                console.warn('Submission requires retry:', result.error);
+                return result;
+            }
+
+            throw new Error(result.error || 'Unknown submission error');
+        } catch (error: any) {
             console.error('Submission failed:', error);
-            // In offline scenario, the store handles local persistence
-            throw error;
+            // Return retry status so the PWA keeps data in localStorage
+            return {
+                status: 'retry',
+                error: error.message || 'Network error',
+                message: 'Submission failed. Data preserved for retry.',
+            };
         }
     },
 
     async uploadPhoto(base64: string) {
         const token = getAuthToken();
-        // API logic for photo upload to Bitrix24 via backend
         console.log('Uploading photo...', { token });
-        return { status: 'success', url: 'https://cdn.inspection.app/uploads/image.jpg' };
+        // Photos are now handled as part of submit-inspection
+        return { status: 'success', url: '' };
     }
 };
