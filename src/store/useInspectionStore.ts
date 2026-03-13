@@ -16,7 +16,11 @@ export interface InspectionJob {
   plates: string;
   phone: string;
   appointmentTime: string;
-  status: 'pending' | 'completed';
+  deadline: string; // ISO date "2026-03-13"
+  status: 'ready' | 'in_progress' | 'completed';
+  make?: string;
+  model?: string;
+  city?: string;
 }
 
 // ─── Toggle Type ───────────────────────────────────────────
@@ -286,6 +290,13 @@ interface InspectionState {
     loading: boolean;
     error: string | null;
   };
+  // Calendar
+  calendar: {
+    selectedDate: string;
+    expanded: boolean;
+  };
+  // Drafts (to prevent data loss when switching jobs)
+  drafts: Record<string, StepData>;
 
   // Actions
   setStep: (step: number) => void;
@@ -298,6 +309,9 @@ interface InspectionState {
   setJobs: (jobs: InspectionJob[]) => void;
   setJobsError: (error: string | null) => void;
   selectJob: (jobId: string | null) => void;
+  // Calendar Actions
+  setSelectedDate: (date: string) => void;
+  toggleCalendarExpanded: () => void;
 
   updateField: <K extends keyof StepData>(
     step: K,
@@ -481,6 +495,11 @@ export const useInspectionStore = create<InspectionState>()(
         loading: false,
         error: null,
       },
+      calendar: {
+        selectedDate: new Date().toISOString().split('T')[0],
+        expanded: false,
+      },
+      drafts: {},
 
       setStep: (step: number) =>
         set((state) => ({
@@ -513,6 +532,11 @@ export const useInspectionStore = create<InspectionState>()(
             error: null,
           },
           jobs: { list: [], currentJobId: null, loading: false, error: null },
+          calendar: {
+            selectedDate: new Date().toISOString().split('T')[0],
+            expanded: false,
+          },
+          drafts: {},
           currentStep: 1,
           maxVisitedStep: 1,
           data: initialData,
@@ -530,9 +554,16 @@ export const useInspectionStore = create<InspectionState>()(
 
       selectJob: (jobId) =>
         set((state) => {
+          // If a job is currently active, save it to drafts
+          const newDrafts = { ...state.drafts };
+          if (state.jobs.currentJobId) {
+            newDrafts[state.jobs.currentJobId] = state.data;
+          }
+
           if (!jobId) {
             return {
               jobs: { ...state.jobs, currentJobId: null },
+              drafts: newDrafts,
               currentStep: 1,
               data: initialData,
             };
@@ -541,19 +572,37 @@ export const useInspectionStore = create<InspectionState>()(
           const job = state.jobs.list.find((j) => j.id === jobId);
           if (!job) return state;
 
-          // Pre-fill Step 1 with job data
-          const newData = { ...initialData };
-          newData.vehicleData.basicInfo.userOwner = job.clientName;
-          newData.vehicleData.vin = job.vin;
-          newData.vehicleData.registrationPlates = job.plates;
-          // Optionally add more pre-filled fields here
+          // Load from drafts or pre-fill Step 1
+          let finalData: StepData;
+          if (newDrafts[jobId]) {
+            finalData = newDrafts[jobId];
+          } else {
+            finalData = JSON.parse(JSON.stringify(initialData));
+            finalData.vehicleData.basicInfo.userOwner = job.clientName;
+            finalData.vehicleData.vin = job.vin;
+            finalData.vehicleData.registrationPlates = job.plates;
+            finalData.vehicleData.make = job.make || "";
+            finalData.vehicleData.model = job.model || "";
+            // Optionally add more pre-filled fields here
+          }
 
           return {
             jobs: { ...state.jobs, currentJobId: jobId },
+            drafts: newDrafts,
             currentStep: 1,
-            data: newData,
+            data: finalData,
           };
         }),
+
+      setSelectedDate: (date) =>
+        set((state) => ({
+          calendar: { ...state.calendar, selectedDate: date },
+        })),
+
+      toggleCalendarExpanded: () =>
+        set((state) => ({
+          calendar: { ...state.calendar, expanded: !state.calendar.expanded },
+        })),
 
       updateField: (step, field, value) =>
         set((state) => ({

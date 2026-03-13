@@ -1,178 +1,235 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
 import { apiClient } from '@/api/client';
 import {
-    Phone,
-    Play,
-    Calendar,
-    Car,
-    ChevronRight,
     LogOut,
     RefreshCcw,
-    MapPin,
-    Clock,
-    UserCircle
+    UserCircle,
+    Bell,
+    Settings,
+    Search,
+    Play
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
+import { CalendarStrip } from './CalendarStrip';
+import { MissionCard } from './MissionCard';
+import { SkeletonCard } from './SkeletonCard';
 import { registerPushNotifications } from "@/lib/push-notifications";
 
 export const Dashboard: React.FC = () => {
-    useEffect(() => {
-        registerPushNotifications();
-    }, []);
-
     const {
         auth,
         jobs,
+        calendar,
         logout,
         setJobs,
         setJobsLoading,
         setJobsError,
-        selectJob
     } = useInspectionStore();
+
+    const [pulling, setPulling] = useState(false);
+    const [pullDistance, setPullDistance] = useState(0);
+    const touchStartRef = useRef(0);
+    const PULL_THRESHOLD = 80;
 
     const fetchJobs = async () => {
         setJobsLoading(true);
         try {
-            const data = await apiClient.fetchJobs();
+            // Fetch for the selected date
+            const data = await apiClient.fetchJobs(calendar.selectedDate);
             setJobs(data);
         } catch (err: any) {
             setJobsError(err.message || 'Nie udało się pobrać zleceń.');
         }
     };
 
+    // Re-fetch when selected date changes
     useEffect(() => {
-        if (jobs.list.length === 0) {
-            fetchJobs();
-        }
+        fetchJobs();
+    }, [calendar.selectedDate]);
+
+    useEffect(() => {
+        registerPushNotifications();
     }, []);
 
-    const handleCall = (phone: string) => {
-        window.location.href = `tel:${phone}`;
+    // Pull-to-refresh logic
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (window.scrollY === 0) {
+            touchStartRef.current = e.touches[0].clientY;
+        }
     };
 
-    const handleStart = (jobId: string) => {
-        selectJob(jobId);
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (touchStartRef.current > 0) {
+            const distance = e.touches[0].clientY - touchStartRef.current;
+            if (distance > 0) {
+                setPullDistance(Math.min(distance * 0.5, PULL_THRESHOLD + 20));
+                if (distance > PULL_THRESHOLD) setPulling(true);
+            }
+        }
     };
+
+    const handleTouchEnd = () => {
+        if (pullDistance > PULL_THRESHOLD) {
+            fetchJobs();
+        }
+        setPulling(false);
+        setPullDistance(0);
+        touchStartRef.current = 0;
+    };
+
+    // Filter jobs by selected date (though API should handle it, client filter is safer)
+    const filteredJobs = jobs.list.filter(job => job.deadline === calendar.selectedDate);
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white">
-            {/* Header */}
-            <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-lg shadow-lg shadow-blue-900/40">
-                        {auth.user?.name.charAt(0)}
-                    </div>
-                    <div>
-                        <h2 className="font-bold text-sm leading-tight">{auth.user?.name}</h2>
-                        <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">Appraiser Marek</p>
-                    </div>
-                </div>
+        <div 
+            className="min-h-screen bg-slate-950 text-white selection:bg-blue-500/30"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+        >
+            {/* Pull-to-Refresh Indicator */}
+            <div 
+                className="fixed top-0 left-0 right-0 flex items-center justify-center transition-all duration-300 z-[60]"
+                style={{ 
+                    height: `${pullDistance}px`, 
+                    opacity: pullDistance / PULL_THRESHOLD,
+                    transform: `translateY(${Math.min(pullDistance - 40, 0)}px)`
+                }}
+            >
+                <RefreshCcw className={cn(
+                    "w-6 h-6 text-blue-500", 
+                    pulling && "animate-spin",
+                    pullDistance >= PULL_THRESHOLD && "scale-125"
+                )} />
+            </div>
 
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={fetchJobs}
-                        disabled={jobs.loading}
-                        className="p-2 hover:bg-slate-800 rounded-xl transition-colors disabled:opacity-50"
-                        title="Odśwież"
-                    >
-                        <RefreshCcw className={cn("w-5 h-5 text-slate-400", jobs.loading && "animate-spin")} />
-                    </button>
-                    <button
-                        onClick={logout}
-                        title="Wyloguj"
-                        className="flex items-center gap-2 px-3 py-2 hover:bg-slate-800 rounded-xl transition-colors text-red-400"
-                    >
-                        <LogOut className="w-5 h-5" />
-                        <span className="text-xs font-bold">Wyloguj</span>
-                    </button>
+            {/* Premium Header */}
+            <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-2xl border-b border-white/[0.05] px-6 py-4">
+                <div className="flex items-center justify-between max-w-2xl mx-auto w-full">
+                    <div className="flex items-center gap-4">
+                        <div className="relative group">
+                            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                            <div className="relative w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center border border-white/10">
+                                <UserCircle className="w-8 h-8 text-blue-400" />
+                            </div>
+                        </div>
+                        <div>
+                            <h2 className="font-black text-lg tracking-tight leading-none mb-0.5">{auth.user?.name}</h2>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Rzeczoznawca Online</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button className="p-2.5 bg-slate-900/50 hover:bg-slate-800 rounded-xl border border-white/5 transition-all active:scale-95 relative">
+                            <Bell className="w-5 h-5 text-slate-400" />
+                            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-blue-500 rounded-full border-2 border-slate-950" />
+                        </button>
+                        <button
+                            onClick={logout}
+                            className="p-2.5 bg-red-500/10 hover:bg-red-500/20 rounded-xl border border-red-500/10 transition-all active:scale-95 text-red-400"
+                        >
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </header>
 
-            <main className="p-6 pb-24 max-w-2xl mx-auto space-y-6">
-                {/* Stats / Welcome */}
-                <div className="animate-fade-in">
-                    <h1 className="text-2xl font-bold tracking-tight">Twoje Zlecenia</h1>
-                    <p className="text-slate-400 text-sm">Masz {jobs.list.length} zaplanowanych inspekcji na dziś.</p>
+            <main className="max-w-2xl mx-auto px-6 pt-6 pb-32 space-y-8">
+                {/* Search Bar - One-Handed Focus */}
+                <div className="relative group">
+                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                        <Search className="w-4 h-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
+                    </div>
+                    <input 
+                        type="search"
+                        placeholder="Szukaj VIN, Tablic, Klienta..."
+                        className="w-full bg-slate-900/50 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium focus:bg-slate-900 focus:border-blue-500/50 transition-all outline-none"
+                    />
                 </div>
 
-                {/* Job List */}
-                <div className="space-y-4">
-                    {jobs.loading && jobs.list.length === 0 ? (
-                        <div className="py-20 flex flex-col items-center justify-center gap-4">
-                            <RefreshCcw className="w-8 h-8 text-blue-500 animate-spin" />
-                            <p className="text-slate-500 font-medium">Pobieranie zleceń...</p>
-                        </div>
+                {/* Date Picker Section */}
+                <section className="animate-fade-in [animation-delay:100ms]">
+                    <CalendarStrip />
+                </section>
+
+                {/* Job List Header */}
+                <div className="flex items-center justify-between px-1">
+                    <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
+                        Twoje Misje
+                        <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
+                            {filteredJobs.length}
+                        </span>
+                    </h3>
+                    <button 
+                        onClick={fetchJobs}
+                        disabled={jobs.loading}
+                        className="text-[11px] font-bold text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors flex items-center gap-1.5"
+                    >
+                        <RefreshCcw className={cn("w-3 h-3", jobs.loading && "animate-spin")} />
+                        Synchronizuj
+                    </button>
+                </div>
+
+                {/* Job Feed */}
+                <div className="space-y-4 min-h-[300px]">
+                    {jobs.loading ? (
+                        <>
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                        </>
                     ) : jobs.error ? (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 text-center">
-                            <p className="text-red-200 mb-4">{jobs.error}</p>
+                        <div className="glass-card p-10 text-center border-red-500/20 bg-red-500/5">
+                            <p className="text-red-200 font-medium mb-6">{jobs.error}</p>
                             <button
                                 onClick={fetchJobs}
-                                className="px-6 py-2 bg-red-500 hover:bg-red-600 rounded-xl font-bold transition-all"
+                                className="px-8 py-3 bg-red-500 hover:bg-red-600 rounded-2xl font-black text-sm uppercase transition-all shadow-lg shadow-red-900/20 active:scale-95"
                             >
                                 Spróbuj ponownie
                             </button>
                         </div>
-                    ) : jobs.list.length === 0 ? (
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-12 text-center text-slate-500">
-                            Brak zaplanowanych inspekcji.
+                    ) : filteredJobs.length === 0 ? (
+                        <div className="bg-slate-900/20 border-2 border-dashed border-slate-800 rounded-[2.5rem] py-20 flex flex-col items-center justify-center text-center px-10">
+                            <div className="w-20 h-20 rounded-full bg-slate-900/80 flex items-center justify-center mb-6 border border-white/5">
+                                <Search className="w-10 h-10 text-slate-700" />
+                            </div>
+                            <h4 className="text-lg font-bold text-slate-400 mb-2">Brak zleceń</h4>
+                            <p className="text-sm text-slate-600 font-medium max-w-[200px]">
+                                Wygląda na to, że nie masz zaplanowanych misji na ten dzień.
+                            </p>
                         </div>
                     ) : (
-                        jobs.list.map((job) => (
-                            <div
-                                key={job.id}
-                                className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 shadow-xl hover:border-slate-700 transition-all duration-300 group"
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="flex items-center gap-2 bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase">
-                                        <Clock className="w-3.5 h-3.5" />
-                                        {job.appointmentTime}
-                                    </div>
-                                    <div className="text-[10px] text-slate-600 font-mono tracking-tighter uppercase px-2">
-                                        #{job.id}
-                                    </div>
-                                </div>
-
-                                <h3 className="text-xl font-bold mb-1 group-hover:text-blue-400 transition-colors uppercase">{job.clientName}</h3>
-
-                                <div className="grid grid-cols-2 gap-y-3 mb-6">
-                                    <div className="flex items-center gap-2 text-slate-400 text-sm">
-                                        <Car className="w-4 h-4" />
-                                        <span className="font-mono">{job.vin}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-slate-400 text-sm">
-                                        <MapPin className="w-4 h-4" />
-                                        <span>{job.plates}</span>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => handleCall(job.phone)}
-                                        className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 py-3 rounded-2xl font-bold transition-all active:scale-95"
-                                    >
-                                        <Phone className="w-4 h-4 text-blue-500" />
-                                        Zadzwoń
-                                    </button>
-                                    <button
-                                        onClick={() => handleStart(job.id)}
-                                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 py-3 rounded-2xl font-bold shadow-lg shadow-blue-900/20 transition-all active:scale-95"
-                                    >
-                                        <Play className="w-4 h-4 fill-current" />
-                                        Start
-                                    </button>
-                                </div>
-                            </div>
-                        ))
+                        <div className="grid grid-cols-1 gap-5 animate-fade-in [animation-delay:200ms]">
+                            {filteredJobs.map((job) => (
+                                <MissionCard key={job.id} job={job} />
+                            ))}
+                        </div>
                     )}
                 </div>
             </main>
 
-            {/* Bottom Safe Area Helper */}
-            <div className="fixed bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
+            {/* Bottom Nav Mock / Safe Area */}
+            <div className="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent pointer-events-none z-40 transition-opacity" />
+            
+            <footer className="fixed bottom-6 left-6 right-6 h-16 bg-slate-900/60 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl flex items-center justify-around z-50 transform transition-all hover:border-blue-500/20">
+                <button className="flex flex-col items-center gap-1 text-blue-400">
+                    <UserCircle className="w-6 h-6" />
+                    <span className="text-[9px] font-black uppercase">Dashboard</span>
+                </button>
+                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center shadow-lg shadow-blue-900/40 -mt-8 border-4 border-slate-950 active:scale-90 transition-transform">
+                    <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                </div>
+                <button className="flex flex-col items-center gap-1 text-slate-500">
+                    <Settings className="w-6 h-6" />
+                    <span className="text-[9px] font-black uppercase">Ustawienia</span>
+                </button>
+            </footer>
         </div>
     );
 };

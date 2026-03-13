@@ -51,20 +51,27 @@ async def get_user_by_email(email: str) -> Optional[dict]:
         return None
 
 
-async def get_tasks(responsible_id: Optional[str] = None) -> list:
+async def get_tasks(responsible_id: Optional[str] = None, deadline_date: Optional[str] = None) -> list:
     """
     Fetch tasks from Bitrix24 using tasks.task.list.
-    Optionally filter by RESPONSIBLE_ID.
-    Returns a list of task dicts with: id, clientName, vin, plates.
+    Optionally filter by RESPONSIBLE_ID and DEADLINE date.
+    Returns a list of task dicts.
     """
     url = _build_url("tasks.task.list")
 
     params: dict = {
-        "select": ["ID", "TITLE", "DESCRIPTION", "RESPONSIBLE_ID", "UF_CRM_TASK"],
+        "select": ["ID", "TITLE", "DESCRIPTION", "RESPONSIBLE_ID", "DEADLINE", "UF_CRM_TASK"],
+        "filter": {}
     }
 
     if responsible_id:
-        params["filter"] = {"RESPONSIBLE_ID": responsible_id}
+        params["filter"]["RESPONSIBLE_ID"] = responsible_id
+
+    if deadline_date:
+        # Filter for tasks occurring on this specific day
+        # Bitrix24 format: YYYY-MM-DD
+        params["filter"][">=DEADLINE"] = f"{deadline_date}T00:00:00"
+        params["filter"]["<=DEADLINE"] = f"{deadline_date}T23:59:59"
 
     try:
         async with httpx.AsyncClient(timeout=BITRIX_TIMEOUT) as client:
@@ -77,15 +84,29 @@ async def get_tasks(responsible_id: Optional[str] = None) -> list:
             # Map Bitrix24 tasks to our InspectionJob format
             jobs = []
             for task in tasks:
+                deadline = task.get("deadline", "")
+                # Format deadline to a readable time if it exists
+                app_time = "---"
+                if deadline:
+                    # deadline is usually "2026-03-13T10:00:00+03:00"
+                    try:
+                        app_time = deadline.split("T")[1][:5]
+                    except:
+                        app_time = "Plan."
+
                 job = {
                     "id": str(task.get("id", "")),
                     "bitrixTaskId": str(task.get("id", "")),
                     "clientName": task.get("title", "Unknown Client"),
-                    "vin": _extract_field(task, "vin", ""),
-                    "plates": _extract_field(task, "plates", ""),
+                    "vin": _extract_field(task, "vin", "---"),
+                    "plates": _extract_field(task, "plates", "---"),
                     "phone": _extract_field(task, "phone", ""),
-                    "appointmentTime": task.get("deadline", ""),
-                    "status": "pending",
+                    "make": _extract_field(task, "make", ""),
+                    "model": _extract_field(task, "model", ""),
+                    "city": _extract_field(task, "city", ""),
+                    "appointmentTime": app_time,
+                    "deadline": deadline.split("T")[0] if deadline else "",
+                    "status": "ready",
                 }
                 jobs.append(job)
 
@@ -95,6 +116,8 @@ async def get_tasks(responsible_id: Optional[str] = None) -> list:
     except Exception as e:
         logger.error(f"Error fetching tasks from Bitrix24: {e}")
         return []
+
+    return []
 
 
 def _extract_field(task: dict, field_name: str, default: str = "") -> str:
@@ -137,6 +160,8 @@ async def create_deal(fields: dict) -> dict:
     except Exception as e:
         logger.error(f"Error creating Bitrix24 deal: {e}")
         return {"status": "error", "error": str(e)}
+
+    return {"status": "error", "error": "Unknown error during deal creation"}
 
 
 async def upload_file(filename: str, file_content_b64: str) -> Optional[str]:

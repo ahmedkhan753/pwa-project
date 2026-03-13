@@ -70,14 +70,15 @@ export const apiClient = {
         }
     },
 
-    async fetchJobs(): Promise<InspectionJob[]> {
+    async fetchJobs(date?: string): Promise<InspectionJob[]> {
         const token = getAuthToken();
         const email = getAuthEmail();
-        console.log('Fetching tasks from Bitrix24...', { email });
+        console.log('Fetching tasks from Bitrix24...', { email, date });
 
         try {
             const params = new URLSearchParams();
             if (email) params.append('email', email);
+            if (date) params.append('date', date);
 
             const response = await fetch(`${BASE_URL}/api/tasks?${params.toString()}`, {
                 method: 'GET',

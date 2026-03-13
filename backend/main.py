@@ -37,8 +37,12 @@ MOCK_JOBS = [
         "vin": "WVGZZZ5NZLW123456",
         "plates": "WA 12345",
         "phone": "+48600100200",
-        "appointmentTime": "2024-03-20 10:00",
-        "status": "pending"
+        "appointmentTime": "10:00",
+        "deadline": time.strftime("%Y-%m-%d"), # Today
+        "status": "ready",
+        "make": "Volkswagen",
+        "model": "Tiguan",
+        "city": "Warszawa"
     },
     {
         "id": "job_2",
@@ -47,8 +51,26 @@ MOCK_JOBS = [
         "vin": "TMKDA7NE1L098765",
         "plates": "PO 98765",
         "phone": "+48700800900",
-        "appointmentTime": "2024-03-20 14:30",
-        "status": "pending"
+        "appointmentTime": "14:30",
+        "deadline": time.strftime("%Y-%m-%d"), # Today
+        "status": "ready",
+        "make": "Skoda",
+        "model": "Octavia",
+        "city": "Poznań"
+    },
+    {
+        "id": "job_3",
+        "bitrixTaskId": "mock_3",
+        "clientName": "Marek Zegar",
+        "vin": "JLR123HF847294",
+        "plates": "KR 55555",
+        "phone": "+48555444333",
+        "appointmentTime": "09:15",
+        "deadline": time.strftime("%Y-%m-%d", time.localtime(time.time() + 86400)), # Tomorrow
+        "status": "ready",
+        "make": "Jaguar",
+        "model": "F-Pace",
+        "city": "Kraków"
     }
 ]
 
@@ -114,9 +136,9 @@ async def login(request: LoginRequest):
 
 # ─── Task A: Inbound Sync ────────────────────────────────────
 @app.get("/api/tasks")
-async def get_tasks(responsible_id: Optional[str] = None, email: Optional[str] = None):
+async def get_tasks(responsible_id: Optional[str] = None, email: Optional[str] = None, date: Optional[str] = None):
     """
-    Fetch tasks from Bitrix24 filtered by RESPONSIBLE_ID.
+    Fetch tasks from Bitrix24 filtered by RESPONSIBLE_ID and DEADLINE.
     If email is provided, looks up the user's Bitrix24 ID first.
     Falls back to mock data if Bitrix24 is unreachable.
     """
@@ -124,16 +146,18 @@ async def get_tasks(responsible_id: Optional[str] = None, email: Optional[str] =
     if email and not responsible_id:
         responsible_id = await bitrix_service.get_responsible_id_for_email(email)
         if not responsible_id:
-            logger.warning(f"Could not resolve Bitrix24 ID for email: {email}, using mock data")
+            logger.warning(f"Could not resolve Bitrix24 ID for email: {email}, using mock data fallback")
 
     # Try Bitrix24 first
-    tasks = await bitrix_service.get_tasks(responsible_id)
+    tasks = await bitrix_service.get_tasks(responsible_id, date)
 
     if tasks:
         return tasks
 
-    # Fallback to mock data
-    logger.info("Using mock data fallback for tasks")
+    # Fallback to mock data (with local filtering for demo)
+    logger.info(f"Using mock data fallback for tasks (date: {date})")
+    if date:
+        return [j for j in MOCK_JOBS if j["deadline"] == date]
     return MOCK_JOBS
 
 
