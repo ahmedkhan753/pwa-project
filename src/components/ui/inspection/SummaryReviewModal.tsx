@@ -28,19 +28,19 @@ export function SummaryReviewModal({ isOpen, onClose, onContinue }: SummaryRevie
         interiorDamageErrors.length > 0;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="w-full max-w-md bg-surface rounded-3xl overflow-hidden shadow-2xl animate-scale-up">
-                <div className="p-6 border-b border-border flex items-center justify-between bg-primary/5">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in transition-all">
+            <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl animate-scale-up border border-slate-200 dark:border-slate-800">
+                <div className="p-6 border-b border-border flex items-center justify-between bg-primary/5 dark:bg-primary/10">
                     <div className="flex items-center gap-2">
                         <AlertCircle className="text-primary" size={22} />
-                        <h2 className="text-lg font-bold text-foreground">Przegląd Raportu</h2>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Przegląd Raportu</h2>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/50 rounded-xl transition-colors">
+                    <button onClick={onClose} className="p-2 hover:bg-black/5 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 rounded-xl transition-colors">
                         <X size={20} />
                     </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
+                <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4 bg-white dark:bg-slate-900">
                     {!hasErrors ? (
                         <div className="text-center py-4">
                             <CheckCircle2 size={48} className="mx-auto text-green-500 mb-2" />

@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home } from "lucide-reac
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { SummaryReviewModal } from "./SummaryReviewModal";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
     { num: 1, short: "Dane", label: "Dane Pojazdu" },
@@ -76,15 +77,15 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden">
+        <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden transition-colors duration-300">
             {/* ── Header ─────────────────────────────────────── */}
-            <header className="sticky top-0 z-30 bg-[#0f172a] text-white px-4 pt-3 pb-2 shadow-lg">
+            <header className="sticky top-0 z-30 bg-white dark:bg-slate-950 text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
                     <div>
-                        <h2 className="text-base font-bold tracking-tight">
+                        <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
                             {STEPS[currentStep - 1].label}
                         </h2>
-                        <p className="text-xs text-blue-300 font-medium">
+                        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                             Krok {currentStep} z {totalSteps}
                         </p>
                     </div>
@@ -95,16 +96,19 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                                 Zapisano
                             </span>
                         )}
+                        <div className="scale-90 origin-right">
+                            <ThemeToggle />
+                        </div>
                         <button
                             onClick={() => selectJob(null)}
-                            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-400"
+                            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500 dark:text-slate-400"
                             title="Dashboard"
                         >
                             <Home size={18} />
                         </button>
                         <button
                             onClick={logout}
-                            className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-red-400"
+                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors text-red-500 dark:text-red-400"
                             title="Wyloguj"
                         >
                             <LogOut size={18} />

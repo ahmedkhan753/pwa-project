@@ -1,9 +1,0 @@
-node_modules
-.next
-out
-build
-.git
-.gitignore
-README.md
-Dockerfile
-**/*.md

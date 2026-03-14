@@ -1,6 +1,7 @@
 import { InspectionJob, StepData } from "@/store/useInspectionStore";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
 const getAuthToken = () => {
     try {
@@ -40,6 +41,20 @@ export const apiClient = {
     async login(email: string, password: string) {
         console.log('Logging in...', { email });
 
+        if (IS_DEMO) {
+            console.log("DEMO MODE: Simulating login success");
+            await new Promise(res => setTimeout(res, 800));
+            return {
+                access_token: "demo-token-123456",
+                token_type: "bearer",
+                user: {
+                    id: "demo-user",
+                    email,
+                    name: "Demo Inspector"
+                }
+            };
+        }
+
         try {
             const response = await fetch(`${BASE_URL}/auth/login`, {
                 method: 'POST',
@@ -73,7 +88,54 @@ export const apiClient = {
     async fetchJobs(date?: string): Promise<InspectionJob[]> {
         const token = getAuthToken();
         const email = getAuthEmail();
-        console.log('Fetching tasks from Bitrix24...', { email, date });
+        console.log('Fetching tasks...', { email, date });
+
+        if (IS_DEMO) {
+            console.log("DEMO MODE: Returning mock jobs data");
+            await new Promise(res => setTimeout(res, 600));
+            const targetDate = date || new Date().toISOString().split('T')[0];
+            return [
+                {
+                    id: 'demo-job-1',
+                    status: 'ready',
+                    plates: 'WA 78912',
+                    make: 'BMW',
+                    model: 'M3 Competition',
+                    vin: 'WUW343434DK39219',
+                    clientName: 'Jan Kowalski',
+                    phone: '+48 500 600 700',
+                    city: 'Warszawa',
+                    appointmentTime: '08:30',
+                    deadline: targetDate
+                },
+                {
+                    id: 'demo-job-2',
+                    status: 'in_progress',
+                    plates: 'KR 30345',
+                    make: 'Audi',
+                    model: 'A6 Avant',
+                    vin: 'WAUZZZ4G8EN0571',
+                    clientName: 'Anna Nowak',
+                    phone: '+48 600 700 800',
+                    city: 'Kraków',
+                    appointmentTime: '11:15',
+                    deadline: targetDate
+                },
+                {
+                    id: 'demo-job-3',
+                    status: 'completed',
+                    plates: 'GD 501BB',
+                    make: 'Mercedes-Benz',
+                    model: 'S 500',
+                    vin: 'WDD2221821A1598',
+                    clientName: 'Firma TransBud Sp. z o.o.',
+                    phone: '+48 700 800 900',
+                    city: 'Gdańsk',
+                    appointmentTime: '14:00',
+                    deadline: targetDate
+                }
+            ];
+        }
 
         try {
             const params = new URLSearchParams();
@@ -97,7 +159,17 @@ export const apiClient = {
 
     async submitInspection(data: StepData & { jobId: string; images?: string[] }): Promise<SubmissionResult> {
         const token = getAuthToken();
-        console.log('Submitting inspection to Bitrix24...', { jobId: data.jobId });
+        console.log('Submitting inspection...', { jobId: data.jobId });
+
+        if (IS_DEMO) {
+            console.log("DEMO MODE: Simulating form submission with payload:", data);
+            await new Promise(res => setTimeout(res, 1200));
+            return {
+                status: 'submitted',
+                message: 'Demo inspection submitted successfully',
+                filesUploaded: data.images?.length || 0
+            };
+        }
 
         try {
             const response = await fetch(`${BASE_URL}/api/submit-inspection`, {
