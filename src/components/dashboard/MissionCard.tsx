@@ -46,10 +46,10 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     return (
         <div 
             onClick={handleStart}
-            className="group relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-[2rem] p-5 shadow-2xl hover:border-blue-500/30 transition-all duration-300 active:scale-[0.98] cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-[2rem] p-5 shadow-xl dark:shadow-2xl hover:border-blue-500/30 transition-all duration-300 active:scale-[0.98] cursor-pointer overflow-hidden"
         >
             {/* Glossy overlay effect */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/50 dark:from-white/5 to-transparent pointer-events-none" />
             
             {/* Status & Time */}
             <div className="flex justify-between items-start mb-4 relative z-10">
@@ -59,7 +59,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 )}>
                     {getStatusLabel()}
                 </div>
-                <div className="flex items-center gap-1.5 text-slate-400 font-mono text-xs bg-slate-800/50 px-2.5 py-1 rounded-lg">
+                <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-mono text-xs bg-slate-100 dark:bg-slate-800/50 px-2.5 py-1 rounded-lg">
                     <Clock className="w-3 h-3" />
                     {job.appointmentTime}
                 </div>
@@ -67,10 +67,10 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
             {/* License Plate & Vehicle */}
             <div className="mb-4 relative z-10">
-                <h3 className="text-2xl font-black tracking-tight text-white group-hover:text-blue-400 transition-colors uppercase">
+                <h3 className="text-2xl font-black tracking-tight text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors uppercase">
                     {job.plates}
                 </h3>
-                <p className="text-slate-400 text-sm font-medium">
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
                     {job.make} {job.model}
                 </p>
             </div>
@@ -91,18 +91,18 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             <div className="grid grid-cols-3 gap-2 relative z-10">
                 <button
                     onClick={handleCall}
-                    className="flex flex-col items-center justify-center gap-1 bg-slate-800/50 hover:bg-slate-800 py-3 rounded-2xl transition-all active:bg-slate-700"
+                    className="flex flex-col items-center justify-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-800 py-3 rounded-2xl transition-all active:bg-slate-300 dark:active:bg-slate-700"
                     aria-label="Zadzwoń do klienta"
                 >
-                    <Phone className="w-5 h-5 text-blue-400" />
+                    <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     <span className="text-[9px] font-bold uppercase text-slate-500">Zadzwoń</span>
                 </button>
                 <button
                     onClick={handleNavigate}
-                    className="flex flex-col items-center justify-center gap-1 bg-slate-800/50 hover:bg-slate-800 py-3 rounded-2xl transition-all active:bg-slate-700"
+                    className="flex flex-col items-center justify-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-800 py-3 rounded-2xl transition-all active:bg-slate-300 dark:active:bg-slate-700"
                     aria-label="Nawiguj do celu"
                 >
-                    <Navigation className="w-5 h-5 text-blue-400" />
+                    <Navigation className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     <span className="text-[9px] font-bold uppercase text-slate-500">Nawiguj</span>
                 </button>
                 <button
