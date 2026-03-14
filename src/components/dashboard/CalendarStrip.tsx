@@ -51,17 +51,17 @@ export const CalendarStrip: React.FC = () => {
             {/* Header / Week Toggle */}
             <div className="flex items-center justify-between px-2">
                 <div className="flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm font-bold text-slate-200">
+                    <CalendarIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
                         {new Date(calendar.selectedDate).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' })}
                     </span>
                 </div>
                 <button 
                     onClick={toggleCalendarExpanded}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors group"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200/50 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors group"
                 >
-                    <span className="text-[10px] font-bold uppercase text-slate-400 group-hover:text-blue-400">Widok miesiąca</span>
-                    <ChevronDown className={cn("w-3.5 h-3.5 text-slate-500 transition-transform", calendar.expanded && "rotate-180")} />
+                    <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">Widok miesiąca</span>
+                    <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform", calendar.expanded && "rotate-180")} />
                 </button>
             </div>
 
@@ -78,12 +78,12 @@ export const CalendarStrip: React.FC = () => {
                                 onClick={() => formatDate(date)}
                                 className={cn(
                                     "flex flex-col items-center min-w-[3.5rem] py-3 rounded-2xl transition-all duration-300 relative",
-                                    active ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40 scale-110 z-10" : "bg-slate-900/40 text-slate-500 hover:bg-slate-800/60"
+                                    active ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30 dark:shadow-blue-900/40 scale-110 z-10" : "bg-slate-100 dark:bg-slate-900/40 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800/60"
                                 )}
                             >
                                 <span className={cn(
                                     "text-[9px] font-black uppercase mb-1 tracking-tighter",
-                                    active ? "text-blue-100" : "text-slate-600"
+                                    active ? "text-blue-100" : "text-slate-400 dark:text-slate-600"
                                 )}>
                                     {date.toLocaleDateString('pl-PL', { weekday: 'short' }).replace('.', '')}
                                 </span>
@@ -109,10 +109,10 @@ export const CalendarStrip: React.FC = () => {
 
             {/* Monthly View Placeholder (Minimal Implementation for Demo) */}
             {calendar.expanded && (
-                <div className="bg-slate-900/80 backdrop-blur-2xl border border-slate-800 rounded-[2rem] p-4 animate-fade-in shadow-2xl">
+                <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-slate-200 dark:border-slate-800 rounded-[2rem] p-4 animate-fade-in shadow-xl dark:shadow-2xl">
                     <div className="grid grid-cols-7 gap-1">
                         {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'].map(d => (
-                            <div key={d} className="text-[9px] font-bold text-slate-600 text-center py-2 uppercase">{d}</div>
+                            <div key={d} className="text-[9px] font-bold text-slate-400 dark:text-slate-600 text-center py-2 uppercase">{d}</div>
                         ))}
                         {/* Simplified Month Grid (only showing today's week + padding) */}
                         {Array.from({ length: 28 }).map((_, i) => {
@@ -129,7 +129,7 @@ export const CalendarStrip: React.FC = () => {
                                     }}
                                     className={cn(
                                         "aspect-square flex items-center justify-center rounded-xl text-xs font-bold transition-all",
-                                        isSel ? "bg-blue-600 text-white shadow-glow" : "text-slate-400 hover:bg-slate-800"
+                                        isSel ? "bg-blue-600 text-white shadow-glow" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                                     )}
                                 >
                                     {d}

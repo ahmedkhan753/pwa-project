@@ -45,7 +45,7 @@
   --shadow-glow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
-@media (prefers-color-scheme: dark) {
+.dark {
   :root {
     --primary: #3b82f6;
     --primary-hover: #2563eb;
