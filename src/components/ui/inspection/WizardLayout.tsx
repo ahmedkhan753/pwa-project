@@ -2,7 +2,7 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { ProgressBar } from "./ProgressBar";
-import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home } from "lucide-react";
+import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home, Cloud, CloudOff, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { SummaryReviewModal } from "./SummaryReviewModal";
@@ -23,30 +23,40 @@ const STEPS = [
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
-    const { currentStep, maxVisitedStep, setStep, logout, selectJob } = useInspectionStore();
+    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
     const totalSteps = STEPS.length;
     const [showSaved, setShowSaved] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncError, setSyncError] = useState(false);
     const [showReviewModal, setShowReviewModal] = useState(false);
 
-    // Auto-save indicator
+    // Bitrix Auto-Sync (Anti-Oops)
+    useEffect(() => {
+        const performSync = async () => {
+            setIsSyncing(true);
+            setSyncError(false);
+            try {
+                await syncStepWithBitrix(currentStep);
+                setShowSaved(true);
+                setTimeout(() => setShowSaved(false), 2000);
+            } catch (err) {
+                setSyncError(true);
+            } finally {
+                setIsSyncing(false);
+            }
+        };
+
+        performSync();
+    }, [currentStep, syncStepWithBitrix]);
+
+    // Local Persistence indicator (storage events)
     useEffect(() => {
         const handleStorage = () => {
             setShowSaved(true);
             setTimeout(() => setShowSaved(false), 1500);
         };
         window.addEventListener("storage", handleStorage);
-        // Also show on any store update
-        const timer = setInterval(() => {
-            const saved = localStorage.getItem("inspection-storage");
-            if (saved) {
-                setShowSaved(true);
-                setTimeout(() => setShowSaved(false), 1500);
-            }
-        }, 30000);
-        return () => {
-            window.removeEventListener("storage", handleStorage);
-            clearInterval(timer);
-        };
+        return () => window.removeEventListener("storage", handleStorage);
     }, []);
 
     const next = () => {
@@ -90,10 +100,21 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        {showSaved && (
-                            <span className="flex items-center gap-1 text-[10px] text-emerald-400 animate-fade-in bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                                <Save size={10} />
-                                Zapisano
+                        {isSyncing && (
+                            <span className="flex items-center gap-1 text-[10px] text-blue-500 animate-pulse bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                                <RefreshCcw size={10} className="animate-spin" />
+                                Bitrix...
+                            </span>
+                        )}
+                        {syncError ? (
+                            <span className="flex items-center gap-1 text-[10px] text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+                                <CloudOff size={10} />
+                                Offline
+                            </span>
+                        ) : !isSyncing && (
+                            <span className="flex items-center gap-1 text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                <Cloud size={10} />
+                                Synced
                             </span>
                         )}
                         <div className="scale-90 origin-right">

@@ -7,25 +7,19 @@ import { cn } from "@/lib/utils";
 import { submissionQueue } from "@/lib/submissionQueue";
 
 export function SummaryStep() {
-    const { data, updateField, setSignature, reset, jobs } = useInspectionStore();
+    const { data, updateField, setSignature, reset, jobs, submitToBitrix } = useInspectionStore();
     const summary = data.finalSummary;
     const v = data.vehicleData;
 
     const hasSignatures = !!(summary.signatureAppraiser && summary.signatureClient);
 
     const handleSubmit = async () => {
-        updateField('finalSummary', 'submissionStatus', 'pending');
+        const result = await submitToBitrix();
 
-        const result = await submissionQueue.submitReport(data, jobs.currentJobId || 'offline');
-
-        if (result.status === 'submitted') {
-            updateField('finalSummary', 'submissionStatus', 'submitted');
-            updateField('finalSummary', 'submittedAt', new Date().toISOString());
+        if (result.success) {
             alert('Raport wysłany pomyślnie!');
         } else {
-            updateField('finalSummary', 'submissionStatus', 'error');
-            submissionQueue.startBackgroundRetry();
-            alert('Wystąpił problem z połączeniem. Raport zostanie wysłany automatycznie w tle, gdy sygnał powróci.');
+            alert(`Problem z wysyłką: ${result.message}`);
         }
     };
 

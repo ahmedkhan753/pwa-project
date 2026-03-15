@@ -25,9 +25,7 @@ export const Dashboard: React.FC = () => {
         jobs,
         calendar,
         logout,
-        setJobs,
-        setJobsLoading,
-        setJobsError,
+        fetchDealsForCalendar,
     } = useInspectionStore();
 
     const [pulling, setPulling] = useState(false);
@@ -36,14 +34,7 @@ export const Dashboard: React.FC = () => {
     const PULL_THRESHOLD = 80;
 
     const fetchJobs = async () => {
-        setJobsLoading(true);
-        try {
-            // Fetch for the selected date
-            const data = await apiClient.fetchJobs(calendar.selectedDate);
-            setJobs(data);
-        } catch (err: any) {
-            setJobsError(err.message || 'Nie udało się pobrać zleceń.');
-        }
+        await fetchDealsForCalendar(calendar.selectedDate);
     };
 
     // Re-fetch when selected date changes
