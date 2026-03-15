@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { inspectionApi } from '@/api/inspectionApi';
+import { submissionQueue } from '@/lib/submissionQueue';
 
 // ─── Auth & Jobs Types ──────────────────────────────────────
 export interface AuthUser {
@@ -270,6 +272,11 @@ export interface StepData {
   finalSummary: FinalSummary;
 }
 
+export interface InspectionPayload extends StepData {
+  deal_id?: string;
+  job_id?: string;
+}
+
 // ─── Store Interface ──────────────────────────────────────
 interface InspectionState {
   currentStep: number;
@@ -333,8 +340,13 @@ interface InspectionState {
   copyTiresToAxle: (source: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight', target: 'front' | 'rear' | 'all') => void;
   // Signatures
   setSignature: (role: 'signatureAppraiser' | 'signatureClient' | 'signatureYard', base64: string) => void;
-  // Reset
+  // reset
   reset: () => void;
+
+  // ── Bitrix Sync Actions (Phases 7 & 8) ──
+  syncStepWithBitrix: (stepNumber: number) => Promise<void>;
+  submitToBitrix: () => Promise<{ success: boolean; message: string }>;
+  fetchDealsForCalendar: (date: string) => Promise<void>;
 }
 
 // ─── Default Paint Zone ───────────────────────────────────
@@ -699,6 +711,134 @@ export const useInspectionStore = create<InspectionState>()(
 
       // ── Reset ──
       reset: () => set({ currentStep: 1, maxVisitedStep: 1, data: initialData }),
+
+      // ── Bitrix Sync Actions ──
+
+      syncStepWithBitrix: async (stepNumber: number) => {
+        const state = useInspectionStore.getState();
+        const dealId = state.jobs.currentJobId;
+        if (!dealId || dealId.startsWith('mock-')) return;
+
+        const stepKeys: Record<number, keyof StepData> = {
+          1: 'vehicleData', 2: 'equipmentCompleteness', 3: 'fullEquipment',
+          4: 'paintMeasurement', 5: 'tires', 6: 'photos',
+          7: 'tires', // Tires are step 7 in PWA logic
+          8: 'photos',
+          9: 'interiorDamage',
+          10: 'exteriorDamage',
+          11: 'finalSummary'
+        };
+
+        const fieldName = stepKeys[stepNumber];
+        if (!fieldName) return;
+
+        const stepPayload = state.data[fieldName];
+
+        try {
+          console.log(`[Bitrix Sync] Syncing step ${stepNumber} for deal ${dealId}`);
+          await inspectionApi.saveInspectionStep(dealId, stepNumber, stepPayload);
+          console.log(`[Bitrix Sync] Step ${stepNumber} synced successfully.`);
+        } catch (error) {
+          console.warn(`[Bitrix Sync] Step ${stepNumber} sync failed (offline?). Saved to draft.`, error);
+          // Phase 8: Data is already in persisted Zustand store, so it's "queued" for next sync
+        }
+      },
+
+      submitToBitrix: async () => {
+        const state = useInspectionStore.getState();
+        const dealId = state.jobs.currentJobId;
+
+        if (!dealId || dealId.startsWith('mock-')) {
+          return { success: false, message: "Cannot submit a mock job. Please select a real Bitrix24 deal." };
+        }
+
+        set((s) => ({
+          data: {
+            ...s.data,
+            finalSummary: { ...s.data.finalSummary, submissionStatus: 'pending' }
+          }
+        }));
+
+        try {
+          // 1. Upload all base64 images first (Photos + Damages)
+          // To simplify, we use the submissionQueue or direct batch upload
+          console.log("[Bitrix Sync] Starting full submission for deal", dealId);
+
+          // Construct the payload for transform_to_bitrix in backend
+          // The backend expects flat keys, but our InspectionPayload.flatten() handles that
+          // Here we just send the store data structure, backend Pydantic models will parse it
+          const result = await inspectionApi.submitFullInspection({
+            ...state.data,
+            deal_id: dealId,
+            job_id: dealId // in this PWA, jobId is the dealId
+          });
+
+          if (result.status === 'success') {
+            set((s) => ({
+              data: {
+                ...s.data,
+                finalSummary: {
+                  ...s.data.finalSummary,
+                  submissionStatus: 'submitted',
+                  submittedAt: new Date().toISOString()
+                }
+              }
+            }));
+            return { success: true, message: "Inspection submitted successfully!" };
+          }
+
+          throw new Error(result.message || "Submission failed");
+
+        } catch (error: any) {
+          console.error("[Bitrix Sync] Submission failed:", error);
+          set((s) => ({
+            data: {
+              ...s.data,
+              finalSummary: { ...s.data.finalSummary, submissionStatus: 'error' }
+            }
+          }));
+
+          // Trigger background retry loop (Phase 8)
+          submissionQueue.startBackgroundRetry();
+
+          return {
+            success: false,
+            message: `Submission failed: ${error.message}. We will retry in the background.`
+          };
+        }
+      },
+
+      fetchDealsForCalendar: async (date: string) => {
+        set((s) => ({ jobs: { ...s.jobs, loading: true, error: null } }));
+        try {
+          // Bitrix likes date range for calendar views
+          const deals = await inspectionApi.fetchDeals(date, date);
+          // Transform internal format if needed, but the router already translates fields
+          set((s) => ({
+            jobs: {
+              ...s.jobs,
+              list: deals.map((d: any) => ({
+                id: String(d.id),
+                clientName: d.client_name || d.TITLE || 'Brak nazwy',
+                vin: d.vin || '',
+                plates: d.registration_number || '',
+                phone: d.client_phone || '',
+                appointmentTime: '09:00', // Default if not in deal
+                deadline: date,
+                status: (d.STAGE_ID === 'WON' || d.STAGE_ID === 'FINAL') ? 'completed' : 'ready',
+                make: d.vehicle_brand || '',
+                model: d.vehicle_model || '',
+                city: d.inspection_place || ''
+              })),
+              loading: false
+            }
+          }));
+        } catch (error: any) {
+          set((s) => ({
+            jobs: { ...s.jobs, loading: false, error: error.message }
+          }));
+        }
+      },
     }),
     {
       name: 'inspection-storage',

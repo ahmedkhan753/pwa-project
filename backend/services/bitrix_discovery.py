@@ -23,7 +23,7 @@ logger = logging.getLogger("bitrix_discovery")
 # ---------------------------------------------------------------------------
 KEYWORD_MAPPING: Dict[str, List[str]] = {
     # ── Step 1: Vehicle Identity ──────────────────────────────────
-    "vin_number":               ["VIN", "numer nadwozia", "nr seryjny", "Vehicle Identification"],
+    "vin":                      ["VIN", "numer nadwozia", "nr seryjny", "Vehicle Identification"],
     "vehicle_brand":            ["Marka", "Make", "Brand"],
     "vehicle_model":            ["Model pojazdu", "Model"],
     "production_year":          ["Rok produkcji", "Year", "Rok"],

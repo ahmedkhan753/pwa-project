@@ -1,5 +1,6 @@
 import { useInspectionStore, StepData } from "@/store/useInspectionStore";
-import { apiClient, SubmissionResult } from "@/api/client";
+import { inspectionApi } from "@/api/inspectionApi";
+import { SubmissionResult } from "@/api/client";
 
 const RETRY_INTERVAL = 60000; // 60 seconds
 const MAX_RETRIES = 10;
@@ -20,13 +21,17 @@ class SubmissionQueue {
         try {
             console.log("Submitting inspection to Bitrix24 via backend...", { jobId });
 
-            const result = await apiClient.submitInspection({
+            const result = await inspectionApi.submitFullInspection({
                 ...data,
-                jobId,
-                images: [], // Images are embedded in the photos/damages already
+                deal_id: jobId, // in this PWA, jobId is the dealId
+                job_id: jobId,
             });
 
-            return result;
+            return {
+                status: result.status === 'success' ? 'submitted' : 'retry',
+                dealId: result.deal_id,
+                message: result.message || 'Success',
+            };
         } catch (error: any) {
             console.error("Submission failed:", error);
             return {

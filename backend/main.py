@@ -191,7 +191,16 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# ─── Mock Data Fallback ──────────────────────────────────────
+# ─── Routers ──────────────────────────────────────────────────
+from routers import health, deals, inspection, files
+
+app.include_router(health.router)
+app.include_router(deals.router)
+app.include_router(inspection.router)
+app.include_router(files.router)
+
+
+# ─── Mock Data Fallback (Used by Routers if Bitrix Offline) ────
 MOCK_JOBS = [
     {
         "id": "job_1",
@@ -241,11 +250,6 @@ MOCK_JOBS = [
 
 
 # ─── Pydantic Models ─────────────────────────────────────────
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
 class InspectionSubmission(BaseModel):
     """Full inspection data from the Zustand store + base64 images."""
 
@@ -264,43 +268,11 @@ class InspectionSubmission(BaseModel):
     images: List[str] = []
 
 
-# ─── Health Endpoints ─────────────────────────────────────────
-@app.get("/health")
-async def health(request: Request):
-    """Gateway status, field registry size, last sync time."""
-    disc = request.app.state.discovery
-    gw = request.app.state.gateway
-    bitrix_ready = request.app.state.bitrix_ready
+# ─── Auth Endpoint (To be moved to router later if needed) ─────
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
-    return {
-        "status": "ok",
-        "bitrix_ready": bitrix_ready,
-        "field_count": disc.get_total_bitrix_fields() if disc.is_initialized else 0,
-        "mapped_count": disc.get_mapped_count() if disc.is_initialized else 0,
-        "last_sync": disc.last_sync_time if disc.is_initialized else None,
-        "cache_stale": disc.is_cache_stale() if disc.is_initialized else True,
-    }
-
-
-@app.get("/health/fields")
-async def health_fields(request: Request):
-    """Full PWA → Bitrix field mapping for debugging."""
-    disc = request.app.state.discovery
-    if not disc.is_initialized:
-        return {"error": "Discovery engine not initialized", "mapping": {}}
-
-    return {
-        "mapping": disc.get_full_registry(),
-        "total_bitrix_fields": disc.get_total_bitrix_fields(),
-        "mapped_count": disc.get_mapped_count(),
-        "unmapped_keys": [
-            k for k in disc.get_all_pwa_keys()
-            if k not in disc.get_full_registry()
-        ],
-    }
-
-
-# ─── Auth Endpoint ────────────────────────────────────────────
 @app.post("/auth/login")
 async def login(request_body: LoginRequest):
     """Login endpoint — maps email to Bitrix24 user."""
@@ -328,14 +300,14 @@ async def login(request_body: LoginRequest):
     return {"token": f"token_{int(time.time())}", "user": user_data}
 
 
-# ─── Task A: Inbound Sync ────────────────────────────────────
+# ─── Legacy Task Endpoint (Backward Compatibility) ────────────
 @app.get("/api/tasks")
 async def get_tasks(
     responsible_id: Optional[str] = None,
     email: Optional[str] = None,
     date: Optional[str] = None,
 ):
-    """Fetch tasks from Bitrix24 filtered by RESPONSIBLE_ID and DEADLINE."""
+    """Bridge to new deals router logic if needed, or keep for simple sync."""
     if email and not responsible_id:
         responsible_id = await bitrix_service.get_responsible_id_for_email(email)
         if not responsible_id:
@@ -353,11 +325,9 @@ async def get_tasks(
     return MOCK_JOBS
 
 
-@app.get("/jobs/appraiser")
-async def get_jobs():
-    """Legacy endpoint — redirects to /api/tasks internally."""
-    return await get_tasks()
-
+@app.get("/")
+async def root():
+    return {"message": "Auto-Inspection PWA API v2.0", "status": "online"}
 
 # ─── Task B: Outbound Sync ───────────────────────────────────
 @app.post("/api/submit-inspection")
