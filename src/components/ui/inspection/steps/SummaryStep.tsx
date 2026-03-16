@@ -24,8 +24,8 @@ export function SummaryStep() {
             {/* ── Section: Damage Gallery ─────────────────── */}
             <div className="section-card bg-surface-raised border-border/50">
                 <div className="flex items-center gap-2 mb-4">
-                    <ImageIcon size={18} className="text-blue-500" />
-                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Galeria Uszkodzeń ({allDamages.length})</h4>
+                    <ImageIcon size={18} className="text-primary" />
+                    <h4 className="text-xs font-black text-foreground uppercase tracking-tight">Galeria Uszkodzeń ({allDamages.length})</h4>
                 </div>
                 
                 {allDamages.length > 0 ? (
@@ -38,13 +38,13 @@ export function SummaryStep() {
                                         <span className="text-[8px] font-black text-white uppercase">{d.part || 'Element'}</span>
                                     </div>
                                 </div>
-                                <p className="text-[8px] font-bold text-slate-500 truncate leading-tight">{d.description}</p>
+                                <p className="text-[8px] font-bold text-muted truncate leading-tight">{d.description}</p>
                             </div>
                         ))}
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-border rounded-2xl opacity-50">
-                        <ImageIcon size={24} className="text-slate-300 mb-2" />
+                        <ImageIcon size={24} className="text-muted/20 mb-2" />
                         <p className="text-[10px] font-black text-slate-400 uppercase">Brak zgłoszonych uszkodzeń</p>
                     </div>
                 )}

@@ -78,31 +78,28 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             <header className="sticky top-0 z-30 bg-surface dark:bg-background/80 backdrop-blur-lg text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
                     <div>
-                        <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
+                        <h2 className="text-base font-bold tracking-tight text-foreground">
                             {STEPS[currentStep - 1].label}
                         </h2>
-                        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                        <p className="text-xs text-primary font-medium">
                             Krok {currentStep} z {totalSteps}
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        {isSyncing && (
-                            <span className="flex items-center gap-1 text-[10px] text-blue-500 animate-pulse bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                                <RefreshCcw size={10} className="animate-spin" />
-                                Bitrix...
+                        <div className="flex gap-2">
+                            <span className="flex items-center gap-1 text-[10px] text-primary animate-pulse bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                                <div className="w-1 h-1 rounded-full bg-primary" />
+                                LIVE
                             </span>
-                        )}
-                        {syncError ? (
-                            <span className="flex items-center gap-1 text-[10px] text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
-                                <CloudOff size={10} />
-                                Offline
+                            <span className="flex items-center gap-1 text-[10px] text-danger bg-danger/10 px-2 py-0.5 rounded-full border border-danger/20">
+                                <div className="w-1 h-1 rounded-full bg-danger" />
+                                HIGH PRIO
                             </span>
-                        ) : !isSyncing && (
-                            <span className="flex items-center gap-1 text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                                <Cloud size={10} />
-                                Synced
+                            <span className="flex items-center gap-1 text-[10px] text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                                <div className="w-1 h-1 rounded-full bg-success" />
+                                SECURE
                             </span>
-                        )}
+                        </div>
                         <div className="scale-90 origin-right">
                             <ThemeToggle />
                         </div>

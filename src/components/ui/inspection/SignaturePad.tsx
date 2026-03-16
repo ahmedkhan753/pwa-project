@@ -62,8 +62,8 @@ export function SignaturePad({ label, value, onSave, disabled }: SignaturePadPro
                             className="max-w-full max-h-full object-contain filter dark:invert"
                         />
                         {!disabled && (
-                            <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/5 transition-colors flex items-center justify-center pointer-events-none">
-                                <span className="text-[10px] font-black uppercase text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute inset-0 bg-background/0 group-hover:bg-background/5 transition-colors flex items-center justify-center pointer-events-none">
+                                <span className="text-[10px] font-black uppercase text-muted opacity-0 group-hover:opacity-100 transition-opacity">
                                     Kliknij "Wyczyść" aby zmienić
                                 </span>
                             </div>

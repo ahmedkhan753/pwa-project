@@ -48,10 +48,8 @@ export function EquipmentStep() {
                 ))}
 
                 {/* Keys Count */}
-                <div className="mt-4 pt-4 border-t border-border">
-                    <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
-                        Ilość kluczyków
-                    </label>
+                <div className="bg-surface rounded-3xl border border-border p-6 shadow-sm mt-4">
+                    <h4 className="text-sm font-black text-foreground mb-6 uppercase tracking-tight">Ilość kluczyków</h4>
                     <input
                         type="number"
                         value={eq.keysCount}

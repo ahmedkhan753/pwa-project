@@ -50,7 +50,7 @@ export function ValidationStep() {
             <div className="text-center space-y-2 mb-8">
                 <div className={cn(
                     "w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-4 transition-all duration-500",
-                    isReady ? "bg-emerald-500 shadow-lg shadow-emerald-500/20" : "bg-amber-500 shadow-lg shadow-amber-500/20"
+                    isReady ? "bg-success shadow-lg shadow-success/20" : "bg-warning shadow-lg shadow-warning/20"
                 )}>
                     {isReady ? <CheckCircle2 size={32} className="text-white" /> : <AlertTriangle size={32} className="text-white" />}
                 </div>
@@ -84,8 +84,8 @@ export function ValidationStep() {
                 ))}
 
                 {isReady && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-3xl p-8 text-center space-y-4">
-                        <CheckCircle2 size={40} className="text-emerald-500 mx-auto" />
+                    <div className="bg-success-light border border-success/20 rounded-3xl p-8 text-center space-y-4">
+                        <CheckCircle2 size={40} className="text-success mx-auto" />
                         <p className="text-sm font-bold text-success">
                             Walidacja przebiegła pomyślnie. Możesz przejść do składania podpisów.
                         </p>

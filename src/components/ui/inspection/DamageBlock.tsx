@@ -47,7 +47,7 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
                 <div className="space-y-3 animate-fade-in">
                     {/* Part Select */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
+                        <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">
                             Element
                         </label>
                         <select
@@ -65,7 +65,7 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
 
                     {/* Type Select */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
+                        <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">
                             Typ uszkodzenia
                         </label>
                         <select
@@ -83,7 +83,7 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
 
                     {/* Action Select */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
+                        <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">
                             Działanie
                         </label>
                         <select
@@ -101,7 +101,7 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
 
                     {/* Size */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
+                        <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">
                             Rozmiar (cm)
                         </label>
                         <input
@@ -116,7 +116,7 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
 
                     {/* Description */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
+                        <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">
                             Opis
                         </label>
                         <textarea
@@ -131,7 +131,7 @@ export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, on
 
                     {/* Damage Photos */}
                     <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-2 flex items-center justify-between">
+                        <label className="text-xs font-bold text-muted uppercase tracking-wider mb-2 flex items-center justify-between">
                             <span>Zdjęcia uszkodzenia</span>
                             {entry.photos.length < 2 && (
                                 <span className="text-[10px] text-danger font-bold animate-pulse">

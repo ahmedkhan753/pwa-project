@@ -48,11 +48,11 @@ export function TireSpecLock({ value, onChange, label }: TireSpecLockProps) {
 
     return (
         <div className="col-span-2 space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block px-1">
-                {label} (Format: Szerokość / Profil / R / Średnica / Indeks)
+            <label className="text-[10px] font-black text-muted uppercase tracking-widest block px-1">
+                {label}
             </label>
             
-            <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-inner">
+            <div className="flex items-center gap-1 bg-surface-raised p-1.5 rounded-2xl border-2 border-border shadow-inner">
                 {/* Width */}
                 <input
                     type="text"
@@ -60,9 +60,9 @@ export function TireSpecLock({ value, onChange, label }: TireSpecLockProps) {
                     placeholder="205"
                     value={spec.width}
                     onChange={(e) => updateSpec("width", e.target.value)}
-                    className="w-14 py-2 text-center bg-white dark:bg-slate-900 rounded-xl text-sm font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                    className="w-14 py-2 text-center bg-surface rounded-xl text-sm font-black text-primary focus:ring-2 focus:ring-primary outline-none shadow-sm"
                 />
-                <span className="text-slate-400 font-black">/</span>
+                <span className="text-muted/40 font-black">/</span>
                 
                 {/* Profile */}
                 <input
@@ -71,15 +71,15 @@ export function TireSpecLock({ value, onChange, label }: TireSpecLockProps) {
                     placeholder="55"
                     value={spec.profile}
                     onChange={(e) => updateSpec("profile", e.target.value)}
-                    className="w-12 py-2 text-center bg-white dark:bg-slate-900 rounded-xl text-sm font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                    className="w-12 py-2 text-center bg-surface rounded-xl text-sm font-black text-primary focus:ring-2 focus:ring-primary outline-none shadow-sm"
                 />
-                <span className="text-slate-400 font-black">/</span>
+                <span className="text-muted/40 font-black">/</span>
                 
                 {/* R (Locked) */}
-                <div className="w-8 py-2 text-center bg-slate-200 dark:bg-slate-700 rounded-xl text-sm font-black text-slate-500 cursor-not-allowed">
+                <div className="w-8 py-2 text-center bg-surface-raised rounded-xl text-sm font-black text-muted/40 cursor-not-allowed">
                     R
                 </div>
-                <span className="text-slate-400 font-black">/</span>
+                <span className="text-muted/40 font-black">/</span>
                 
                 {/* Diameter */}
                 <input
@@ -88,9 +88,9 @@ export function TireSpecLock({ value, onChange, label }: TireSpecLockProps) {
                     placeholder="16"
                     value={spec.diameter}
                     onChange={(e) => updateSpec("diameter", e.target.value)}
-                    className="w-12 py-2 text-center bg-white dark:bg-slate-900 rounded-xl text-sm font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                    className="w-12 py-2 text-center bg-surface rounded-xl text-sm font-black text-primary focus:ring-2 focus:ring-primary outline-none shadow-sm"
                 />
-                <span className="text-slate-400 font-black">/</span>
+                <span className="text-muted/40 font-black">/</span>
                 
                 {/* Index */}
                 <input
@@ -98,7 +98,7 @@ export function TireSpecLock({ value, onChange, label }: TireSpecLockProps) {
                     placeholder="91V"
                     value={spec.index}
                     onChange={(e) => updateSpec("index", e.target.value.toUpperCase())}
-                    className="flex-1 min-w-0 py-2 text-center bg-white dark:bg-slate-900 rounded-xl text-sm font-black text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                    className="flex-1 min-w-0 py-2 text-center bg-surface rounded-xl text-sm font-black text-primary focus:ring-2 focus:ring-primary outline-none shadow-sm"
                 />
             </div>
         </div>

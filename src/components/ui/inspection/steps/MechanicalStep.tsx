@@ -63,6 +63,12 @@ const MECH_OPTIONS = [
     { label: 'ND', value: 'ND', colorClass: 'bg-slate-500', activeColor: 'text-white' },
 ];
 
+const VIN_OPTIONS: Array<{ val: '' | 'NIE BADANO' | 'OK' | 'NIEZGODNE'; label: string; color: string }> = [
+    { val: 'NIE BADANO', label: 'Nie badano', color: 'bg-surface-raised text-muted' },
+    { val: 'OK', label: 'OK', color: 'bg-success text-white' },
+    { val: 'NIEZGODNE', label: 'Niezgodne', color: 'bg-danger text-white' },
+];
+
 export function MechanicalStep() {
     const { data, updateField } = useInspectionStore();
     const mech = data.mechanical;
@@ -77,8 +83,8 @@ export function MechanicalStep() {
             </div>
 
             {MECH_GROUPS.map((group) => (
-                <div key={group.title} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm mb-4">
-                    <h4 className="text-sm font-black text-slate-900 dark:text-white mb-6 uppercase tracking-tight">{group.title}</h4>
+                <div key={group.title} className="bg-surface rounded-3xl border border-border p-6 shadow-sm mb-4">
+                    <h4 className="text-sm font-black text-foreground mb-6 uppercase tracking-tight">{group.title}</h4>
                     <div className="space-y-2">
                         {group.items.map((item) => (
                             <InspectionToggle

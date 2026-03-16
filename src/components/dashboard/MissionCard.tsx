@@ -22,9 +22,9 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const isCompleted = job.status === 'completed';
 
     const getStatusStyles = () => {
-        if (isCompleted) return 'bg-green-500/10 text-green-400 border-green-500/20';
-        if (isInProgress) return 'bg-orange-500/10 text-orange-400 border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]';
-        return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+        if (isCompleted) return 'bg-success-light text-success border-success/20';
+        if (isInProgress) return 'bg-warning-light text-warning border-warning/20 shadow-lg shadow-warning/5';
+        return 'bg-primary-light text-primary border-primary/20';
     };
 
     const getStatusLabel = () => {
@@ -83,7 +83,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         >
             {/* Conflict Warning Badge */}
             {job.hasConflict && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-black px-4 py-1 rounded-full shadow-lg shadow-red-500/40 z-20 flex items-center gap-1.5 uppercase tracking-widest">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-danger text-white text-[10px] font-black px-4 py-1 rounded-full shadow-lg shadow-danger/40 z-20 flex items-center gap-1.5 uppercase tracking-widest animate-pulse-soft">
                     <AlertCircle className="w-3 h-3" />
                     Kolizja terminów
                 </div>
@@ -97,7 +97,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     </div>
                     <div className={cn(
                         "px-3 py-1 rounded-full text-[10px] font-black uppercase border shadow-lg",
-                        job.jobType === 'CFM' ? "bg-purple-500/20 text-purple-400 border-purple-500/30" : "bg-blue-600 text-white border-blue-500 shadow-blue-500/20"
+                        job.jobType === 'CFM' ? "bg-primary-light text-primary border-primary/30" : "bg-primary text-white border-primary shadow-lg shadow-primary/20"
                     )}>
                         {job.jobType || 'WYCENA'}
                     </div>

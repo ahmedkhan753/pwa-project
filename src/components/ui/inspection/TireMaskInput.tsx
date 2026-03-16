@@ -24,16 +24,16 @@ export function TireMaskInput({ value, onChange, label }: TireMaskInputProps) {
 
     return (
         <div className="flex flex-col gap-1 mb-4">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{label}</label>
+            <label className="text-xs font-bold text-muted uppercase tracking-wider">{label}</label>
             <input
                 type="text"
                 inputMode="decimal"
                 value={value}
                 onChange={handleInputChange}
                 placeholder="X,X"
-                className="text-2xl font-mono py-3 px-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 outline-none transition-colors"
+                className="text-2xl font-mono py-3 px-4 rounded-xl border-2 border-border bg-surface text-foreground focus:border-primary outline-none transition-colors"
             />
-            <p className="text-[10px] text-gray-400">Format: 5,4 (mm)</p>
+            <p className="text-[10px] text-muted/40">Format: 5,4 (mm)</p>
         </div>
     );
 }

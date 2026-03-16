@@ -92,7 +92,7 @@ export const Dashboard: React.FC = () => {
                 }}
             >
                 <RefreshCcw className={cn(
-                    "w-6 h-6 text-blue-500", 
+                    "w-6 h-6 text-primary", 
                     pulling && "animate-spin",
                     pullDistance >= PULL_THRESHOLD && "scale-125"
                 )} />
@@ -177,11 +177,11 @@ export const Dashboard: React.FC = () => {
                             <SkeletonCard />
                         </>
                     ) : jobs.error ? (
-                        <div className="glass-card p-10 text-center border-red-500/20 bg-red-50 dark:bg-red-500/5">
-                            <p className="text-red-600 dark:text-red-200 font-medium mb-6">{jobs.error}</p>
+                        <div className="glass-card p-10 text-center border-danger/20 bg-danger-light">
+                            <p className="text-danger font-medium mb-6">{jobs.error}</p>
                             <button
                                 onClick={fetchJobs}
-                                className="px-8 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-black text-sm uppercase transition-all shadow-lg shadow-red-500/20 dark:shadow-red-900/20 active:scale-95"
+                                className="px-8 py-3 bg-danger hover:bg-danger/90 text-white rounded-2xl font-black text-sm uppercase transition-all shadow-lg shadow-danger/20 active:scale-95"
                             >
                                 Spróbuj ponownie
                             </button>

@@ -40,9 +40,9 @@ export function VehicleDataStep() {
 
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <Loader2 size={40} className="text-blue-500 animate-spin" />
-                <p className="text-slate-500 font-bold animate-pulse uppercase tracking-widest text-xs">Pobieranie danych Bitrix24...</p>
+            <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+                <Loader2 size={40} className="text-primary animate-spin" />
+                <p className="text-muted font-bold animate-pulse uppercase tracking-widest text-xs">Pobieranie danych Bitrix24...</p>
             </div>
         );
     }
@@ -50,13 +50,13 @@ export function VehicleDataStep() {
     return (
         <div className="space-y-6 animate-fade-in">
             {/* ── Basic Info (Read-Only) ─────────────────────── */}
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm border-l-[6px] border-l-blue-500">
-                <div className="flex items-center gap-2 mb-4">
-                    <Building2 size={18} className="text-blue-500" />
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                        Informacje Podstawowe
+            <div className="bg-surface rounded-3xl border border-border p-6 shadow-sm border-l-[6px] border-l-primary">
+                <div className="flex items-center gap-2 mb-6">
+                    <Building2 size={18} className="text-primary" />
+                    <h3 className="text-sm font-black text-foreground uppercase tracking-tight">
+                        Dane z systemu
                     </h3>
-                    <span className="text-[9px] bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-black px-2 py-1 rounded-md ml-auto uppercase">TYLKO ODCZYT</span>
+                    <span className="text-[9px] bg-warning-light text-warning-hover font-black px-2 py-1 rounded-md ml-auto uppercase">TYLKO ODCZYT</span>
                 </div>
                 <div className="grid gap-3">
                     <ReadOnlyField icon={<Building2 size={14} />} label="Firma" value={bi.companyName} placeholder="Nazwa firmy" />
@@ -68,33 +68,32 @@ export function VehicleDataStep() {
             </div>
 
             {/* ── VIN Section ────────────────────────────────── */}
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-lg">
+            <div className="bg-surface rounded-3xl border border-border p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-6">
-                    <Car size={18} className="text-blue-500" />
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                        Dane Pojazdu
+                    <Car size={18} className="text-primary" />
+                    <h3 className="text-sm font-black text-foreground uppercase tracking-tight">
+                        Dane do uzupełnienia
                     </h3>
                 </div>
 
                 {/* VIN with OCR trigger */}
-                <div className="mb-8">
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block px-1">
+                <div className="space-y-4">
+                    <label className="text-xs font-black text-muted uppercase tracking-widest mb-2 block px-1">
                         Numer VIN
                     </label>
                     <div className="flex gap-2">
                         <input
                             type="text"
                             value={v.vin}
-                            onChange={(e) => handleChange('vin', e.target.value.toUpperCase())}
+                            onChange={(e) => updateField('vehicleData', 'vin', e.target.value.toUpperCase())}
                             maxLength={17}
-                            placeholder="WVWZZZ3CZWE123456"
+                            placeholder="Wpisz lub zeskanuj VIN"
                             aria-label="VIN number"
-                            className="flex-1 py-4 px-5 font-mono text-xl tracking-[0.2em] rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white uppercase shadow-inner"
+                            className="flex-1 py-4 px-5 font-mono text-xl tracking-[0.2em] rounded-2xl border-2 border-border bg-surface text-foreground uppercase shadow-inner"
                         />
                         <button
-                            type="button"
                             onClick={() => setShowScanner(true)}
-                            className="px-6 py-4 bg-blue-600 text-white rounded-2xl flex items-center gap-2 font-black text-xs uppercase shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                            className="px-6 py-4 bg-primary text-white rounded-2xl flex items-center gap-2 font-black text-xs uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all"
                             aria-label="Scan VIN with camera"
                         >
                             <ScanLine size={20} />
@@ -102,13 +101,13 @@ export function VehicleDataStep() {
                         </button>
                     </div>
                     {v.vin && v.vin.length !== 17 && (
-                        <p className="text-xs text-rose-500 mt-2 font-black uppercase tracking-tight">VIN musi mieć 17 znaków ({v.vin.length}/17)</p>
+                        <p className="text-xs text-danger mt-2 font-black uppercase tracking-tight">VIN musi mieć 17 znaków ({v.vin.length}/17)</p>
                     )}
                 </div>
 
                 {showScanner && (
                     <VinScanner
-                        onScan={(vin) => handleChange('vin', vin)}
+                        onScan={(vin) => updateField('vehicleData', 'vin', vin)}
                         onClose={() => setShowScanner(false)}
                     />
                 )}
@@ -188,7 +187,7 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: {
 }) {
     return (
         <div>
-            <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block px-1">
+            <label className="text-xs font-black text-muted uppercase tracking-widest mb-2 block px-1">
                 {label}
             </label>
             <input
@@ -197,7 +196,7 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: {
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
                 aria-label={label}
-                className="w-full py-3.5 px-4 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-500 transition-all"
+                className="w-full py-3.5 px-4 rounded-xl border-2 border-border bg-surface text-foreground text-sm font-bold placeholder:text-muted/40 focus:border-primary transition-all"
             />
         </div>
     );
@@ -208,16 +207,16 @@ function ReadOnlyField({ icon, label, value, placeholder }: {
     icon: React.ReactNode; label: string; value: string; placeholder: string;
 }) {
     return (
-        <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl px-4 py-3 border border-transparent shadow-inner">
-            <div className="text-blue-500 flex-shrink-0 bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm">{icon}</div>
-            <div className="flex-1 min-w-0">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">{label}</span>
-                <span className={cn(
-                    "block text-sm font-bold truncate",
-                    value ? "text-slate-900 dark:text-white" : "text-slate-300 dark:text-slate-600 italic"
+        <div className="flex items-center gap-4 bg-surface-raised/50 rounded-2xl px-4 py-3 border border-transparent shadow-inner">
+            <div className="text-primary flex-shrink-0 bg-surface p-2 rounded-xl shadow-sm">{icon}</div>
+            <div className="min-w-0">
+                <span className="text-[10px] font-black text-muted uppercase tracking-widest block mb-1">{label}</span>
+                <p className={cn(
+                    "text-sm font-bold truncate leading-none",
+                    value ? "text-foreground" : "text-muted/40 italic"
                 )}>
                     {value || placeholder}
-                </span>
+                </p>
             </div>
         </div>
     );

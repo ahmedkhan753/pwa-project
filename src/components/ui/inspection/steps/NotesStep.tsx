@@ -18,9 +18,9 @@ const UWAGI_ITEMS: { key: string; label: string }[] = [
 ];
 
 const VIN_OPTIONS: Array<{ val: '' | 'NIE BADANO' | 'OK' | 'NIEZGODNE'; label: string; color: string }> = [
-    { val: 'NIE BADANO', label: 'Nie badano', color: 'bg-gray-100 text-gray-600' },
-    { val: 'OK', label: 'OK', color: 'bg-green-500 text-white' },
-    { val: 'NIEZGODNE', label: 'Niezgodne', color: 'bg-red-500 text-white' },
+    { val: 'NIE BADANO', label: 'Nie badano', color: 'bg-surface-raised text-muted' },
+    { val: 'OK', label: 'OK', color: 'bg-success text-white' },
+    { val: 'NIEZGODNE', label: 'Niezgodne', color: 'bg-danger text-white' },
 ];
 
 export function NotesStep() {
@@ -83,7 +83,7 @@ export function NotesStep() {
                                 "flex-1 py-2.5 rounded-lg font-bold text-xs transition-all active:scale-95",
                                 notes.vinVerification === opt.val
                                     ? `${opt.color} shadow-md`
-                                    : "bg-gray-100 text-gray-500 dark:bg-gray-800"
+                                    : "bg-surface-raised text-muted/40"
                             )}
                         >
                             {opt.label}

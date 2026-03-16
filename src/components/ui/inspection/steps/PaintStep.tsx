@@ -21,7 +21,7 @@ export function PaintStep() {
                     Pomiar Lakieru
                 </h3>
             </div>
-            <p className="text-xs text-secondary mb-4">
+            <p className="text-xs text-muted mb-4">
                 Kliknij na element nadwozia aby wprowadzić grubość lakieru w µm.
             </p>
             <CarSchema paint={paint} onZoneUpdate={handleZoneUpdate} />

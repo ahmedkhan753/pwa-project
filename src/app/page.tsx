@@ -19,8 +19,8 @@ export default function Home() {
 
     if (!isClient) {
         return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center transition-colors duration-300">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            <div className="min-h-screen bg-background flex items-center justify-center transition-colors duration-300">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
         );
     }

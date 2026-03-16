@@ -39,7 +39,7 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="pl" className={inter.variable} suppressHydrationWarning>
-            <body className="font-sans antialiased text-slate-900 bg-slate-50 dark:text-slate-50 dark:bg-slate-950 transition-colors duration-300">
+            <body className="font-sans antialiased text-foreground bg-background transition-colors duration-300">
                 <ThemeProvider
                     attribute="class"
                     defaultTheme="system"

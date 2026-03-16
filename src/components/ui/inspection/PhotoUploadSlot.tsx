@@ -45,7 +45,7 @@ export function PhotoUploadSlot({ label, base64, required, onCapture, onClear }:
                     />
                     <button
                         onClick={onClear}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md"
+                        className="absolute top-1 right-1 bg-danger text-white rounded-full p-1 shadow-md"
                         aria-label={`Remove ${label}`}
                     >
                         <X size={14} />
@@ -59,7 +59,7 @@ export function PhotoUploadSlot({ label, base64, required, onCapture, onClear }:
                     onClick={() => inputRef.current?.click()}
                     className={cn(
                         "photo-slot w-full flex-col gap-1",
-                        required && "border-amber-300 bg-amber-50/30"
+                        required && "border-warning bg-warning-light"
                     )}
                 >
                     <Camera size={20} className="text-muted" />
