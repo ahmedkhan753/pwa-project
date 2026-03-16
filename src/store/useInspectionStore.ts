@@ -328,7 +328,7 @@ interface InspectionState {
   logout: () => void;
   // Job Actions
   setJobsLoading: (loading: boolean) => void;
-  setJobs: (jobs: InspectionJob[]) => void;
+  setJobs: (scheduled: InspectionJob[], unscheduled: InspectionJob[], total?: number) => void;
   setJobsError: (error: string | null) => void;
   selectJob: (jobId: string | null) => void;
   // Calendar Actions
