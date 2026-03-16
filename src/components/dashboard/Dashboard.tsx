@@ -154,7 +154,7 @@ export const Dashboard: React.FC = () => {
                     <h3 className="text-xl font-black tracking-tight flex items-center gap-3 text-foreground uppercase">
                         Zlecenia na dziś
                         <span className="text-[12px] bg-primary text-white px-2 py-0.5 rounded-lg border border-primary/20">
-                            {jobs.scheduled.length}
+                            {(jobs.scheduled || []).length}
                         </span>
                     </h3>
                     <button 
@@ -174,13 +174,13 @@ export const Dashboard: React.FC = () => {
                             <SkeletonCard />
                             <SkeletonCard />
                         </>
-                    ) : jobs.scheduled.length === 0 ? (
+                    ) : (jobs.scheduled || []).length === 0 ? (
                         <div className="bg-surface-raised/30 border border-dashed border-border rounded-2xl py-8 flex flex-col items-center justify-center text-center px-6">
                             <p className="text-xs text-muted font-bold uppercase tracking-widest">Brak zaplanowanych misji</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-5 animate-fade-in [animation-delay:200ms]">
-                            {jobs.scheduled.map((job) => (
+                            {(jobs.scheduled || []).map((job) => (
                                 <MissionCard key={job.id} job={job} />
                             ))}
                         </div>
@@ -192,19 +192,19 @@ export const Dashboard: React.FC = () => {
                     <h3 className="text-xl font-black tracking-tight flex items-center gap-3 text-foreground uppercase px-1 mb-6">
                         Oczekujące / Inne
                         <span className="text-[12px] bg-muted/20 text-muted px-2 py-0.5 rounded-lg border border-border">
-                            {jobs.unscheduled.length}
+                            {(jobs.unscheduled || []).length}
                         </span>
                     </h3>
                     <div className="space-y-4">
                         {jobs.loading ? (
                             <SkeletonCard />
-                        ) : jobs.unscheduled.length === 0 ? (
+                        ) : (jobs.unscheduled || []).length === 0 ? (
                             <div className="bg-surface-raised/10 border border-dashed border-border/50 rounded-2xl py-8 flex flex-col items-center justify-center text-center px-6 grayscale">
                                 <p className="text-[10px] text-muted/50 font-bold uppercase tracking-widest">Wszystkie misje są przypisane</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-5 animate-fade-in [animation-delay:300ms]">
-                                {jobs.unscheduled.map((job) => (
+                                {(jobs.unscheduled || []).map((job) => (
                                     <MissionCard key={job.id} job={job} />
                                 ))}
                             </div>

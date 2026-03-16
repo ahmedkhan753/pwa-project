@@ -328,7 +328,7 @@ interface InspectionState {
   logout: () => void;
   // Job Actions
   setJobsLoading: (loading: boolean) => void;
-  setJobs: (jobs: InspectionJob[]) => void;
+  setJobs: (scheduled: InspectionJob[], unscheduled: InspectionJob[], total?: number) => void;
   setJobsError: (error: string | null) => void;
   selectJob: (jobId: string | null) => void;
   // Calendar Actions
@@ -1013,6 +1013,28 @@ export const useInspectionStore = create<InspectionState>()(
     {
       name: 'inspection-storage',
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          // Initialize grouped jobs if missing
+          const jobs = persistedState.jobs || {};
+          const scheduled = jobs.scheduled || [];
+          const unscheduled = jobs.unscheduled || jobs.list || [];
+          
+          return {
+            ...persistedState,
+            jobs: {
+              ...jobs,
+              scheduled,
+              unscheduled,
+              totalInBitrix: scheduled.length + unscheduled.length,
+              loading: false,
+              error: null
+            }
+          };
+        }
+        return persistedState;
+      },
     }
   )
 );

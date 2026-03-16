@@ -37,7 +37,7 @@ export const CalendarStrip: React.FC = () => {
 
     const hasTasks = (date: Date) => {
         const isoString = date.toISOString().split('T')[0];
-        return [...jobs.scheduled, ...jobs.unscheduled].some(job => job.deadline === isoString);
+        return [...(jobs.scheduled || []), ...(jobs.unscheduled || [])].some(job => job.deadline === isoString);
     };
 
     const formatDate = (date: Date) => {
