@@ -386,7 +386,7 @@ const defaultPhotoSlots: PhotoSlot[] = [
   { id: 'right_side', label: '7. Prawy Bok', base64: '', required: true },
   { id: 'rear_right', label: '8. Tył Prawy', base64: '', required: true },
   { id: 'roof', label: '9. Dach', base64: '', required: true },
-  
+
   // Interior & Engine
   { id: 'dashboard', label: '10. Kokpit / Deska', base64: '', required: true },
   { id: 'odometer', label: '11. Licznik (Przebieg)', base64: '', required: true },
@@ -572,13 +572,13 @@ export const useInspectionStore = create<InspectionState>()(
             currentUserId: null,
             currentUserName: null,
           },
-          jobs: { 
-            scheduled: [], 
-            unscheduled: [], 
+          jobs: {
+            scheduled: [],
+            unscheduled: [],
             totalInBitrix: 0,
-            currentJobId: null, 
-            loading: false, 
-            error: null 
+            currentJobId: null,
+            loading: false,
+            error: null
           },
           calendar: {
             selectedDate: new Date().toISOString().split('T')[0],
@@ -647,8 +647,8 @@ export const useInspectionStore = create<InspectionState>()(
           });
         } catch (error: any) {
           console.error("Failed to fetch full deal:", error);
-          set((state) => ({ 
-            jobs: { ...state.jobs, loading: false, error: "Nie udało się pobrać danych z Bitrix24" } 
+          set((state) => ({
+            jobs: { ...state.jobs, loading: false, error: "Nie udało się pobrać danych z Bitrix24" }
           }));
           throw error;
         }
@@ -659,15 +659,15 @@ export const useInspectionStore = create<InspectionState>()(
         set((state) => ({ jobs: { ...state.jobs, loading } })),
 
       setJobs: (scheduled, unscheduled, total) =>
-        set((state) => ({ 
-          jobs: { 
-            ...state.jobs, 
-            scheduled, 
-            unscheduled, 
+        set((state) => ({
+          jobs: {
+            ...state.jobs,
+            scheduled,
+            unscheduled,
             totalInBitrix: total || (scheduled.length + unscheduled.length),
-            loading: false, 
-            error: null 
-          } 
+            loading: false,
+            error: null
+          }
         })),
 
       setJobsError: (error) =>
@@ -730,28 +730,28 @@ export const useInspectionStore = create<InspectionState>()(
           const dealId = jobId;
           const isoDate = date;
           const response = await api.scheduleDeal(dealId, isoDate.split('T')[0], isoDate.split('T')[1] || '09:00');
-      if (response.success) {
-        set((state) => ({
-          jobs: {
-            ...state.jobs,
-            scheduled: state.jobs.scheduled.map((j) =>
-              j.id === dealId
-                ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
-                : j
-            ),
-            unscheduled: state.jobs.unscheduled.map((j) =>
-              j.id === dealId
-                ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
-                : j
-            ),
-          },
-        }));
-      }
-      return response;
+          if (response.success) {
+            set((state) => ({
+              jobs: {
+                ...state.jobs,
+                scheduled: state.jobs.scheduled.map((j) =>
+                  j.id === dealId
+                    ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
+                    : j
+                ),
+                unscheduled: state.jobs.unscheduled.map((j) =>
+                  j.id === dealId
+                    ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
+                    : j
+                ),
+              },
+            }));
+          }
+          return response;
         } catch (error: any) {
           console.error("Failed to schedule job:", error);
-          return { 
-            success: false, 
+          return {
+            success: false,
             message: error.response?.data?.detail || "Błąd połączenia z serwerem",
             conflict: error.response?.status === 409
           };
@@ -852,9 +852,9 @@ export const useInspectionStore = create<InspectionState>()(
         })),
 
       // ── Reset ──
-      reset: () => set({ 
-        currentStep: 1, 
-        maxVisitedStep: 1, 
+      reset: () => set({
+        currentStep: 1,
+        maxVisitedStep: 1,
         data: initialData,
         jobs: {
           scheduled: [],
@@ -972,7 +972,7 @@ export const useInspectionStore = create<InspectionState>()(
         try {
           const auth = useInspectionStore.getState().auth;
           const res = await api.getDeals(date, date);
-          
+
           // Handle both old flat array and new grouped object as requested in FIX 1
           const scheduledRaw = Array.isArray(res) ? res : (res.scheduled || []);
           const unscheduledRaw = Array.isArray(res) ? [] : (res.unscheduled || []);
@@ -980,18 +980,18 @@ export const useInspectionStore = create<InspectionState>()(
 
           const transform = (d: any) => ({
             id: String(d.id),
-            clientName: d.client_name || d.TITLE || 'Brak nazwy',
+            clientName: d.client_name || d.TITLE || d.title || (d.clientFirstName ? `${d.clientFirstName} ${d.clientLastName}` : 'Brak nazwy'),
             vin: d.vin || '',
-            plates: d.registration_number || '',
-            phone: d.client_phone || '',
-            appointmentTime: d.appointment_time || '09:00',
+            plates: d.registration_number || d.registrationNumber || '',
+            phone: d.client_phone || d.clientPhone || '',
+            appointmentTime: d.appointment_time || (d.scheduledDate ? d.scheduledDate.split('T')[1]?.slice(0, 5) : '09:00'),
             deadline: date,
-            status: (d.STAGE_ID === 'WON' || d.STAGE_ID === 'FINAL') ? 'completed' : 'ready',
-            make: d.vehicle_brand || '',
-            model: d.vehicle_model || '',
-            city: d.inspection_place || '',
-            jobType: d.job_type || 'WYCENA',
-            scheduledDate: d.scheduled_date
+            status: (d.STAGE_ID === 'WON' || d.STAGE_ID === 'FINAL' || d.status === 'completed' || d.status === 'scheduled') ? 'ready' : 'ready',
+            make: d.vehicle_brand || d.brand || '',
+            model: d.vehicle_model || d.model || '',
+            city: d.inspection_place || d.location || '',
+            jobType: d.job_type || d.type || 'WYCENA',
+            scheduledDate: d.scheduled_date || d.scheduledDate
           });
 
           set((s) => ({
@@ -1020,7 +1020,7 @@ export const useInspectionStore = create<InspectionState>()(
           const jobs = persistedState.jobs || {};
           const scheduled = jobs.scheduled || [];
           const unscheduled = jobs.unscheduled || jobs.list || [];
-          
+
           return {
             ...persistedState,
             jobs: {
