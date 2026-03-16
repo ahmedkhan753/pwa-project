@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { inspectionApi } from '@/api/inspectionApi';
+import { api } from '@/lib/api';
 import { submissionQueue } from '@/lib/submissionQueue';
 
 // ─── Auth & Jobs Types ──────────────────────────────────────
@@ -592,7 +592,7 @@ export const useInspectionStore = create<InspectionState>()(
 
       fetchMe: async () => {
         try {
-          const response = await inspectionApi.getCurrentUser();
+          const response = await api.getMe();
           if (response && response.id) {
             set((state) => ({
               auth: {
@@ -616,7 +616,7 @@ export const useInspectionStore = create<InspectionState>()(
       fetchFullDeal: async (dealId: string) => {
         set((state) => ({ jobs: { ...state.jobs, loading: true, error: null } }));
         try {
-          const deal = await inspectionApi.getDeal(dealId);
+          const deal = await api.getDeal(dealId);
           set((state) => {
             const initial = JSON.parse(JSON.stringify(initialData));
             // Merge deal data into vehicleData.basicInfo and core fields
@@ -729,19 +729,19 @@ export const useInspectionStore = create<InspectionState>()(
         try {
           const dealId = jobId;
           const isoDate = date;
-          const response = await inspectionApi.scheduleInspection(dealId, isoDate);
+          const response = await api.scheduleDeal(dealId, isoDate.split('T')[0], isoDate.split('T')[1] || '09:00');
       if (response.success) {
         set((state) => ({
           jobs: {
             ...state.jobs,
             scheduled: state.jobs.scheduled.map((j) =>
               j.id === dealId
-                ? { ...j, scheduledDate: isoDate, hasConflict: response.conflict }
+                ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
                 : j
             ),
             unscheduled: state.jobs.unscheduled.map((j) =>
               j.id === dealId
-                ? { ...j, scheduledDate: isoDate, hasConflict: response.conflict }
+                ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
                 : j
             ),
           },
@@ -895,7 +895,7 @@ export const useInspectionStore = create<InspectionState>()(
 
         try {
           console.log(`[Bitrix Sync] Syncing step ${stepNumber} for deal ${dealId}`);
-          await inspectionApi.saveInspectionStep(dealId, stepNumber, stepPayload);
+          await api.saveStep(dealId, stepNumber, stepPayload);
           console.log(`[Bitrix Sync] Step ${stepNumber} synced successfully.`);
         } catch (error) {
           console.warn(`[Bitrix Sync] Step ${stepNumber} sync failed (offline?). Saved to draft.`, error);
@@ -926,7 +926,7 @@ export const useInspectionStore = create<InspectionState>()(
           // Construct the payload for transform_to_bitrix in backend
           // The backend expects flat keys, but our InspectionPayload.flatten() handles that
           // Here we just send the store data structure, backend Pydantic models will parse it
-          const result = await inspectionApi.submitFullInspection({
+          const result = await api.submitInspection(dealId, {
             ...state.data,
             deal_id: dealId,
             job_id: dealId // in this PWA, jobId is the dealId
@@ -971,7 +971,7 @@ export const useInspectionStore = create<InspectionState>()(
         set((s) => ({ jobs: { ...s.jobs, loading: true, error: null } }));
         try {
           const auth = useInspectionStore.getState().auth;
-          const res = await inspectionApi.fetchDeals(date, date, auth.currentUserId?.toString());
+          const res = await api.getDeals(date, date);
           
           // Handle both old flat array and new grouped object as requested in FIX 1
           const scheduledRaw = Array.isArray(res) ? res : (res.scheduled || []);

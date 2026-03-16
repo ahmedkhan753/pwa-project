@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
-import { apiClient } from '@/api/client';
 import {
     LogOut,
     RefreshCcw,

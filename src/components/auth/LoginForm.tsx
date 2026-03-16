@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
-import { apiClient } from '@/api/client';
+import { api } from '@/lib/api';
 import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/ui/Logo';
@@ -14,6 +14,16 @@ export const LoginForm: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+    
+    // Auto-fill in demo mode
+    React.useEffect(() => {
+        if (DEMO_MODE) {
+            setEmail("demo@zaufajrzeczoznawcy.pl");
+            setPassword("demo2024");
+        }
+    }, [DEMO_MODE]);
+
     const loginStore = useInspectionStore((state) => state.login);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -22,7 +32,7 @@ export const LoginForm: React.FC = () => {
         setError(null);
 
         try {
-            const response = await apiClient.login(email, password);
+            const response = await api.login(email, password);
             loginStore(response.user.email, response.token, response.user);
         } catch (err: any) {
             setError(err.message || 'Błąd logowania. Spróbuj ponownie.');
@@ -110,6 +120,24 @@ export const LoginForm: React.FC = () => {
                                 <span>Zaloguj się</span>
                             )}
                         </button>
+
+                        {DEMO_MODE && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEmail("demo@zaufajrzeczoznawcy.pl");
+                                    setPassword("demo2024");
+                                    // Submit after a small delay to show filling
+                                    setTimeout(() => {
+                                        const form = document.querySelector('form');
+                                        form?.requestSubmit();
+                                    }, 100);
+                                }}
+                                className="w-full py-3 bg-surface-raised border border-border rounded-xl text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 transition-all text-center"
+                            >
+                                Zaloguj jako Demo
+                            </button>
+                        )}
                     </form>
 
                     <div className="mt-8 text-center text-muted">

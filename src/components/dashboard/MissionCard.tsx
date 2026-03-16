@@ -14,10 +14,20 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const fetchFullDeal = useInspectionStore(state => state.fetchFullDeal);
     const setStep = useInspectionStore(state => state.setStep);
 
+    // Bug 2 Fix: Date/Time defaults
+    const getTodayDate = () => new Date().toISOString().split('T')[0];
+    const getNextHour = () => {
+        const now = new Date();
+        now.setHours(now.getHours() + 1);
+        now.setMinutes(0);
+        return now.toTimeString().slice(0, 5); // "11:00"
+    };
+
     const [isScheduling, setIsScheduling] = React.useState(!job.scheduledDate);
-    const [selectedDate, setSelectedDate] = React.useState(job.scheduledDate?.split('T')[0] || '');
-    const [selectedTime, setSelectedTime] = React.useState(job.scheduledDate?.split('T')[1]?.substring(0, 5) || '');
+    const [selectedDate, setSelectedDate] = React.useState(job.scheduledDate?.split('T')[0] || getTodayDate());
+    const [selectedTime, setSelectedTime] = React.useState(job.scheduledDate?.split('T')[1]?.substring(0, 5) || getNextHour());
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [isScheduledSuccessfully, setIsScheduledSuccessfully] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     
     // Check if progress exists in drafts
@@ -82,14 +92,30 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         setIsSubmitting(true);
         setError(null);
         const fullIso = `${selectedDate}T${selectedTime}:00`;
-        const res = await scheduleJob(job.id, fullIso);
-        
-        if (res.success) {
-            setIsScheduling(false);
-            // After scheduling, automatically start/fetch
-            handleStart();
-        } else {
-            setError(res.message);
+
+        try {
+            // Bug 1 Fix: Adding a timeout safety net
+            const res: any = await Promise.race([
+                scheduleJob(job.id, fullIso),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Przekroczono czas oczekiwania (timeout)')), 5000)
+                )
+            ]);
+            
+            if (res.success) {
+                setIsScheduledSuccessfully(true);
+                // Wait small delay to show success "Zaplanowano ✓"
+                await new Promise(resolve => setTimeout(resolve, 800));
+                setIsScheduling(false);
+                // After scheduling, automatically start/fetch
+                await handleStart();
+            } else {
+                setError(res.message || "Błąd zapisu");
+                setIsSubmitting(false);
+            }
+        } catch (err: any) {
+            console.error("Schedule error:", err);
+            setError(err.message || "Wystąpił nieoczekiwany błąd");
             setIsSubmitting(false);
         }
     };
@@ -177,6 +203,11 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         </div>
                     </div>
 
+                    <div className="space-y-1 pt-1">
+                        <label className="text-[9px] font-black text-muted uppercase tracking-widest ml-1">Limit czasu</label>
+                        <p className="text-[8px] text-muted italic ml-1">Automatyczny timeout po 5s</p>
+                    </div>
+
                     {error && (
                         <div className="flex items-center gap-2 text-danger bg-danger-light p-2 rounded-lg border border-danger/10">
                             <AlertCircle className="w-3.5 h-3.5" />
@@ -187,9 +218,12 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     <button
                         onClick={onConfirmSchedule}
                         disabled={isSubmitting}
-                        className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50"
+                        className={cn(
+                            "w-full py-3 rounded-xl font-black text-xs uppercase shadow-lg transition-all active:scale-[0.98] disabled:opacity-50",
+                            isScheduledSuccessfully ? "bg-success text-white shadow-success/20" : "bg-primary hover:bg-primary-hover text-white shadow-primary/20"
+                        )}
                     >
-                        {isSubmitting ? 'Zapisywanie...' : 'Zatwierdź i Rozpocznij'}
+                        {isSubmitting ? 'Zapisywanie...' : (isScheduledSuccessfully ? 'Zaplanowano ✓' : 'Zatwierdź i Rozpocznij')}
                     </button>
                     
                     {job.scheduledDate && (
