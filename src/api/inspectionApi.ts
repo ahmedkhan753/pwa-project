@@ -191,5 +191,23 @@ export const inspectionApi = {
         }
 
         return result;
+    },
+
+    /**
+     * GET /auth/me
+     * Fetch current bitrix user profile.
+     */
+    async getCurrentUser() {
+        const token = getAuthToken();
+        const response = await fetch(`${BASE_URL}/api/auth/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            const error: ApiError = await response.json().catch(() => ({}));
+            throw new Error(error.detail || 'Failed to fetch user profile');
+        }
+
+        return await response.json();
     }
 };

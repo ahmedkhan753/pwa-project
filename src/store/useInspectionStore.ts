@@ -294,6 +294,8 @@ interface InspectionState {
     user: AuthUser | null;
     loading: boolean;
     error: string | null;
+    currentUserId: number | null;
+    currentUserName: string | null;
   };
   // Jobs
   jobs: {
@@ -315,6 +317,7 @@ interface InspectionState {
   // Auth Actions
   setAuth: (auth: Partial<InspectionState['auth']>) => void;
   login: (email: string, token: string, user: AuthUser) => void;
+  fetchMe: () => Promise<void>;
   logout: () => void;
   // Job Actions
   setJobsLoading: (loading: boolean) => void;
@@ -491,6 +494,8 @@ export const useInspectionStore = create<InspectionState>()(
         user: null,
         loading: false,
         error: null,
+        currentUserId: null,
+        currentUserName: null,
       },
       jobs: {
         list: [],
@@ -522,17 +527,20 @@ export const useInspectionStore = create<InspectionState>()(
             user,
             loading: false,
             error: null,
+            currentUserId: null,
+            currentUserName: user.name || 'Rzeczoznawca',
           },
         })),
 
       logout: () =>
-        set(() => ({
+        set((state) => ({
           auth: {
+            ...state.auth,
             isAuthenticated: false,
             token: null,
             user: null,
-            loading: false,
-            error: null,
+            currentUserId: null,
+            currentUserName: null,
           },
           jobs: { list: [], currentJobId: null, loading: false, error: null },
           calendar: {
@@ -544,6 +552,29 @@ export const useInspectionStore = create<InspectionState>()(
           maxVisitedStep: 1,
           data: initialData,
         })),
+
+      fetchMe: async () => {
+        try {
+          const response = await inspectionApi.getCurrentUser();
+          if (response && response.ID) {
+            set((state) => ({
+              auth: {
+                ...state.auth,
+                currentUserId: Number(response.ID),
+                currentUserName: `${response.NAME || ''} ${response.LAST_NAME || ''}`.trim() || 'Rzeczoznawca'
+              }
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to fetch current user:", error);
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              currentUserName: state.auth.currentUserName || 'Rzeczoznawca'
+            }
+          }));
+        }
+      },
 
       // ── Job Actions ──
       setJobsLoading: (loading) =>
@@ -835,8 +866,8 @@ export const useInspectionStore = create<InspectionState>()(
       fetchDealsForCalendar: async (date: string) => {
         set((s) => ({ jobs: { ...s.jobs, loading: true, error: null } }));
         try {
-          // Bitrix likes date range for calendar views
-          const deals = await inspectionApi.fetchDeals(date, date);
+          const auth = useInspectionStore.getState().auth;
+          const deals = await inspectionApi.fetchDeals(date, date, auth.currentUserId?.toString());
           // Transform internal format if needed, but the router already translates fields
           set((s) => ({
             jobs: {

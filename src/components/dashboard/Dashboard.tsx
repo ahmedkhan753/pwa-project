@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { CalendarStrip } from './CalendarStrip';
 import { MissionCard } from './MissionCard';
 import { SkeletonCard } from './SkeletonCard';
+import { Logo } from '@/components/ui/Logo';
 import { registerPushNotifications } from "@/lib/push-notifications";
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -26,6 +27,7 @@ export const Dashboard: React.FC = () => {
         calendar,
         logout,
         fetchDealsForCalendar,
+        fetchMe,
     } = useInspectionStore();
 
     const [pulling, setPulling] = useState(false);
@@ -44,6 +46,7 @@ export const Dashboard: React.FC = () => {
 
     useEffect(() => {
         registerPushNotifications();
+        fetchMe();
     }, []);
 
     // Pull-to-refresh logic
@@ -102,30 +105,27 @@ export const Dashboard: React.FC = () => {
             <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-2xl border-b border-border transition-colors duration-300">
                 <div className="flex items-center justify-between max-w-2xl mx-auto w-full">
                     <div className="flex items-center gap-4">
-                        <div className="relative group">
-                            <div className="absolute -inset-1 bg-gradient-to-r from-primary to-accent rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
-                            <div className="relative w-12 h-12 rounded-2xl bg-surface flex items-center justify-center border border-border shadow-sm transition-colors">
-                                <UserCircle className="w-8 h-8 text-primary" />
+                        <div className="relative">
+                            <div className="w-12 h-12 rounded-2xl bg-black flex items-center justify-center border border-border/50 shadow-sm p-1 overflow-visible">
+                                <Logo variant="icon" size="md" className="!overflow-visible" />
                             </div>
                         </div>
                         <div>
-                            <h2 className="font-black text-lg tracking-tight leading-none mb-0.5">{auth.user?.name}</h2>
+                            <h2 className="font-black text-lg tracking-tight leading-none mb-0.5">
+                                {auth.currentUserName || 'Rzeczoznawca'}
+                            </h2>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                                <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Rzeczoznawca Online</span>
+                                <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Online Appraiser</span>
                             </div>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                         <ThemeToggle />
-                        <button className="p-2.5 bg-surface-raised/50 hover:bg-surface-raised rounded-xl border border-border transition-all active:scale-95 relative">
-                            <Bell className="w-5 h-5 text-muted" />
-                            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-primary rounded-full border-2 border-surface" />
-                        </button>
                         <button
                             onClick={logout}
-                            className="p-2.5 bg-danger-light hover:bg-danger/20 rounded-xl border border-danger/20 transition-all active:scale-95 text-danger"
+                            className="p-2.5 bg-danger-light hover:bg-danger/20 rounded-xl border border-danger/20 transition-all active:scale-95 text-danger ml-2"
                         >
                             <LogOut className="w-5 h-5" />
                         </button>
@@ -217,10 +217,7 @@ export const Dashboard: React.FC = () => {
                 <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/30 -mt-8 border-4 border-background active:scale-90 transition-transform">
                     <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
                 </div>
-                <button className="flex flex-col items-center gap-1 text-muted">
-                    <Settings className="w-6 h-6" />
-                    <span className="text-[9px] font-black uppercase">Ustawienia</span>
-                </button>
+                <div className="w-10" /> {/* Spacer instead of settings */}
             </footer>
         </div>
     );

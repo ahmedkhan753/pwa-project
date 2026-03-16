@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import "./globals.css";
 
 const inter = Inter({
@@ -10,14 +11,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-    title: "Auto Inspection PWA — Vehicle Inspector",
-    description: "Professional vehicle inspection tool for field appraisers. Fast, offline-ready, mobile-first.",
-    keywords: ["vehicle inspection", "car appraisal", "PWA", "auto inspection"],
+    title: "Zaufaj Rzeczoznawcy — System Inspekcji",
+    description: "Profesjonalny system inspekcji pojazdów dla rzeczoznawców terenowych.",
+    keywords: ["rzeczoznawca", "inspekcja pojazdu", "PWA", "Zaufaj Rzeczoznawcy"],
     manifest: "/manifest.json",
     appleWebApp: {
         capable: true,
         statusBarStyle: "black-translucent",
-        title: "Auto Inspection",
+        title: "RZeczoznawcy",
     },
 };
 
@@ -27,8 +28,8 @@ export const viewport: Viewport = {
     maximumScale: 1,
     userScalable: false,
     themeColor: [
-        { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
-        { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+        { media: "(prefers-color-scheme: light)", color: "#000000" },
+        { media: "(prefers-color-scheme: dark)", color: "#000000" },
     ],
 };
 
@@ -46,6 +47,7 @@ export default function RootLayout({
                     enableSystem
                     disableTransitionOnChange
                 >
+                    <OfflineBanner />
                     {children}
                 </ThemeProvider>
             </body>

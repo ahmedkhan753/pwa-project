@@ -6,6 +6,7 @@ import { WizardLayout } from '@/components/ui/inspection/WizardLayout';
 import { StepDispatcher } from '@/components/ui/inspection/StepDispatcher';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { Dashboard } from '@/components/dashboard/Dashboard';
+import { SplashScreen } from '@/components/SplashScreen';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
@@ -37,8 +38,11 @@ export default function Home() {
 
     // 3. Inspection Wizard (The 11-Step Form)
     return (
-        <WizardLayout>
-            <StepDispatcher />
-        </WizardLayout>
+        <>
+            <SplashScreen />
+            <WizardLayout>
+                <StepDispatcher />
+            </WizardLayout>
+        </>
     );
 }

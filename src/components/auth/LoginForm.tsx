@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
 import { apiClient } from '@/api/client';
-import { Lock, Mail, Loader2, AlertCircle, CarFront } from 'lucide-react';
+import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Logo } from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 export const LoginForm: React.FC = () => {
@@ -43,12 +44,9 @@ export const LoginForm: React.FC = () => {
 
             <div className="w-full max-w-md relative">
                 {/* Logo Section */}
-                <div className="text-center mb-8 animate-fade-in">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-primary-hover shadow-xl shadow-primary/20 dark:shadow-primary/40 mb-4 transform hover:scale-105 transition-all duration-300">
-                        <CarFront className="w-12 h-12 text-white" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-foreground tracking-tight transition-colors">Auto Inspection</h1>
-                    <p className="text-muted mt-2 font-medium transition-colors">Brama Appraisera — Zaloguj się</p>
+                <div className="space-y-3">
+                    <Logo variant="full" size="lg" />
+                    <p className="text-muted text-xs font-bold uppercase tracking-[0.2em]">System Inspekcji Pojazdów</p>
                 </div>
 
                 {/* Form Card */}
@@ -57,7 +55,7 @@ export const LoginForm: React.FC = () => {
                         {error && (
                             <div className="bg-danger/10 border border-danger/20 rounded-xl p-4 flex items-start gap-3 animate-shake">
                                 <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-                                <p className="text-sm text-danger">{error}</p>
+                                <p className="text-sm text-danger font-medium leading-relaxed">{error}</p>
                             </div>
                         )}
 

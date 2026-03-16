@@ -2,11 +2,12 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { SignaturePad } from "../SignaturePad";
+import { Logo } from "@/components/ui/Logo";
 import { CheckCircle2, UserCheck, ShieldCheck, AlertCircle, Info, Image as ImageIcon, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SummaryStep() {
-    const { data, updateStepData, setSignature } = useInspectionStore();
+    const { data, jobs, updateStepData, setSignature } = useInspectionStore();
     const summary = data.finalSummary;
     const allDamages = [...data.exteriorDamage, ...data.interiorDamage];
     
@@ -130,20 +131,33 @@ export function SummaryStep() {
             </div>
 
             {/* ── Section: Inspector & Yard Signatures ──── */}
-            <div className="grid grid-cols-1 gap-6">
-                <SignaturePad
-                    label="Podpis Rzeczoznawcy"
-                    value={summary.signatureAppraiser}
-                    onSave={(b64) => setSignature('signatureAppraiser', b64)}
-                    disabled={isLocked && !!summary.signatureAppraiser}
-                />
-                
-                <SignaturePad
-                    label="Podpis Przedstawiciela Placu (Opcjonalnie)"
-                    value={summary.signatureYard}
-                    onSave={(b64) => setSignature('signatureYard', b64)}
-                    disabled={isLocked}
-                />
+            <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm text-slate-900">
+                <div className="flex flex-col items-center text-center mb-8 border-b-2 border-slate-100 pb-8">
+                    <div className="bg-black p-3 rounded-2xl mb-4">
+                        <Logo variant="full" size="md" />
+                    </div>
+                    <h3 className="text-lg font-black uppercase tracking-tight">Protokół Inspekcji Pojazdu</h3>
+                    <div className="flex gap-4 mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span>Data: {new Date().toLocaleDateString('pl-PL')}</span>
+                        <span>Zlecenie: #{jobs.currentJobId || 'BRAK ID'}</span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-10">
+                    <SignaturePad
+                        label="Podpis Rzeczoznawcy"
+                        value={summary.signatureAppraiser}
+                        onSave={(b64) => setSignature('signatureAppraiser', b64)}
+                        disabled={isLocked && !!summary.signatureAppraiser}
+                    />
+                    
+                    <SignaturePad
+                        label="Podpis Przedstawiciela Placu (Opcjonalnie)"
+                        value={summary.signatureYard}
+                        onSave={(b64) => setSignature('signatureYard', b64)}
+                        disabled={isLocked}
+                    />
+                </div>
             </div>
 
             {/* Final Verification */}

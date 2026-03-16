@@ -2,6 +2,7 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { ProgressBar } from "./ProgressBar";
+import { Logo } from "@/components/ui/Logo";
 import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home, Cloud, CloudOff, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -77,29 +78,20 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             {/* ── Header ─────────────────────────────────────── */}
             <header className="sticky top-0 z-30 bg-surface dark:bg-background/80 backdrop-blur-lg text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
-                    <div>
-                        <h2 className="text-base font-bold tracking-tight text-foreground">
-                            {STEPS[currentStep - 1].label}
-                        </h2>
-                        <p className="text-xs text-primary font-medium">
-                            Krok {currentStep} z {totalSteps}
-                        </p>
+                    <div className="flex items-center gap-3">
+                        <div className="bg-black p-1 rounded-lg">
+                            <Logo variant="icon" size="sm" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold tracking-tight text-foreground leading-tight">
+                                {STEPS[currentStep - 1].label}
+                            </h2>
+                            <p className="text-[10px] text-primary font-black uppercase tracking-widest">
+                                Krok {currentStep} / {totalSteps}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="flex gap-2">
-                            <span className="flex items-center gap-1 text-[10px] text-primary animate-pulse bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                                <div className="w-1 h-1 rounded-full bg-primary" />
-                                LIVE
-                            </span>
-                            <span className="flex items-center gap-1 text-[10px] text-danger bg-danger/10 px-2 py-0.5 rounded-full border border-danger/20">
-                                <div className="w-1 h-1 rounded-full bg-danger" />
-                                HIGH PRIO
-                            </span>
-                            <span className="flex items-center gap-1 text-[10px] text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
-                                <div className="w-1 h-1 rounded-full bg-success" />
-                                SECURE
-                            </span>
-                        </div>
                         <div className="scale-90 origin-right">
                             <ThemeToggle />
                         </div>
