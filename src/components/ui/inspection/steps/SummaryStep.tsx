@@ -2,157 +2,187 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { SignaturePad } from "../SignaturePad";
-import { CheckCircle2, AlertCircle, Trash2, Send, Car } from "lucide-react";
+import { CheckCircle2, UserCheck, ShieldCheck, AlertCircle, Info, Image as ImageIcon, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { submissionQueue } from "@/lib/submissionQueue";
 
 export function SummaryStep() {
-    const { data, updateField, setSignature, reset, jobs, submitToBitrix } = useInspectionStore();
+    const { data, updateStepData, setSignature } = useInspectionStore();
     const summary = data.finalSummary;
-    const v = data.vehicleData;
+    const allDamages = [...data.exteriorDamage, ...data.interiorDamage];
+    
+    // Lock logic: if appraiser has signed, lock everything
+    const isLocked = !!summary.signatureAppraiser;
 
-    const hasSignatures = !!(summary.signatureAppraiser && summary.signatureClient);
-
-    const handleSubmit = async () => {
-        const result = await submitToBitrix();
-
-        if (result.success) {
-            alert('Raport wysłany pomyślnie!');
-        } else {
-            alert(`Problem z wysyłką: ${result.message}`);
-        }
-    };
-
-    const handleReset = () => {
-        if (confirm('Czy na pewno chcesz usunąć wszystkie dane? Ta operacja jest nieodwracalna.')) {
-            reset();
-            window.location.reload();
-        }
+    const handleAbsentToggle = (val: boolean) => {
+        if (isLocked) return;
+        updateStepData('finalSummary', { isAbsentRep: val });
+        if (val) setSignature('signatureClient', ''); 
     };
 
     return (
-        <div className="space-y-4 animate-fade-in">
-            {/* VIN Confirmation */}
-            <div className="section-card border-l-4 border-l-primary">
-                <div className="flex items-center gap-2 mb-3">
-                    <Car size={18} className="text-primary" />
-                    <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
-                        Potwierdzenie VIN
-                    </h3>
+        <div className="space-y-8 animate-fade-in pb-20">
+            {/* ── Section: Damage Gallery ─────────────────── */}
+            <div className="section-card bg-slate-50 dark:bg-slate-900/40 border-slate-200/50">
+                <div className="flex items-center gap-2 mb-4">
+                    <ImageIcon size={18} className="text-blue-500" />
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Galeria Uszkodzeń ({allDamages.length})</h4>
                 </div>
-
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-3">
-                    <p className="text-xs text-secondary mb-1">Numer VIN</p>
-                    <p className="text-xl font-mono font-bold tracking-widest text-foreground">
-                        {v.vin || '—'}
-                    </p>
-                    <p className="text-xs text-secondary mt-2">
-                        {v.make} {v.model} • {v.year} • {v.registrationPlates}
-                    </p>
-                </div>
-
-                <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={summary.vinConfirmed}
-                        onChange={(e) => updateField('finalSummary', 'vinConfirmed', e.target.checked)}
-                        className="w-5 h-5 rounded accent-primary"
-                        aria-label="Confirm VIN"
-                    />
-                    <span className="text-sm font-medium text-foreground">
-                        Potwierdzam poprawność numeru VIN
-                    </span>
-                </label>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-3 gap-2">
-                <StatCard
-                    label="Zdjęcia"
-                    value={`${data.photos.filter(p => p.base64).length}/${data.photos.length}`}
-                    ok={data.photos.filter(p => p.required && p.base64).length === data.photos.filter(p => p.required).length}
-                />
-                <StatCard
-                    label="Uszk. zewn."
-                    value={`${data.exteriorDamage.length}`}
-                    ok={true}
-                />
-                <StatCard
-                    label="Uszk. wewn."
-                    value={`${data.interiorDamage.length}`}
-                    ok={true}
-                />
-            </div>
-
-            {/* Signatures */}
-            <SignaturePad
-                label="📝 Podpis — Rzeczoznawca"
-                value={summary.signatureAppraiser}
-                onSave={(b64) => setSignature('signatureAppraiser', b64)}
-            />
-            <SignaturePad
-                label="📝 Podpis — Klient"
-                value={summary.signatureClient}
-                onSave={(b64) => setSignature('signatureClient', b64)}
-            />
-            <SignaturePad
-                label="📝 Podpis — Przedstawiciel placu"
-                value={summary.signatureYard}
-                onSave={(b64) => setSignature('signatureYard', b64)}
-            />
-
-            {/* Submit */}
-            <button
-                onClick={handleSubmit}
-                disabled={!summary.vinConfirmed || !hasSignatures}
-                className={cn(
-                    "w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]",
-                    summary.vinConfirmed && hasSignatures
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg hover:shadow-xl"
-                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                
+                {allDamages.length > 0 ? (
+                    <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar -mx-1 px-1">
+                        {allDamages.map((d, i) => (
+                            <div key={i} className="flex-shrink-0 w-24 space-y-2">
+                                <div className="aspect-square rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm relative group">
+                                    <img src={d.photos[0]} alt="damage" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-x-0 bottom-0 bg-black/60 py-1 text-center">
+                                        <span className="text-[8px] font-black text-white uppercase">{d.part || 'Element'}</span>
+                                    </div>
+                                </div>
+                                <p className="text-[8px] font-bold text-slate-500 truncate leading-tight">{d.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl opacity-50">
+                        <ImageIcon size={24} className="text-slate-300 mb-2" />
+                        <p className="text-[10px] font-black text-slate-400 uppercase">Brak zgłoszonych uszkodzeń</p>
+                    </div>
                 )}
-                aria-label="Submit inspection"
-            >
-                <Send size={20} />
-                WYŚLIJ INSPEKCJĘ
-            </button>
-
-            {!summary.vinConfirmed && (
-                <p className="flex items-center gap-1 text-xs text-amber-500 justify-center">
-                    <AlertCircle size={14} />
-                    Potwierdź VIN i złóż podpisy aby wysłać
-                </p>
-            )}
-
-            {summary.submissionStatus === 'submitted' && (
-                <div className="flex items-center gap-2 justify-center text-success animate-fade-in">
-                    <CheckCircle2 size={18} />
-                    <span className="text-sm font-bold">Wysłano: {summary.submittedAt}</span>
-                </div>
-            )}
-
-            {/* Clear All */}
-            <div className="pt-6 border-t border-border">
-                <button
-                    onClick={handleReset}
-                    className="w-full py-3 text-danger font-bold border-2 border-danger-light rounded-xl flex items-center justify-center gap-2 hover:bg-danger-light transition-colors active:scale-[0.98]"
-                    aria-label="Clear all inspection data"
-                >
-                    <Trash2 size={16} />
-                    Wyczyść wszystkie dane
-                </button>
             </div>
-        </div>
-    );
-}
 
-function StatCard({ label, value, ok }: { label: string; value: string; ok: boolean }) {
-    return (
-        <div className="section-card text-center py-3">
-            <p className="text-xs text-secondary font-medium mb-1">{label}</p>
-            <p className={cn("text-lg font-bold", ok ? "text-foreground" : "text-amber-500")}>
-                {value}
-            </p>
+            {/* ── Section: Representative Absence ────────── */}
+            <div className={cn("section-card border-l-4 border-amber-500 relative overflow-hidden", isLocked && "opacity-75 grayscale shadow-inner")}>
+                {isLocked && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-1 bg-slate-900/10 rounded-lg backdrop-blur-sm">
+                        <ShieldCheck size={12} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase">Zablokowano</span>
+                    </div>
+                )}
+                
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <UserCheck size={18} className="text-amber-500" />
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Dysponent Pojazdu</h4>
+                    </div>
+                    <button
+                        onClick={() => handleAbsentToggle(!summary.isAbsentRep)}
+                        disabled={isLocked}
+                        className={cn(
+                            "px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                            summary.isAbsentRep 
+                                ? "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20" 
+                                : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500",
+                            isLocked && "cursor-not-allowed opacity-50"
+                        )}
+                    >
+                        {summary.isAbsentRep ? "NB: Nieobecny" : "Obecny"}
+                    </button>
+                </div>
+
+                {summary.isAbsentRep ? (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-800/50">
+                            <Info size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-amber-800 dark:text-amber-200 font-bold leading-normal">
+                                Wybrano brak dysponenta. Zamiast podpisu w raport zostanie wstawione: 
+                                <span className="block mt-1 italic opacity-80">"Podpis niemożliwy - Dysponent nieobecny"</span>
+                            </p>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Uwagi dot. nieobecności</label>
+                            <div className="relative">
+                                <MessageSquare size={14} className="absolute left-3 top-3 text-slate-400" />
+                                <textarea
+                                    value={summary.absentRepComment}
+                                    disabled={isLocked}
+                                    onChange={(e) => updateStepData('finalSummary', { absentRepComment: e.target.value })}
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-3 pl-10 pr-4 text-sm font-bold min-h-[80px]"
+                                    placeholder="np. Pojazd pozostawiony na parkingu, kluczyki w skrzynce..."
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {/* Damage context thumbnails row above representative signature */}
+                        {allDamages.length > 0 && (
+                            <div className="flex gap-2 overflow-x-auto py-2 no-scrollbar px-1 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                {allDamages.slice(0, 8).map((d, idx) => (
+                                    <div key={idx} className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm">
+                                        <img src={d.photos[0]} alt="" className="w-full h-full object-cover grayscale-[0.5]" />
+                                    </div>
+                                ))}
+                                {allDamages.length > 8 && (
+                                    <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center bg-slate-200 dark:bg-slate-800 text-[8px] font-black text-slate-400">
+                                        +{allDamages.length - 8}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <SignaturePad
+                            label="Podpis Dysponenta / Przedstawiciela"
+                            value={summary.signatureClient}
+                            onSave={(b64) => setSignature('signatureClient', b64)}
+                            disabled={isLocked}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* ── Section: Inspector & Yard Signatures ──── */}
+            <div className="grid grid-cols-1 gap-6">
+                <SignaturePad
+                    label="Podpis Rzeczoznawcy"
+                    value={summary.signatureAppraiser}
+                    onSave={(b64) => setSignature('signatureAppraiser', b64)}
+                    disabled={isLocked && !!summary.signatureAppraiser}
+                />
+                
+                <SignaturePad
+                    label="Podpis Przedstawiciela Placu (Opcjonalnie)"
+                    value={summary.signatureYard}
+                    onSave={(b64) => setSignature('signatureYard', b64)}
+                    disabled={isLocked}
+                />
+            </div>
+
+            {/* Final Verification */}
+            <div className="bg-slate-900 dark:bg-blue-600 rounded-3xl p-6 text-white shadow-xl shadow-blue-500/20">
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
+                        <ShieldCheck size={24} />
+                    </div>
+                    <div>
+                        <h4 className="font-black text-sm uppercase tracking-tight">Zatwierdzenie Raportu</h4>
+                        <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Ostatni etap inspekcji</p>
+                    </div>
+                </div>
+                
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-white/10 rounded-xl">
+                        <span className="text-[10px] font-black uppercase">VIN Potwierdzony</span>
+                        <CheckCircle2 size={16} className="text-emerald-400" />
+                    </div>
+                    <div className="p-3 bg-white/10 rounded-xl">
+                        <p className="text-[10px] font-bold leading-normal opacity-90 italic">
+                            Oświadczam, że powyższy protokół został sporządzony zgodnie ze stanem faktycznym i rzetelnie odzwierciedla kondycję pojazdu w dniu oględzin.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Deferred Digital Sign Placeholder */}
+            <div className="opacity-60 grayscale scale-95 origin-center">
+                 <div className="bg-slate-50 dark:bg-slate-800/30 rounded-2xl p-4 border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                            <Info size={14} className="text-slate-400" />
+                        </div>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-tight">Pieczęć Elektroniczna</span>
+                    </div>
+                    <span className="text-[8px] font-black bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md text-slate-500 uppercase">Phase 2</span>
+                </div>
+            </div>
         </div>
     );
 }

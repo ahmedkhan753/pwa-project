@@ -60,7 +60,7 @@ async def get_tasks(responsible_id: Optional[str] = None, deadline_date: Optiona
     url = _build_url("tasks.task.list")
 
     params: dict = {
-        "select": ["ID", "TITLE", "DESCRIPTION", "RESPONSIBLE_ID", "DEADLINE", "UF_CRM_TASK"],
+        "select": ["ID", "TITLE", "DESCRIPTION", "RESPONSIBLE_ID", "DEADLINE"],
         "filter": {}
     }
 

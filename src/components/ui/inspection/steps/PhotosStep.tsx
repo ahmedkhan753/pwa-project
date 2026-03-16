@@ -9,12 +9,15 @@ export function PhotosStep() {
     const photos = data.photos;
 
     const required = photos.filter((p) => p.required);
-    const optional = photos.filter((p) => !p.required);
+    const documents = photos.filter((p) => p.id.startsWith('doc_'));
+    const optional = photos.filter((p) => !p.required && !p.id.startsWith('doc_') && !p.id.startsWith('extra_'));
+    const extra = photos.filter((p) => p.id.startsWith('extra_'));
+    
     const filledCount = photos.filter((p) => p.base64).length;
     const requiredFilledCount = required.filter((p) => p.base64).length;
 
     return (
-        <div className="space-y-4 animate-fade-in">
+        <div className="space-y-4 animate-fade-in pb-10">
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                     <Camera size={18} className="text-primary" />
@@ -38,12 +41,13 @@ export function PhotosStep() {
                 />
             </div>
             <p className="text-[10px] text-center text-muted">
-                {requiredFilledCount}/{required.length} wymaganych • {filledCount - requiredFilledCount}/{optional.length} opcjonalnych
+                {requiredFilledCount}/{required.length} wymaganych • {filledCount - requiredFilledCount} opcjonalnych/dokumentów
             </p>
 
             {/* Required Photos */}
             <div className="section-card">
-                <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-3">
+                <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                     📸 Wymagane ({requiredFilledCount}/{required.length})
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
@@ -60,13 +64,53 @@ export function PhotosStep() {
                 </div>
             </div>
 
-            {/* Optional Photos */}
-            <div className="section-card">
-                <h4 className="text-xs font-bold text-secondary uppercase tracking-wider mb-3">
-                    📷 Opcjonalne
+            {/* Documents Section (D1-D5) */}
+            <div className="section-card border-l-4 border-l-blue-500">
+                <h4 className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">
+                    📄 Dokumenty (D1-D5)
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
-                    {optional.map((slot) => (
+                    {documents.map((slot) => (
+                        <PhotoUploadSlot
+                            key={slot.id}
+                            label={slot.label}
+                            base64={slot.base64}
+                            required={false}
+                            onCapture={(b64) => setPhotoSlot(slot.id, b64)}
+                            onClear={() => clearPhotoSlot(slot.id)}
+                        />
+                    ))}
+                </div>
+            </div>
+
+            {/* Optional Photos */}
+            {optional.length > 0 && (
+                <div className="section-card opacity-80">
+                    <h4 className="text-xs font-bold text-secondary uppercase tracking-wider mb-3">
+                        📷 Opcjonalne detale
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2">
+                        {optional.map((slot) => (
+                            <PhotoUploadSlot
+                                key={slot.id}
+                                label={slot.label}
+                                base64={slot.base64}
+                                required={false}
+                                onCapture={(b64) => setPhotoSlot(slot.id, b64)}
+                                onClear={() => clearPhotoSlot(slot.id)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Extra Slots */}
+            <div className="section-card opacity-60">
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                    ➕ Dodatkowe sloty
+                </h4>
+                <div className="grid grid-cols-3 gap-2">
+                    {extra.map((slot) => (
                         <PhotoUploadSlot
                             key={slot.id}
                             label={slot.label}

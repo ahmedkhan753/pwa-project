@@ -3,43 +3,50 @@
 import { cn } from "@/lib/utils";
 import type { ToggleValue } from "@/store/useInspectionStore";
 
+interface ToggleOption {
+    label: string;
+    value: string;
+    colorClass: string;
+    activeColor: string;
+}
+
 interface InspectionToggleProps {
     value: ToggleValue;
-    onChange: (value: 'TAK' | 'NIE' | 'ND') => void;
+    onChange: (value: any) => void;
     label: string;
+    options?: ToggleOption[];
     compact?: boolean;
 }
 
-export function InspectionToggle({ value, onChange, label, compact }: InspectionToggleProps) {
-    const options: Array<{ val: 'TAK' | 'NIE' | 'ND'; color: string }> = [
-        { val: 'TAK', color: 'toggle-tak' },
-        { val: 'NIE', color: 'toggle-nie' },
-        { val: 'ND', color: 'toggle-nd' },
-    ];
+const DEFAULT_OPTIONS: ToggleOption[] = [
+    { label: 'TAK', value: 'TAK', colorClass: 'bg-emerald-500', activeColor: 'text-white' },
+    { label: 'NIE', value: 'NIE', colorClass: 'bg-rose-500', activeColor: 'text-white' },
+    { label: 'ND', value: 'ND', colorClass: 'bg-slate-500', activeColor: 'text-white' },
+];
 
+export function InspectionToggle({ value, onChange, label, options = DEFAULT_OPTIONS, compact }: InspectionToggleProps) {
     return (
-        <div className={cn("flex items-center gap-3", compact ? "mb-2" : "mb-4")}>
+        <div className={cn("flex flex-col gap-2", compact ? "mb-4" : "mb-6")}>
             <span className={cn(
-                "font-semibold text-foreground flex-1 min-w-0",
-                compact ? "text-xs" : "text-sm"
+                "font-black text-slate-500 uppercase tracking-widest px-1",
+                compact ? "text-[10px]" : "text-xs"
             )}>
                 {label}
             </span>
-            <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg gap-0.5 flex-shrink-0">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl gap-1.5 w-full">
                 {options.map((opt) => (
                     <button
-                        key={opt.val}
-                        onClick={() => onChange(opt.val)}
-                        aria-label={`${label}: ${opt.val}`}
+                        key={opt.value}
+                        onClick={() => onChange(opt.value)}
+                        aria-label={`${label}: ${opt.label}`}
                         className={cn(
-                            "rounded-md font-bold transition-all duration-200 active:scale-95",
-                            compact ? "py-1.5 px-2.5 text-xs" : "py-2 px-3 text-sm",
-                            value === opt.val
-                                ? opt.color
-                                : "text-gray-400 hover:text-gray-600"
+                            "flex-1 rounded-xl font-black transition-all duration-200 active:scale-95 py-3.5 px-2 text-sm",
+                            value === opt.value
+                                ? `${opt.colorClass} ${opt.activeColor} shadow-lg shadow-black/10`
+                                : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         )}
                     >
-                        {opt.val}
+                        {opt.label}
                     </button>
                 ))}
             </div>

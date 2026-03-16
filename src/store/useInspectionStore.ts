@@ -23,6 +23,9 @@ export interface InspectionJob {
   make?: string;
   model?: string;
   city?: string;
+  jobType?: 'WYCENA' | 'CFM' | 'UNKNOWN';
+  scheduledDate?: string; // UF_CRM_1772108256983
+  hasConflict?: boolean;
 }
 
 // ─── Toggle Type ───────────────────────────────────────────
@@ -253,6 +256,8 @@ export interface FinalSummary {
   signatureAppraiser: string;  // base64
   signatureClient: string;     // base64
   signatureYard: string;       // base64
+  isAbsentRep: boolean;        // Dysponent nieobecny
+  absentRepComment: string;    // Comment for absence
   submittedAt: string;
   submissionStatus: 'pending' | 'submitted' | 'error' | '';
 }
@@ -319,6 +324,7 @@ interface InspectionState {
   // Calendar Actions
   setSelectedDate: (date: string) => void;
   toggleCalendarExpanded: () => void;
+  scheduleJob: (jobId: string, date: string) => Promise<{ success: boolean; message: string; conflict?: boolean }>;
 
   updateField: <K extends keyof StepData>(
     step: K,
@@ -359,49 +365,29 @@ const emptyWheel: WheelData = {
 
 // ─── Photo Slots ──────────────────────────────────────────
 const defaultPhotoSlots: PhotoSlot[] = [
-  { id: 'front', label: 'Front', base64: '', required: true },
-  { id: 'rear', label: 'Rear', base64: '', required: true },
-  { id: 'left_side', label: 'Left Side', base64: '', required: true },
-  { id: 'right_side', label: 'Right Side', base64: '', required: true },
-  { id: 'front_left_angle', label: 'Front Left Angle', base64: '', required: true },
-  { id: 'front_right_angle', label: 'Front Right Angle', base64: '', required: true },
-  { id: 'rear_left_angle', label: 'Rear Left Angle', base64: '', required: true },
-  { id: 'rear_right_angle', label: 'Rear Right Angle', base64: '', required: true },
-  { id: 'engine', label: 'Engine Bay', base64: '', required: true },
-  { id: 'trunk', label: 'Trunk', base64: '', required: true },
-  { id: 'trunk_floor', label: 'Trunk Floor', base64: '', required: true },
-  { id: 'dashboard', label: 'Dashboard', base64: '', required: true },
-  { id: 'instrument_cluster', label: 'Instrument Cluster', base64: '', required: true },
-  { id: 'mileage', label: 'Mileage Close-up', base64: '', required: true },
-  { id: 'front_seats', label: 'Front Seats', base64: '', required: true },
-  { id: 'rear_seats', label: 'Rear Seats', base64: '', required: true },
-  { id: 'steering_wheel', label: 'Steering Wheel', base64: '', required: true },
-  { id: 'vin_plate', label: 'VIN Plate', base64: '', required: true },
-  { id: 'vin_windshield', label: 'VIN Windshield', base64: '', required: true },
-  { id: 'registration_doc_front', label: 'Reg. Doc Front', base64: '', required: true },
-  { id: 'registration_doc_back', label: 'Reg. Doc Back', base64: '', required: true },
-  { id: 'front_left_wheel', label: 'Front Left Wheel', base64: '', required: true },
-  { id: 'front_right_wheel', label: 'Front Right Wheel', base64: '', required: true },
-  { id: 'rear_left_wheel', label: 'Rear Left Wheel', base64: '', required: true },
-  { id: 'rear_right_wheel', label: 'Rear Right Wheel', base64: '', required: true },
-  { id: 'tire_dot_front_left', label: 'Tire DOT FL', base64: '', required: true },
-  { id: 'tire_dot_front_right', label: 'Tire DOT FR', base64: '', required: true },
-  { id: 'tire_dot_rear_left', label: 'Tire DOT RL', base64: '', required: true },
-  { id: 'tire_dot_rear_right', label: 'Tire DOT RR', base64: '', required: true },
-  { id: 'headliner', label: 'Headliner', base64: '', required: true },
-  { id: 'roof_exterior', label: 'Roof (Exterior)', base64: '', required: true },
-  { id: 'undercarriage', label: 'Undercarriage', base64: '', required: true },
-  { id: 'exhaust', label: 'Exhaust System', base64: '', required: true },
-  { id: 'suspension_front', label: 'Front Suspension', base64: '', required: true },
-  { id: 'suspension_rear', label: 'Rear Suspension', base64: '', required: true },
-  { id: 'brake_front', label: 'Front Brakes', base64: '', required: true },
-  { id: 'brake_rear', label: 'Rear Brakes', base64: '', required: true },
-  { id: 'multimedia', label: 'Multimedia System', base64: '', required: false },
-  { id: 'ac_display', label: 'A/C Controls', base64: '', required: false },
-  { id: 'key_fob', label: 'Key/Remote', base64: '', required: false },
-  { id: 'extra_1', label: 'Extra Photo 1', base64: '', required: false },
-  { id: 'extra_2', label: 'Extra Photo 2', base64: '', required: false },
-  { id: 'extra_3', label: 'Extra Photo 3', base64: '', required: false },
+  { id: 'front', label: 'Przód pojazdu', base64: '', required: true },
+  { id: 'rear', label: 'Tył pojazdu', base64: '', required: true },
+  { id: 'left_side', label: 'Lewy bok', base64: '', required: true },
+  { id: 'right_side', label: 'Prawy bok', base64: '', required: true },
+  { id: 'front_seats', label: 'Wnętrze (Fotele przód)', base64: '', required: true },
+  { id: 'dashboard', label: 'Deska rozdzielcza (Kokpit)', base64: '', required: true },
+  { id: 'odometer', label: 'Licznik (Przebieg)', base64: '', required: true },
+  { id: 'vin_plate', label: 'Tabliczka znamionowa (VIN)', base64: '', required: true },
+  { id: 'engine', label: 'Komora silnika', base64: '', required: false },
+  { id: 'trunk', label: 'Bagażnik', base64: '', required: false },
+  { id: 'tire_dot_front_left', label: 'Opona PL (DOT)', base64: '', required: false },
+  { id: 'tire_dot_front_right', label: 'Opona PP (DOT)', base64: '', required: false },
+  { id: 'tire_dot_rear_left', label: 'Opona TL (DOT)', base64: '', required: false },
+  { id: 'tire_dot_rear_right', label: 'Opona TP (DOT)', base64: '', required: false },
+  { id: 'extra_1', label: 'Dodatkowe 1', base64: '', required: false },
+  { id: 'extra_2', label: 'Dodatkowe 2', base64: '', required: false },
+  { id: 'extra_3', label: 'Dodatkowe 3', base64: '', required: false },
+  // D1-D5 Document Slots
+  { id: 'doc_reg_front', label: 'Dowód rejestracyjny (przód)', base64: '', required: false },
+  { id: 'doc_reg_rear', label: 'Dowód rejestracyjny (tył)', base64: '', required: false },
+  { id: 'doc_insurance', label: 'Polisa ubezpieczeniowa', base64: '', required: false },
+  { id: 'doc_manual', label: 'Instrukcja / Książka', base64: '', required: false },
+  { id: 'doc_extra', label: 'Inne dokumenty', base64: '', required: false },
 ];
 
 // ─── Initial Data ─────────────────────────────────────────
@@ -482,8 +468,13 @@ const initialData: StepData = {
   },
   finalSummary: {
     vinConfirmed: false,
-    signatureAppraiser: '', signatureClient: '', signatureYard: '',
-    submittedAt: '', submissionStatus: '',
+    signatureAppraiser: '',
+    signatureClient: '',
+    signatureYard: '',
+    isAbsentRep: false,
+    absentRepComment: '',
+    submittedAt: '',
+    submissionStatus: '',
   },
 };
 
@@ -616,6 +607,34 @@ export const useInspectionStore = create<InspectionState>()(
           calendar: { ...state.calendar, expanded: !state.calendar.expanded },
         })),
 
+      scheduleJob: async (jobId, date) => {
+        try {
+          const dealId = jobId;
+          const isoDate = date;
+          const response = await inspectionApi.scheduleInspection(dealId, isoDate);
+      if (response.success) {
+        set((state) => ({
+          jobs: {
+            ...state.jobs,
+            list: state.jobs.list.map((j) =>
+              j.id === dealId
+                ? { ...j, scheduledDate: isoDate, hasConflict: response.conflict }
+                : j
+            ),
+          },
+        }));
+      }
+      return response;
+        } catch (error: any) {
+          console.error("Failed to schedule job:", error);
+          return { 
+            success: false, 
+            message: error.response?.data?.detail || "Błąd połączenia z serwerem",
+            conflict: error.response?.status === 409
+          };
+        }
+      },
+
       updateField: (step, field, value) =>
         set((state) => ({
           data: {
@@ -720,13 +739,18 @@ export const useInspectionStore = create<InspectionState>()(
         if (!dealId || dealId.startsWith('mock-')) return;
 
         const stepKeys: Record<number, keyof StepData> = {
-          1: 'vehicleData', 2: 'equipmentCompleteness', 3: 'fullEquipment',
-          4: 'paintMeasurement', 5: 'tires', 6: 'photos',
-          7: 'tires', // Tires are step 7 in PWA logic
-          8: 'photos',
-          9: 'interiorDamage',
-          10: 'exteriorDamage',
-          11: 'finalSummary'
+          1: 'vehicleData',
+          2: 'equipmentCompleteness',
+          3: 'fullEquipment',
+          4: 'paintMeasurement',
+          5: 'tires',
+          6: 'photos',
+          7: 'exteriorDamage',
+          8: 'interiorDamage',
+          9: 'mechanical',
+          10: 'notesValuation',
+          11: 'vehicleData', // Validation (no specific data, sync vehicle as heartbeat)
+          12: 'finalSummary'
         };
 
         const fieldName = stepKeys[stepNumber];

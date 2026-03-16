@@ -38,6 +38,7 @@ KEYWORD_MAPPING: Dict[str, List[str]] = {
     "registration_number":      ["Numer rejestracyjny", "Rejestracja", "Tablice", "Registration", "Plates"],
     "first_registration_date":  ["Data pierwszej rejestracji", "Pierwsza rejestracja", "First registration"],
     "production_date":          ["Data produkcji", "Production date"],
+    "job_type":                 ["Typ zlecenia", "Rodzaj zlecenia", "Typ", "Job type"],
 
     # ── Step 2: Client Info ───────────────────────────────────────
     "company_name":             ["Firma", "Company", "Nazwa firmy"],
@@ -50,6 +51,7 @@ KEYWORD_MAPPING: Dict[str, List[str]] = {
     "inspection_place":         ["Miejsce oględzin", "Inspection place", "Lokalizacja"],
     "inspector_name":           ["Rzeczoznawca", "Inspector", "Inspektor"],
     "appraiser_mobile":         ["Rzeczoznawca mobilny", "Mobile appraiser"],
+    "scheduled_date":           ["Planowana data", "Scheduled date", "UF_CRM_1772108256983"],
 
     # ── Step 4: Documents Check ───────────────────────────────────
     "documents_completeness":   ["Kompletność dokumentów", "Dokumenty", "Documents"],
@@ -108,18 +110,19 @@ KEYWORD_MAPPING: Dict[str, List[str]] = {
     "tires_data_json":          ["Ogumienie", "Opony", "Tires", "Koła"],
 
     # ── Step 8: Exterior Photos ───────────────────────────────────
-    "photo_front":              ["Zdjęcie przód", "Photo front", "Przód pojazdu"],
-    "photo_rear":               ["Zdjęcie tył", "Photo rear", "Tył pojazdu"],
-    "photo_left":               ["Zdjęcie lewy bok", "Photo left", "Lewy bok"],
-    "photo_right":              ["Zdjęcie prawy bok", "Photo right", "Prawy bok"],
-    "photo_interior":           ["Zdjęcie wnętrze", "Photo interior", "Wnętrze"],
-    "photo_dashboard":          ["Zdjęcie deska", "Photo dashboard", "Deska rozdzielcza"],
-    "photo_odometer":           ["Zdjęcie licznik", "Photo odometer", "Licznik"],
-    "photo_vin_plate":          ["Zdjęcie tabliczka VIN", "Photo VIN plate", "Tabliczka znamionowa"],
+    "photo_front":              ["Przód pojazdu"],
+    "photo_rear":               ["Tył pojazdu"],
+    "photo_left":               ["Lewy bok"],
+    "photo_right":              ["Prawy bok"],
+    "photo_interior":           ["Wnętrze (Fotele przód)"],
+    "photo_dashboard":          ["Deska rozdzielcza (Kokpit)"],
+    "photo_odometer":           ["Licznik (Przebieg)"],
+    "photo_vin_plate":          ["Tabliczka znamionowa (VIN)"],
 
     # ── Step 9: Interior Assessment ───────────────────────────────
     "interior_damage_json":     ["Uszkodzenia wnętrza", "Interior damage", "Uszkodzenia wewnętrzne"],
-    "interior_condition":       ["Stan wnętrza", "Interior condition"],
+    "interior_condition":       ["Stan wnętrza", "Interior condition", "Ogólny stan"],
+    "absent_rep_comment":       ["COMMENTS", "Uwagi do podpisu", "Nieobecność"],
     "seat_condition":           ["Stan foteli", "Seat condition", "Fotele"],
     "dashboard_condition":      ["Stan deski", "Dashboard condition"],
 
@@ -145,6 +148,265 @@ KEYWORD_MAPPING: Dict[str, List[str]] = {
     # ── Equipment ─────────────────────────────────────────────────
     "equipment_completeness":   ["Kompletność wyposażenia", "Equipment completeness"],
     "full_equipment_json":      ["Pełne wyposażenie", "Full equipment", "Wyposażenie"],
+}
+
+# ---------------------------------------------------------------------------
+# Manual Overrides: PWA key → Exact Bitrix Field ID
+# These are checked FIRST (Problem 1)
+# ---------------------------------------------------------------------------
+MANUAL_OVERRIDES: Dict[str, str] = {
+    # Step 1 — Vehicle Identity
+    "registration_number":  "UF_CRM_1766057515315",
+    "registrationPlates":   "UF_CRM_1766057515315",
+    "vin_number":           "UF_CRM_1766057539531",
+    "production_year":      "UF_CRM_1766057572300",
+    "year":                 "UF_CRM_1766057572300",
+    "object_condition":     "UF_CRM_1766057661321",
+    "internal_order_no":    "UF_CRM_1766057686053",
+    "object_type":          "UF_CRM_1766057822722",
+    "make":                 "UF_CRM_1766057839684",
+    "vehicle_brand":        "UF_CRM_1766057839684",
+    "model":                "UF_CRM_1766057849818",
+    "vehicle_model":        "UF_CRM_1766057849818",
+    "object_notes":         "UF_CRM_1766057874704",
+    "bodyType":             "UF_CRM_1772796562336",
+    "body_type":            "UF_CRM_1772796562336",
+    "gearboxType":          "UF_CRM_1772796772039",
+    "gearbox_type":         "UF_CRM_1772796772039",
+    "fuelType":             "UF_CRM_1772534193",
+    "fuel_type":            "UF_CRM_1772534193",
+    "driveType":            "UF_CRM_1772534384484",
+    "drive_type":           "UF_CRM_1772534384484",
+    "color":                "UF_CRM_1772534410706",
+    "engineCapacity":       "UF_CRM_1772534081105",
+    "engine_capacity":      "UF_CRM_1772534081105",
+    "enginePower":          "UF_CRM_1772534094039",
+    "engine_power":         "UF_CRM_1772534094039",
+    "seatsCount":           "UF_CRM_1772534240887",
+    "seats_count":          "UF_CRM_1772534240887",
+    "productionDate":       "UF_CRM_1772534258723",
+    "production_date":      "UF_CRM_1772534258723",
+    "mileage":              "UF_CRM_1772534309693",
+    "firstRegistration":    "UF_CRM_1771529218758",
+    "first_registration":   "UF_CRM_1771529218758",
+
+    # Step 2 — Client Info
+    "first_name":           "UF_CRM_1766057941327",
+    "last_name":            "UF_CRM_1766057951060",
+    "company_name":         "UF_CRM_1766057964319",
+    "vat_payer":            "UF_CRM_1766057986080",
+    "tax_id":               "UF_CRM_1766057995404",
+    "city":                 "UF_CRM_1766058009838",
+    "street":               "UF_CRM_1766058028123",
+    "phone":                "UF_CRM_1766058053224",
+    "mobile":               "UF_CRM_1766058064293",
+    "client_email":         "UF_CRM_1766058088327",
+    "contact_person":       "UF_CRM_1766058259960",
+    "contact_phone":        "UF_CRM_1766058247125",
+    "client_is_owner":      "UF_CRM_1770382017593",
+    "user_owner":           "UF_CRM_1772533649132",
+
+    # Step 3 — Scheduling
+    "scheduled_date":       "UF_CRM_1772108256983",
+    "inspection_date":      "UF_CRM_1772108256983",
+    "planned_location":     "UF_CRM_1766058185504",
+    "planned_address":      "UF_CRM_1766058194337",
+    "expected_date":        "UF_CRM_1766058328433",
+    "expected_time":        "UF_CRM_1766058499797",
+
+    # Step 4 — Paint Measurements
+    "hood":                 "UF_CRM_1772608834",
+    "paint_hood":           "UF_CRM_1772608834",
+    "leftFrontFender":      "UF_CRM_1772609211",
+    "paint_fender_fl":      "UF_CRM_1772609211",
+    "leftFrontDoor":        "UF_CRM_1772609231",
+    "paint_door_fl":        "UF_CRM_1772609231",
+    "leftAColumn":          "UF_CRM_1772609246",
+    "leftBColumn":          "UF_CRM_1772610029",
+    "leftRearDoor":         "UF_CRM_1772610262",
+    "paint_door_rl":        "UF_CRM_1772610262",
+    "leftRearFender":       "UF_CRM_1772610277",
+    "paint_fender_rl":      "UF_CRM_1772610277",
+    "leftSill":             "UF_CRM_1772610293",
+    "trunk":                "UF_CRM_1772610306",
+    "paint_trunk":          "UF_CRM_1772610306",
+    "rightSill":            "UF_CRM_1772610320",
+    "rightRearFender":      "UF_CRM_1772610341",
+    "paint_fender_rr":      "UF_CRM_1772610341",
+    "rightRearDoor":        "UF_CRM_1772610362",
+    "paint_door_rr":        "UF_CRM_1772610362",
+    "rightBColumn":         "UF_CRM_1772610375",
+    "rightAColumn":         "UF_CRM_1772610470",
+    "rightFrontDoor":       "UF_CRM_1772610483",
+    "paint_door_fr":        "UF_CRM_1772610483",
+    "rightFrontFender":     "UF_CRM_1772610496",
+    "paint_fender_fr":      "UF_CRM_1772610496",
+    "roof":                 "UF_CRM_1772610511",
+    "paint_roof":           "UF_CRM_1772610511",
+
+    # Step 5 — Tires (Front Left)
+    "frontLeft.photo":      "UF_CRM_1772610734643",
+    "tire_fl_photo":        "UF_CRM_1772610734643",
+    "frontLeft.brand":      "UF_CRM_1772610816511",
+    "tire_fl_brand":        "UF_CRM_1772610816511",
+    "frontLeft.model":      "UF_CRM_1772610837476",
+    "frontLeft.width":      "UF_CRM_1772610861879",
+    "tire_fl_width":        "UF_CRM_1772610861879",
+    "frontLeft.height":     "UF_CRM_1772610884898",
+    "frontLeft.diameter":   "UF_CRM_1772610897372",
+    "frontLeft.type":       "UF_CRM_1772611049682",
+    "tire_fl_type":         "UF_CRM_1772611049682",
+
+    # Step 5 — Tires (Rear Left)
+    "rearLeft.photo":       "UF_CRM_1772611130006",
+    "rearLeft.brand":       "UF_CRM_1772611145640",
+    "tire_rl_brand":        "UF_CRM_1772611145640",
+    "rearLeft.width":       "UF_CRM_1772611181014",
+    "tire_rl_width":        "UF_CRM_1772611181014",
+    "rearLeft.type":        "UF_CRM_1772611308379",
+
+    # Step 5 — Tires (Rear Right)
+    "rearRight.photo":      "UF_CRM_1772611337096",
+    "rearRight.brand":      "UF_CRM_1772611353212",
+    "tire_rr_brand":        "UF_CRM_1772611353212",
+    "rearRight.width":      "UF_CRM_1772611383784",
+    "tire_rr_width":        "UF_CRM_1772611383784",
+    "rearRight.type":       "UF_CRM_1772611486777",
+
+    # Step 5 — Tires (Front Right)
+    "frontRight.photo":     "UF_CRM_1772611509263",
+    "frontRight.brand":     "UF_CRM_1772611525863",
+    "tire_fr_brand":        "UF_CRM_1772611525863",
+    "frontRight.width":     "UF_CRM_1772611559270",
+    "tire_fr_width":        "UF_CRM_1772611559270",
+    "frontRight.type":      "UF_CRM_1772611681119",
+
+    # Step 6 — Exterior Photos
+    "photo_diagonal_fl":    "UF_CRM_1772611987832",
+    "photo_front":          "UF_CRM_1772612004048",
+    "photo_underbody_f":    "UF_CRM_1772612013651",
+    "photo_diagonal_fr":    "UF_CRM_1772612024701",
+    "photo_right_front":    "UF_CRM_1772612033335",
+    "photo_right_rear":     "UF_CRM_1772612050107",
+    "photo_diagonal_rr":    "UF_CRM_1772612066491",
+    "photo_rear":           "UF_CRM_1772612079009",
+    "photo_underbody_r":    "UF_CRM_1772612087523",
+    "photo_trunk":          "UF_CRM_1772612097406",
+    "photo_spare_wheel":    "UF_CRM_1772612105807",
+    "photo_diagonal_rl":    "UF_CRM_1772612115527",
+    "photo_left_rear":      "UF_CRM_1772612124809",
+    "photo_left_front":     "UF_CRM_1772612134646",
+    "photo_engine":         "UF_CRM_1772612144482",
+    "photo_vin":            "UF_CRM_1772612153446",
+    "photo_vin_plate":      "UF_CRM_1772612153446",
+    "photo_nameplate":      "UF_CRM_1772612164113",
+    "photo_odometer":       "UF_CRM_1772612173468",
+    "photo_service":        "UF_CRM_1772612182601",
+    "photo_door_fl_open":   "UF_CRM_1772612194120",
+    "photo_door_fr_open":   "UF_CRM_1772798492178",
+    "photo_steering_left":  "UF_CRM_1772612202338",
+    "photo_door_rl_open":   "UF_CRM_1772612212884",
+    "photo_rear_to_dash":   "UF_CRM_1772612221275",
+    "photo_console":        "UF_CRM_1772612231675",
+    "photo_tunnel":         "UF_CRM_1772612239574",
+    "photo_steering_front": "UF_CRM_1772612253674",
+    "photo_protocol":       "UF_CRM_1772612269743",
+
+    # Step 9 — Mechanical
+    "engine_oil_level":     "UF_CRM_1772534488",
+    "brake_fluid_level":    "UF_CRM_1772534549",
+    "power_steering_level": "UF_CRM_1772534574",
+    "coolant_level":        "UF_CRM_1772534597",
+    "engine_noises":        "UF_CRM_1772613615422",
+    "clutch_noises":        "UF_CRM_1772613597958",
+    "steering_noises":      "UF_CRM_1772613633756",
+    "suspension_noises":    "UF_CRM_1772613982870",
+    "oil_leaks":            "UF_CRM_1772613674060",
+    "gearbox_leaks":        "UF_CRM_1772613689243",
+    "coolant_leaks":        "UF_CRM_1772613705229",
+    "brake_fluid_leaks":    "UF_CRM_1772613719093",
+    "excessive_smoking":    "UF_CRM_1772613886946",
+    "check_engine":         "UF_CRM_1772613819989",
+    "abs_esp_warning":      "UF_CRM_1772613835346",
+    "airbag_warning":       "UF_CRM_1772613852408",
+    "service_warning":      "UF_CRM_1772613868261",
+
+    # Step 12 — Signature & Summary
+    "absentRepComment":     "COMMENTS",
+    "absent_rep_comment":   "COMMENTS",
+    "summary":              "UF_CRM_1772798881993",
+    "report_type":          "UF_CRM_1772793999330",
+    "additional_notes":     "UF_CRM_1772190212427",
+
+    # Rear Left tires (Extended)
+    "rearLeft.height":      "UF_CRM_1772611199032",
+    "rearLeft.diameter":    "UF_CRM_1772611214450",
+    "rearLeft.loadIndex":   "UF_CRM_1772611233034",
+    "rearLeft.speedIndex":  "UF_CRM_1772611258151",
+    "rearLeft.profile":     "UF_CRM_1772611274637",
+    "rearLeft.type":        "UF_CRM_1772611308379",
+    "tire_rl_type":         "UF_CRM_1772611308379",
+
+    # Rear Right tires (Extended)
+    "rearRight.height":     "UF_CRM_1772611399366",
+    "rearRight.diameter":   "UF_CRM_1772611414250",
+    "rearRight.loadIndex":  "UF_CRM_1772611429054",
+    "rearRight.speedIndex": "UF_CRM_1772611443569",
+    "rearRight.profile":    "UF_CRM_1772611458789",
+    "rearRight.type":       "UF_CRM_1772611486777",
+    "tire_rr_type":         "UF_CRM_1772611486777",
+
+    # Front Right tires (Extended)
+    "frontRight.height":    "UF_CRM_1772611574783",
+    "frontRight.diameter":  "UF_CRM_1772611590270",
+    "frontRight.loadIndex": "UF_CRM_1772611605902",
+    "frontRight.speedIndex":"UF_CRM_1772611622692",
+    "frontRight.profile":   "UF_CRM_1772611638595",
+    "frontRight.type":      "UF_CRM_1772611681119",
+    "tire_fr_type":         "UF_CRM_1772611681119",
+
+    # Damage Groups 1-7
+    "damage_group_1.type":  "UF_CRM_1772613182502",
+    "damage_group_1.photos":"UF_CRM_1772613206871",
+    "damage_group_1.far":   "UF_CRM_1772613217059",
+    "damage_group_1.close": "UF_CRM_1772613228190",
+    "damage_group_1.desc":  "UF_CRM_1772613247890",
+
+    "damage_group_2.type":  "UF_CRM_1772613355353",
+    "damage_group_2.photos":"UF_CRM_1772613373460",
+    "damage_group_2.far":   "UF_CRM_1772613387457",
+    "damage_group_2.close": "UF_CRM_1772613397392",
+    "damage_group_2.desc":  "UF_CRM_1772613406127",
+
+    "damage_group_3.type":  "UF_CRM_1772715276778",
+    "damage_group_3.photos":"UF_CRM_1772715380001",
+    "damage_group_3.far":   "UF_CRM_1772715409356",
+    "damage_group_3.close": "UF_CRM_1772715425054",
+    "damage_group_3.desc":  "UF_CRM_1772802047750",
+
+    "damage_group_4.type":  "UF_CRM_1772715537916",
+    "damage_group_4.photos":"UF_CRM_1772715552367",
+    "damage_group_4.far":   "UF_CRM_1772715562835",
+    "damage_group_4.close": "UF_CRM_1772715572369",
+    "damage_group_4.desc":  "UF_CRM_1772715584270",
+
+    "damage_group_5.type":  "UF_CRM_1772715645276",
+    "damage_group_5.photos":"UF_CRM_1772715663777",
+    "damage_group_5.far":   "UF_CRM_1772715684930",
+    "damage_group_5.close": "UF_CRM_1772715696198",
+    "damage_group_5.desc":  "UF_CRM_1772715705935",
+
+    "damage_group_6.type":  "UF_CRM_1772715772023",
+    "damage_group_6.photos":"UF_CRM_1772715787774",
+    "damage_group_6.far":   "UF_CRM_1772715801292",
+    "damage_group_6.close": "UF_CRM_1772715816526",
+    "damage_group_6.desc":  "UF_CRM_1772715826394",
+
+    "damage_group_7.type":  "UF_CRM_1772715893467",
+    "damage_group_7.photos":"UF_CRM_1772715904885",
+    "damage_group_7.far":   "UF_CRM_1772715914852",
+    "damage_group_7.close": "UF_CRM_1772715927438",
+    "damage_group_7.desc":  "UF_CRM_1772715939756",
 }
 
 
@@ -228,19 +490,27 @@ class BitrixFieldDiscovery:
         self._registry.clear()
         self._reverse_registry.clear()
 
-        # 1. Apply manual overrides first
+        # 1. Apply manual overrides from file first
         for pwa_key, field_id in self._overrides.items():
             if field_id in self._field_schema:
                 self._registry[pwa_key] = field_id
                 self._reverse_registry[field_id] = pwa_key
-                logger.debug(f"Override: {pwa_key} → {field_id}")
+                logger.debug(f"Override (file): {pwa_key} → {field_id}")
+
+        # 2. Apply MANUAL_OVERRIDES from code (Problem 1)
+        for pwa_key, field_id in MANUAL_OVERRIDES.items():
+            # Allow "COMMENTS" even if not in scheme (it's a system field)
+            if field_id in self._field_schema or field_id == "COMMENTS":
+                self._registry[pwa_key] = field_id
+                self._reverse_registry[field_id] = pwa_key
+                logger.debug(f"Override (code): {pwa_key} → {field_id}")
             else:
                 logger.warning(
-                    f"Override {pwa_key} → {field_id} skipped: "
+                    f"Manual Override {pwa_key} → {field_id} skipped: "
                     f"field ID not found in Bitrix schema"
                 )
 
-        # 2. Keyword-match remaining PWA keys
+        # 3. Keyword-match remaining PWA keys
         for pwa_key, keywords in KEYWORD_MAPPING.items():
             # Skip if already set by override
             if pwa_key in self._registry:
@@ -303,7 +573,7 @@ class BitrixFieldDiscovery:
         total_pwa_keys = len(KEYWORD_MAPPING)
         mapped_count = len(self._registry)
         override_count = len(
-            [k for k in self._registry if k in self._overrides]
+            [k for k in self._registry if k in self._overrides or k in MANUAL_OVERRIDES]
         )
         unmapped_keys = [
             k for k in KEYWORD_MAPPING if k not in self._registry

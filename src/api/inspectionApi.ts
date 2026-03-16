@@ -71,7 +71,7 @@ export const inspectionApi = {
 
     /**
      * POST /inspection/submit
-     * Submit the full 11-step inspection payload.
+     * Submit the full 12-step inspection payload.
      */
     async submitFullInspection(payload: any) {
         const token = getAuthToken();
@@ -168,5 +168,28 @@ export const inspectionApi = {
         }
 
         return await response.json();
+    },
+
+    /**
+     * POST /inspection/{deal_id}/schedule
+     * Schedule an inspection date/time.
+     */
+    async scheduleInspection(dealId: string, scheduledDate: string) {
+        const token = getAuthToken();
+        const response = await fetch(`${BASE_URL}/inspection/${dealId}/schedule`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ scheduled_date: scheduledDate }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to schedule inspection');
+        }
+
+        return result;
     }
 };

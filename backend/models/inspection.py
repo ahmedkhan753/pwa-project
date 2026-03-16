@@ -192,16 +192,13 @@ class PaintMeasurements(BaseModel):
 
 class MechanicalCheck(BaseModel):
     """Step 6 — Mechanical condition: fluids, warning lights, etc."""
-    engine_oil_level: Optional[FluidLevel] = None
-    coolant_level: Optional[FluidLevel] = None
-    brake_fluid_level: Optional[FluidLevel] = None
-    power_steering_level: Optional[FluidLevel] = None
-    warning_lights: Optional[Dict[str, WarningLightStatus]] = Field(
-        None, description="Warning lights status map"
-    )
-    mechanical_json: Optional[Dict[str, Any]] = Field(
-        None, description="Full mechanical data as JSON blob"
-    )
+    engine_oil_level: Optional[Any] = None
+    coolant_level: Optional[Any] = None
+    brake_fluid_level: Optional[Any] = None
+    power_steering_level: Optional[Any] = None
+    warning_lights: Optional[Any] = None
+    mechanical_json: Optional[Any] = None
+    extra_data: Optional[Dict[str, Any]] = None
 
 
 # ─── Step 7: Tire Data ───────────────────────────────────────
@@ -222,36 +219,35 @@ class SingleTire(BaseModel):
 
 class TireData(BaseModel):
     """Step 7 — Tire data for all 4 wheels."""
-    front_left: Optional[SingleTire] = None
-    front_right: Optional[SingleTire] = None
-    rear_left: Optional[SingleTire] = None
-    rear_right: Optional[SingleTire] = None
-    spare_tire: Optional[bool] = Field(None, description="Spare tire present")
-    tires_data_json: Optional[Dict[str, Any]] = Field(
-        None, description="Full tire data as JSON blob"
-    )
+    front_left: Optional[Any] = None
+    front_right: Optional[Any] = None
+    rear_left: Optional[Any] = None
+    rear_right: Optional[Any] = None
+    spare_tire: Optional[Any] = None
+    tires_data_json: Optional[Any] = None
 
     # Individual Bitrix fields (flat mapping for discovery)
-    tire_fl_brand: Optional[str] = None
-    tire_fl_size: Optional[str] = None
-    tire_fl_width: Optional[str] = None
-    tire_fl_depth: Optional[str] = None
-    tire_fl_type: Optional[str] = None
-    tire_fr_brand: Optional[str] = None
-    tire_fr_size: Optional[str] = None
-    tire_fr_width: Optional[str] = None
-    tire_fr_depth: Optional[str] = None
-    tire_fr_type: Optional[str] = None
-    tire_rl_brand: Optional[str] = None
-    tire_rl_size: Optional[str] = None
-    tire_rl_width: Optional[str] = None
-    tire_rl_depth: Optional[str] = None
-    tire_rl_type: Optional[str] = None
-    tire_rr_brand: Optional[str] = None
-    tire_rr_size: Optional[str] = None
-    tire_rr_width: Optional[str] = None
-    tire_rr_depth: Optional[str] = None
-    tire_rr_type: Optional[str] = None
+    tire_fl_brand: Optional[Any] = None
+    tire_fl_size: Optional[Any] = None
+    tire_fl_width: Optional[Any] = None
+    tire_fl_depth: Optional[Any] = None
+    tire_fl_type: Optional[Any] = None
+    tire_fr_brand: Optional[Any] = None
+    tire_fr_size: Optional[Any] = None
+    tire_fr_width: Optional[Any] = None
+    tire_fr_depth: Optional[Any] = None
+    tire_fr_type: Optional[Any] = None
+    tire_rl_brand: Optional[Any] = None
+    tire_rl_size: Optional[Any] = None
+    tire_rl_width: Optional[Any] = None
+    tire_rl_depth: Optional[Any] = None
+    tire_rl_type: Optional[Any] = None
+    tire_rr_brand: Optional[Any] = None
+    tire_rr_size: Optional[Any] = None
+    tire_rr_width: Optional[Any] = None
+    tire_rr_depth: Optional[Any] = None
+    tire_rr_type: Optional[Any] = None
+    extra_data: Optional[Dict[str, Any]] = None
 
 
 # ─── Step 8: Exterior Photos ─────────────────────────────────
@@ -267,15 +263,16 @@ class PhotoRef(BaseModel):
 
 class ExteriorPhotos(BaseModel):
     """Step 8 — Exterior photo references."""
-    photo_front: Optional[PhotoRef] = None
-    photo_rear: Optional[PhotoRef] = None
-    photo_left: Optional[PhotoRef] = None
-    photo_right: Optional[PhotoRef] = None
-    photo_interior: Optional[PhotoRef] = None
-    photo_dashboard: Optional[PhotoRef] = None
-    photo_odometer: Optional[PhotoRef] = None
-    photo_vin_plate: Optional[PhotoRef] = None
-    additional_photos: Optional[List[PhotoRef]] = Field(default_factory=list)
+    photo_front: Optional[Any] = None
+    photo_rear: Optional[Any] = None
+    photo_left: Optional[Any] = None
+    photo_right: Optional[Any] = None
+    photo_interior: Optional[Any] = None
+    photo_dashboard: Optional[Any] = None
+    photo_odometer: Optional[Any] = None
+    photo_vin_plate: Optional[Any] = None
+    additional_photos: Optional[Any] = None
+    extra_data: Optional[Dict[str, Any]] = None
 
 
 # ─── Step 9: Interior Assessment ─────────────────────────────
@@ -293,33 +290,31 @@ class DamageEntry(BaseModel):
 
 class InteriorAssessment(BaseModel):
     """Step 9 — Interior condition and damage (groups 1–5)."""
-    interior_condition: Optional[InteriorCondition] = None
-    seat_condition: Optional[InteriorCondition] = None
-    dashboard_condition: Optional[InteriorCondition] = None
-    damage_group_1: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_2: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_3: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_4: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_5: Optional[List[DamageEntry]] = Field(default_factory=list)
-    interior_damage_json: Optional[Dict[str, Any]] = Field(
-        None, description="Full interior damage as JSON blob"
-    )
+    interior_condition: Optional[Any] = None
+    seat_condition: Optional[Any] = None
+    dashboard_condition: Optional[Any] = None
+    damage_group_1: Optional[Any] = None
+    damage_group_2: Optional[Any] = None
+    damage_group_3: Optional[Any] = None
+    damage_group_4: Optional[Any] = None
+    damage_group_5: Optional[Any] = None
+    interior_damage_json: Optional[Any] = None
+    extra_data: Optional[Dict[str, Any]] = None
 
 
 # ─── Step 10: Body Damage ────────────────────────────────────
 
 class BodyDamage(BaseModel):
     """Step 10 — Body / exterior damage (groups 1–7)."""
-    damage_group_1: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_2: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_3: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_4: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_5: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_6: Optional[List[DamageEntry]] = Field(default_factory=list)
-    damage_group_7: Optional[List[DamageEntry]] = Field(default_factory=list)
-    exterior_damage_json: Optional[Dict[str, Any]] = Field(
-        None, description="Full exterior damage as JSON blob"
-    )
+    damage_group_1: Optional[Any] = None
+    damage_group_2: Optional[Any] = None
+    damage_group_3: Optional[Any] = None
+    damage_group_4: Optional[Any] = None
+    damage_group_5: Optional[Any] = None
+    damage_group_6: Optional[Any] = None
+    damage_group_7: Optional[Any] = None
+    exterior_damage_json: Optional[Any] = None
+    extra_data: Optional[Dict[str, Any]] = None
 
 
 # ─── Step 11: Summary & Signature ────────────────────────────
@@ -332,6 +327,8 @@ class SummaryAndSignature(BaseModel):
     signature_appraiser: Optional[str] = Field(None, description="Appraiser signature (base64 or file ID)")
     signature_client: Optional[str] = Field(None, description="Client signature")
     signature_yard: Optional[str] = Field(None, description="Yard / parking signature")
+    is_absent_rep: Optional[bool] = Field(None, description="Dysponent nieobecny")
+    absent_rep_comment: Optional[str] = Field(None, description="Comment for absence")
     notes_valuation_json: Optional[Dict[str, Any]] = Field(
         None, description="Full notes & valuation JSON blob"
     )
@@ -347,7 +344,7 @@ class SummaryAndSignature(BaseModel):
 
 class InspectionPayload(BaseModel):
     """
-    Master model wrapping all 11 inspection steps.
+    Master model wrapping all 12 inspection steps.
     All fields are Optional to support partial / step saves.
     """
     # Step 1
@@ -418,7 +415,7 @@ class StepPartialData(BaseModel):
     Partial data for a single wizard step.
     Used by PATCH /inspection/{deal_id}/step/{step_number}.
     """
-    step_number: int = Field(..., ge=1, le=11, description="Step number (1-11)")
+    step_number: int = Field(..., ge=1, le=12, description="Step number (1-12)")
     data: Dict[str, Any] = Field(..., description="Step fields as key-value pairs")
 
 

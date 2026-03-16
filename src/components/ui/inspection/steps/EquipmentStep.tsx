@@ -40,6 +40,10 @@ export function EquipmentStep() {
                         label={item.label}
                         value={eq[item.key as keyof typeof eq] as ToggleValue}
                         onChange={(val) => updateField('equipmentCompleteness', item.key, val)}
+                        options={[
+                            { label: 'TAK', value: 'TAK', colorClass: 'bg-emerald-500', activeColor: 'text-white' },
+                            { label: 'NIE', value: 'NIE', colorClass: 'bg-rose-500', activeColor: 'text-white' },
+                        ]}
                     />
                 ))}
 

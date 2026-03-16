@@ -56,7 +56,7 @@ export const apiClient = {
         }
 
         try {
-            const response = await fetch(`${BASE_URL}/auth/login`, {
+            const response = await fetch(`${BASE_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
@@ -205,6 +205,17 @@ export const apiClient = {
         }
     },
 
+    async getMetadata() {
+        if (IS_DEMO) return {};
+        try {
+            const response = await fetch(`${BASE_URL}/api/metadata/options`);
+            if (!response.ok) return {};
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch metadata", e);
+            return {};
+        }
+    },
     async uploadPhoto(base64: string) {
         const token = getAuthToken();
         console.log('Uploading photo...', { token });

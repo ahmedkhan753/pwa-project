@@ -139,7 +139,7 @@ async def upload_batch(
                     error=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB",
                 )
 
-            result = await gateway.upload_file(
+            result = await gateway.upload_file_to_deal(
                 deal_id=deal_id,
                 field_pwa_key=fk,
                 file_bytes=file_bytes,

@@ -32,8 +32,9 @@ from services.bitrix_gateway import (
 )
 from services.field_transformer import FieldTransformer
 
-# Also keep legacy bitrix_service for backward compat
-import bitrix_service
+# ─── Global Instances ─────────────────────────────────────────
+gateway = BitrixGateway(discovery=discovery)
+transformer = FieldTransformer(discovery=discovery)
 
 # ─── Logging ──────────────────────────────────────────────────
 logging.basicConfig(
@@ -50,16 +51,12 @@ async def lifespan(app: FastAPI):
     On startup:
       1. Test Bitrix24 connectivity
       2. Discover & cache all CRM Deal fields
-      3. Log the mapping report
-    On shutdown:
-      - Close the gateway HTTP client
     """
     logger.info("=" * 60)
     logger.info("STARTING Auto-Inspection PWA Backend")
     logger.info("=" * 60)
-
-    # Create gateway instance
-    gateway = BitrixGateway(discovery=discovery)
+    
+    # Provide gateway/discovery to app state for routers
     app.state.gateway = gateway
     app.state.discovery = discovery
     app.state.bitrix_ready = False
@@ -69,23 +66,16 @@ async def lifespan(app: FastAPI):
         logger.info("Testing Bitrix24 connection...")
         conn = await gateway.test_connection()
         if not conn["connected"]:
-            logger.error(
-                "⚠ Bitrix24 connection FAILED — running in degraded mode"
-            )
+            logger.error("⚠ Bitrix24 connection FAILED — running in degraded mode")
         else:
-            logger.info(
-                f"✓ Bitrix24 connected — {conn['field_count']} fields available"
-            )
+            logger.info(f"✓ Bitrix24 connected — {conn['field_count']} fields available")
 
             # Step 2: Initialize field discovery
             logger.info("Running dynamic field discovery...")
             await discovery.initialize(gateway.call)
 
             app.state.bitrix_ready = True
-            logger.info(
-                f"✓ Field discovery complete — "
-                f"{discovery.get_mapped_count()} fields mapped"
-            )
+            logger.info(f"✓ Field discovery complete — {discovery.get_mapped_count()} fields mapped")
 
     except Exception as e:
         logger.error(f"Startup error: {e} — running in degraded mode")
@@ -192,12 +182,13 @@ async def log_requests(request: Request, call_next):
 
 
 # ─── Routers ──────────────────────────────────────────────────
-from routers import health, deals, inspection, files
+from routers import health, deals, inspection, files, metadata
 
 app.include_router(health.router)
 app.include_router(deals.router)
 app.include_router(inspection.router)
 app.include_router(files.router)
+app.include_router(metadata.router)
 
 
 # ─── Mock Data Fallback (Used by Routers if Bitrix Offline) ────
@@ -273,28 +264,37 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-@app.post("/auth/login")
+@app.post("/api/auth/login")
 async def login(request_body: LoginRequest):
-    """Login endpoint — maps email to Bitrix24 user."""
-    if "error" in request_body.email:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    bitrix_user = await bitrix_service.get_user_by_email(request_body.email)
-
-    if bitrix_user:
-        user_data = {
-            "id": str(bitrix_user.get("ID", "1")),
-            "email": request_body.email,
-            "name": f"{bitrix_user.get('NAME', '')} {bitrix_user.get('LAST_NAME', '')}".strip()
-            or "Appraiser",
-            "bitrixId": str(bitrix_user.get("ID", "")),
-        }
-    else:
+    """
+    Login endpoint (Bitrix24 mock/auth).
+    Returns basic user info from Bitrix.
+    """
+    try:
+        bitrix_user = await gateway.get_user_by_email(request_body.email)
+        if not bitrix_user:
+            # Universal Test Access: Default to ID 1 (Mateusz) if email unknown
+            logger.info(f"Email {request_body.email} not found in Bitrix. Using universal test ID: 1")
+            user_data = {
+                "id": "1",
+                "email": request_body.email,
+                "name": "Testing (Mateusz) - Real Bitrix Mode",
+                "bitrixId": "1",
+            }
+        else:
+            user_data = {
+                "id": str(bitrix_user.get("ID")),
+                "email": request_body.email,
+                "name": f"{bitrix_user.get('NAME', '')} {bitrix_user.get('LAST_NAME', '')}".strip() or "Appraiser",
+                "bitrixId": str(bitrix_user.get("ID")),
+            }
+    except Exception as e:
+        logger.error(f"Login error: {e}")
         user_data = {
             "id": "1",
             "email": request_body.email,
-            "name": "Appraiser Marek",
-            "bitrixId": "",
+            "name": "Testing (Mateusz) - Fallback",
+            "bitrixId": "1",
         }
 
     return {"token": f"token_{int(time.time())}", "user": user_data}
@@ -308,18 +308,24 @@ async def get_tasks(
     date: Optional[str] = None,
 ):
     """Bridge to new deals router logic if needed, or keep for simple sync."""
-    if email and not responsible_id:
-        responsible_id = await bitrix_service.get_responsible_id_for_email(email)
-        if not responsible_id:
-            logger.warning(
-                f"Could not resolve Bitrix24 ID for email: {email}, using mock data"
-            )
+    try:
+        # Universal Test Access: Default to ID 1 if email not found
+        bitrix_user = await gateway.get_user_by_email(email)
+        responsible_id = "1"
+        if bitrix_user:
+            responsible_id = str(bitrix_user.get("ID"))
+        else:
+            logger.info(f"Dashboard email {email} not found. Defaulting to responsible_id: 1 for real data.")
+        
+        # Fetch real missions from Bitrix
+        deals = await gateway.get_appraiser_deals(int(responsible_id), date)
+        if deals:
+            return deals
+    except Exception as e:
+        logger.warning(f"Error fetching Bitrix deals for {email}: {e}")
 
-    tasks = await bitrix_service.get_tasks(responsible_id, date)
-    if tasks:
-        return tasks
-
-    logger.info(f"Using mock data fallback for tasks (date: {date})")
+    # Final logic: if Bitrix has no deals even for ID 1, show mock data so UI isn't empty
+    logger.info(f"Using mock data fallback for UI consistency (date: {date})")
     if date:
         return [j for j in MOCK_JOBS if j["deadline"] == date]
     return MOCK_JOBS
@@ -345,7 +351,7 @@ async def submit_inspection(data: InspectionSubmission):
         if b64:
             label = photo.get("label", f"photo_{i}")
             filename = f"inspection_{data.jobId}_{label}.jpg"
-            file_id = await bitrix_service.upload_file(filename, b64)
+            file_id = await gateway.upload_file_to_disk(filename, b64)
             if file_id:
                 uploaded_file_ids.append(file_id)
 
@@ -353,14 +359,14 @@ async def submit_inspection(data: InspectionSubmission):
         for j, photo_b64 in enumerate(damage.get("photos", [])):
             if photo_b64:
                 filename = f"damage_{data.jobId}_{damage.get('id', '')}_{j}.jpg"
-                file_id = await bitrix_service.upload_file(filename, photo_b64)
+                file_id = await gateway.upload_file(filename, photo_b64)
                 if file_id:
                     uploaded_file_ids.append(file_id)
 
     for k, img_b64 in enumerate(data.images):
         if img_b64:
             filename = f"extra_{data.jobId}_{k}.jpg"
-            file_id = await bitrix_service.upload_file(filename, img_b64)
+            file_id = await gateway.upload_file_to_disk(filename, img_b64)
             if file_id:
                 uploaded_file_ids.append(file_id)
 
@@ -372,7 +378,7 @@ async def submit_inspection(data: InspectionSubmission):
     for sig_name, sig_b64 in signatures.items():
         if sig_b64:
             filename = f"{sig_name}_{data.jobId}.png"
-            file_id = await bitrix_service.upload_file(filename, sig_b64)
+            file_id = await gateway.upload_file(filename, sig_b64)
             if file_id:
                 uploaded_file_ids.append(file_id)
 
@@ -428,15 +434,20 @@ async def submit_inspection(data: InspectionSubmission):
         logger.warning("Discovery not ready — using direct field names (may fail)")
 
     if uploaded_file_ids:
-        deal_fields["UF_CRM_FILES"] = uploaded_file_ids
+        # Resolve the photos field dynamically (e.g., photo_front)
+        files_field_id = discovery.get_field_id("photo_front")
+        if files_field_id:
+            deal_fields[files_field_id] = uploaded_file_ids
+        else:
+            logger.warning("❌ No 'photo_front' field found in Bitrix24 - skipping file attachment")
 
-    result = await bitrix_service.create_deal(deal_fields)
+    result = await gateway.create_deal(deal_fields)
 
-    if result.get("status") == "success":
-        logger.info(f"Inspection submitted successfully. Deal ID: {result.get('dealId')}")
+    if result.get("success"):
+        logger.info(f"Inspection submitted successfully. Deal ID: {result.get('deal_id')}")
         return {
             "status": "submitted",
-            "dealId": result.get("dealId"),
+            "dealId": result.get("deal_id"),
             "filesUploaded": len(uploaded_file_ids),
             "message": "Inspection submitted to Bitrix24 successfully.",
         }

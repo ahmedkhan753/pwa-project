@@ -57,6 +57,12 @@ const MECH_GROUPS = [
     },
 ];
 
+const MECH_OPTIONS = [
+    { label: 'OK', value: 'TAK', colorClass: 'bg-emerald-500', activeColor: 'text-white' },
+    { label: 'NOK', value: 'NIE', colorClass: 'bg-rose-500', activeColor: 'text-white' },
+    { label: 'ND', value: 'ND', colorClass: 'bg-slate-500', activeColor: 'text-white' },
+];
+
 export function MechanicalStep() {
     const { data, updateField } = useInspectionStore();
     const mech = data.mechanical;
@@ -71,17 +77,20 @@ export function MechanicalStep() {
             </div>
 
             {MECH_GROUPS.map((group) => (
-                <div key={group.title} className="section-card">
-                    <h4 className="text-sm font-bold text-foreground mb-3">{group.title}</h4>
-                    {group.items.map((item) => (
-                        <InspectionToggle
-                            key={item.key}
-                            label={item.label}
-                            value={mech[item.key as keyof typeof mech] as ToggleValue}
-                            onChange={(val) => updateField('mechanical', item.key, val)}
-                            compact
-                        />
-                    ))}
+                <div key={group.title} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm mb-4">
+                    <h4 className="text-sm font-black text-slate-900 dark:text-white mb-6 uppercase tracking-tight">{group.title}</h4>
+                    <div className="space-y-2">
+                        {group.items.map((item) => (
+                            <InspectionToggle
+                                key={item.key}
+                                label={item.label}
+                                value={mech[item.key as keyof typeof mech] as ToggleValue}
+                                onChange={(val) => updateField('mechanical', item.key, val)}
+                                options={MECH_OPTIONS}
+                                compact
+                            />
+                        ))}
+                    </div>
                 </div>
             ))}
 
@@ -96,11 +105,19 @@ export function MechanicalStep() {
                     label="Jazda próbna przeprowadzona"
                     value={mech.testDriveConducted}
                     onChange={(val) => updateField('mechanical', 'testDriveConducted', val)}
+                    options={[
+                        { label: 'TAK', value: 'TAK', colorClass: 'bg-emerald-500', activeColor: 'text-white' },
+                        { label: 'NIE', value: 'NIE', colorClass: 'bg-rose-500', activeColor: 'text-white' },
+                    ]}
                 />
                 <InspectionToggle
                     label="Jazda próbna niemożliwa"
                     value={mech.testDriveImpossible}
                     onChange={(val) => updateField('mechanical', 'testDriveImpossible', val)}
+                    options={[
+                        { label: 'TAK', value: 'TAK', colorClass: 'bg-emerald-500', activeColor: 'text-white' },
+                        { label: 'NIE', value: 'NIE', colorClass: 'bg-rose-500', activeColor: 'text-white' },
+                    ]}
                 />
 
                 <div className="mt-3">

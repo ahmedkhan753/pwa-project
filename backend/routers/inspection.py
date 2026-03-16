@@ -22,16 +22,17 @@ logger = logging.getLogger("routers.inspection")
 # Step number → step model field name mapping
 STEP_FIELD_MAP = {
     1: "vehicle",
-    2: "client",
-    3: "schedule",
-    4: "documents",
-    5: "paint",
-    6: "mechanical",
-    7: "tires",
-    8: "photos",
-    9: "interior",
-    10: "body_damage",
-    11: "summary",
+    2: "documents",  # equipmentCompleteness
+    3: "full_equipment",
+    4: "paint",
+    5: "tires",
+    6: "photos",
+    7: "body_damage", # exteriorDamage
+    8: "interior",     # interiorDamage
+    9: "mechanical",
+    10: "notes_valuation",
+    11: "vehicle",    # Validation (fallback)
+    12: "summary",
 }
 
 
@@ -39,7 +40,7 @@ STEP_FIELD_MAP = {
 async def submit_inspection(payload: InspectionPayload, request: Request):
     """
     POST /inspection/submit
-    Creates or updates a Bitrix deal from the full 11-step inspection payload.
+    Creates or updates a Bitrix deal from the full 12-step inspection payload.
     Validates with Pydantic, transforms dynamically, triggers file uploads.
     Returns: { deal_id, bitrix_url, status, warnings[] }
     """
@@ -116,10 +117,10 @@ async def save_step(
             detail="Bitrix24 integration not ready",
         )
 
-    if step_number < 1 or step_number > 11:
+    if step_number < 1 or step_number > 12:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid step number: {step_number}. Must be 1-11.",
+            detail=f"Invalid step number: {step_number}. Must be 1-12.",
         )
 
     warnings = []
@@ -127,6 +128,10 @@ async def save_step(
     try:
         # The step_data.data contains PWA key-value pairs for this step
         step_fields = step_data.data
+
+        # Problem 2: Log actual request body for steps 6, 7, 8
+        if step_number in (6, 7, 8):
+            logger.info(f"Step {step_number} PWA Payload: {step_fields}")
 
         logger.info(
             f"Saving step {step_number} for deal {deal_id} "
@@ -151,3 +156,25 @@ async def save_step(
             status_code=502,
             detail=f"Failed to save step {step_number}: {e}",
         )
+@router.post("/{deal_id}/schedule")
+async def schedule_inspection(
+    deal_id: int,
+    request: Request,
+):
+    """
+    POST /inspection/{deal_id}/schedule
+    Updates the planned inspection date and transitions deal stage.
+    """
+    gateway = request.app.state.gateway
+    body = await request.json()
+    scheduled_date = body.get("scheduled_date")
+    
+    if not scheduled_date:
+        raise HTTPException(status_code=400, detail="Missing scheduled_date")
+
+    try:
+        result = await gateway.schedule_inspection(deal_id, scheduled_date)
+        return result
+    except Exception as e:
+        logger.error(f"Scheduling failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))

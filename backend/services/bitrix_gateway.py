@@ -107,7 +107,38 @@ class BitrixGateway:
     # Core API caller with retries
     # ------------------------------------------------------------------
 
-    async def call(self, method: str, params: dict = None) -> Any:
+    async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Look up a Bitrix24 user by email."""
+        result = await self.call("user.search", {"EMAIL": email})
+        if result and len(result) > 0:
+            return result[0]
+        return None
+
+    async def upload_file_to_disk(self, filename: str, content_b64: str) -> Optional[str]:
+        """
+        Uploads a file to Bitrix24 disk.
+        Returns the file ID if successful.
+        """
+        # Strip data URI prefix if present
+        if "," in content_b64:
+            content_b64 = content_b64.split(",", 1)[1]
+        
+        # We'll use the disk.storage.uploadfile method
+        # This requires the storage ID (default 1 for common storage)
+        storage_id = os.getenv("BITRIX_STORAGE_ID", "1")
+        
+        params = {
+            "id": storage_id,
+            "data": {"NAME": filename},
+            "fileContent": [filename, content_b64]
+        }
+        
+        result = await self.call("disk.storage.uploadfile", params)
+        if result and "ID" in result:
+            return str(result["ID"])
+        return None
+
+    async def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Make a POST request to {webhook_url}/{method}.
         Handles retries on 5xx, raises typed exceptions on 4xx.
@@ -266,7 +297,6 @@ class BitrixGateway:
     async def update_deal(self, deal_id: int, inspection_data: dict) -> dict:
         """
         Update an existing CRM deal with new inspection data.
-        Same transform logic as create_deal.
         """
         from services.field_transformer import FieldTransformer
         transformer = FieldTransformer(self.discovery)
@@ -286,6 +316,74 @@ class BitrixGateway:
             "bitrix_url": bitrix_url,
             "success": True,
         }
+
+    async def schedule_inspection(self, deal_id: int, scheduled_date: str) -> dict:
+        """Schedule an inspection with conflict checking and stage transition. (Problem 3)"""
+        day_only = scheduled_date.split('T')[0]
+        filters = {
+            ">=BEGINDATE": f"{day_only} 00:00:00",
+            "<=BEGINDATE": f"{day_only} 23:59:59"
+        }
+        day_deals = await self.get_deal_list(filters)
+        has_conflict = False
+        
+        # Hardcoded date field from Problem 3 instructions
+        DATE_FIELD = "UF_CRM_1772108256983"
+        
+        for d in day_deals:
+            if int(d.get("ID")) == deal_id: continue
+            if d.get(DATE_FIELD) == scheduled_date:
+                has_conflict = True
+                break
+        
+        stage_id = await self.get_status_id_by_label("ustalone")
+        if not stage_id:
+            logger.warning("Could not find stage containing 'ustalone', using C1:USTALONE fallback")
+            stage_id = "C1:USTALONE"
+            
+        # Build payload directly (Problem 3.2)
+        payload = {
+            "STAGE_ID": stage_id,
+            DATE_FIELD: scheduled_date
+        }
+        
+        logger.info(f"Updating deal {deal_id} for scheduling: {payload}")
+        await self.call("crm.deal.update", {"ID": deal_id, "fields": payload})
+        
+        return {
+            "success": True, 
+            "conflict": has_conflict, 
+            "message": "Termin zapisany" + (" (Wykryto kolizję!)" if has_conflict else "")
+        }
+
+    async def get_status_id_by_label(self, label: str) -> Optional[str]:
+        """
+        Look up a STAGE_ID by display name across ALL categories. (Problem 3.3)
+        """
+        try:
+            label_lower = label.lower()
+            
+            # 1. Query all categories
+            categories = await self.call("crm.dealcategory.list", {}) or [{"ID": "0", "NAME": "General"}]
+            
+            for cat in categories:
+                cat_id = cat.get("ID", "0")
+                # 2. For each category call crm.dealcategory.stage.list
+                stages = await self.call("crm.dealcategory.stage.list", {"id": cat_id})
+                if not stages:
+                    continue
+                
+                # 3. Search for a stage whose NAME contains label
+                for s in stages:
+                    stage_name = str(s.get("NAME", "")).lower()
+                    if label_lower in stage_name:
+                        stage_id = s.get("STATUS_ID")
+                        logger.info(f"Found stage for '{label}': {stage_id} ('{s.get('NAME')}') in category {cat_id}")
+                        return stage_id
+                        
+        except Exception as e:
+            logger.error(f"Failed to fetch statuses: {e}")
+        return None
 
     async def get_appraiser_deals(
         self,
@@ -356,7 +454,7 @@ class BitrixGateway:
 
         return all_deals
 
-    async def upload_file(
+    async def upload_file_to_deal(
         self,
         deal_id: int,
         field_pwa_key: str,

@@ -5,7 +5,6 @@ import { ProgressBar } from "./ProgressBar";
 import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home, Cloud, CloudOff, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { SummaryReviewModal } from "./SummaryReviewModal";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
@@ -19,7 +18,8 @@ const STEPS = [
     { num: 8, short: "Wewn.", label: "Uszkodz. Wewn." },
     { num: 9, short: "Mech.", label: "Mechanika" },
     { num: 10, short: "Uwagi", label: "Uwagi i Wycena" },
-    { num: 11, short: "Wyślij", label: "Podsumowanie" },
+    { num: 11, short: "Sprawdź", label: "Weryfikacja" },
+    { num: 12, short: "Podpis", label: "Podsumowanie" },
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
@@ -28,7 +28,6 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [showSaved, setShowSaved] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncError, setSyncError] = useState(false);
-    const [showReviewModal, setShowReviewModal] = useState(false);
 
     // Bitrix Auto-Sync (Anti-Oops)
     useEffect(() => {
@@ -60,10 +59,6 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     }, []);
 
     const next = () => {
-        if (currentStep === 10) {
-            setShowReviewModal(true);
-            return;
-        }
         if (currentStep < totalSteps) setStep(currentStep + 1);
     };
 
@@ -72,18 +67,9 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     };
 
     const goToStep = (step: number) => {
-        if (step === 11 && currentStep < 11) {
-            setShowReviewModal(true);
-            return;
-        }
         if (step <= maxVisitedStep || step === currentStep + 1) {
             setStep(step);
         }
-    };
-
-    const handleConfirmReview = () => {
-        setShowReviewModal(false);
-        setStep(11);
     };
 
     return (
@@ -202,12 +188,6 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     </button>
                 )}
             </footer>
-
-            <SummaryReviewModal
-                isOpen={showReviewModal}
-                onClose={() => setShowReviewModal(false)}
-                onContinue={handleConfirmReview}
-            />
         </div>
     );
 }

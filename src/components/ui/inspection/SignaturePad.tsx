@@ -3,14 +3,16 @@
 import { useRef, useCallback } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { RotateCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SignaturePadProps {
     label: string;
     value: string;
     onSave: (base64: string) => void;
+    disabled?: boolean;
 }
 
-export function SignaturePad({ label, value, onSave }: SignaturePadProps) {
+export function SignaturePad({ label, value, onSave, disabled }: SignaturePadProps) {
     const sigRef = useRef<SignatureCanvas>(null);
 
     const handleEnd = useCallback(() => {
@@ -21,49 +23,59 @@ export function SignaturePad({ label, value, onSave }: SignaturePadProps) {
     }, [onSave]);
 
     const handleClear = () => {
+        if (disabled) return;
         sigRef.current?.clear();
         onSave('');
     };
 
     return (
-        <div className="section-card">
+        <div className={cn("section-card", disabled && "opacity-60 pointer-events-none")}>
             <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-bold text-foreground">{label}</label>
-                <button
-                    onClick={handleClear}
-                    className="flex items-center gap-1 text-xs text-secondary hover:text-danger transition-colors"
-                    aria-label={`Clear ${label}`}
-                >
-                    <RotateCcw size={14} />
-                    Wyczyść
-                </button>
+                {!disabled && (
+                    <button
+                        onClick={handleClear}
+                        className="flex items-center gap-1 text-xs text-secondary hover:text-danger transition-colors"
+                        aria-label={`Clear ${label}`}
+                    >
+                        <RotateCcw size={14} />
+                        Wyczyść
+                    </button>
+                )}
             </div>
 
-            <div className="signature-canvas-wrapper">
+            <div className="signature-canvas-wrapper border-2 border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden bg-white dark:bg-slate-950 relative group">
+                {/* Background Grid for better UX */}
+                {!value && (
+                    <div className="absolute inset-0 grid grid-cols-12 grid-rows-6 opacity-[0.03] pointer-events-none">
+                        {Array.from({ length: 72 }).map((_, i) => (
+                            <div key={i} className="border-[0.5px] border-slate-900 dark:border-white"></div>
+                        ))}
+                    </div>
+                )}
+
                 {value ? (
-                    <div className="relative">
+                    <div className="relative h-[220px] flex items-center justify-center p-4">
                         <img
                             src={value}
                             alt={`Signature: ${label}`}
-                            className="w-full h-[120px] object-contain bg-white rounded-[inherit]"
+                            className="max-w-full max-h-full object-contain filter dark:invert"
                         />
-                        <button
-                            onClick={handleClear}
-                            className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors rounded-[inherit]"
-                        >
-                            <span className="text-xs text-gray-400 opacity-0 hover:opacity-100">
-                                Kliknij aby zmienić
-                            </span>
-                        </button>
+                        {!disabled && (
+                            <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/5 transition-colors flex items-center justify-center pointer-events-none">
+                                <span className="text-[10px] font-black uppercase text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    Kliknij "Wyczyść" aby zmienić
+                                </span>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <SignatureCanvas
                         ref={sigRef}
-                        penColor="#0f172a"
+                        penColor={typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? "#6366f1" : "#0f172a"}
                         canvasProps={{
-                            className: "w-full rounded-[inherit]",
-                            height: 120,
-                            style: { width: '100%', height: '120px' },
+                            className: "w-full cursor-crosshair",
+                            height: 220,
                         }}
                         onEnd={handleEnd}
                     />
@@ -72,7 +84,7 @@ export function SignaturePad({ label, value, onSave }: SignaturePadProps) {
 
             {!value && (
                 <p className="text-[10px] text-muted mt-1 text-center">
-                    Podpis palcem lub rysikiem
+                    Podpis palcem lub rysikiem (min. 200px wys.)
                 </p>
             )}
         </div>
