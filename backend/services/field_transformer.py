@@ -100,15 +100,39 @@ class FieldTransformer:
         return bitrix_fields
 
     def _flatten_payload(self, d: dict, parent_key: str = '', sep: str = '.') -> dict:
-        """Helper to flatten nested dictionaries."""
+        """Helper to flatten nested dictionaries recursively."""
         items = []
         for k, v in d.items():
             new_key = f"{parent_key}{sep}{k}" if parent_key else k
             if isinstance(v, dict) and k not in JSON_BLOB_KEYS:
+                # Recurse for nested dicts not explicitly marked as JSON blobs
                 items.extend(self._flatten_payload(v, new_key, sep=sep).items())
+            elif isinstance(v, list) and k not in JSON_BLOB_KEYS:
+                # For lists, we don't flatten further but we could if needed. 
+                # Usually photos or damage groups are lists of dicts.
+                items.append((new_key, v))
             else:
                 items.append((new_key, v))
         return dict(items)
+
+    def _unflatten_payload(self, d: dict, sep: str = '.') -> dict:
+        """
+        Reconstruct nested dictionary from flat keys with dot-notation.
+        { "frontLeft.brand": "X" } -> { "frontLeft": { "brand": "X" } }
+        """
+        result = {}
+        for k, v in d.items():
+            if sep in k:
+                parts = k.split(sep)
+                curr = result
+                for part in parts[:-1]:
+                    if part not in curr or not isinstance(curr[part], dict):
+                        curr[part] = {}
+                    curr = curr[part]
+                curr[parts[-1]] = v
+            else:
+                result[k] = v
+        return result
 
     def _convert_value_to_bitrix(
         self, field_id: str, value: Any, pwa_key: str
@@ -189,8 +213,8 @@ class FieldTransformer:
             return deal_fields
 
         reverse_map = self.discovery.get_reverse_mapping()
-        pwa_data: Dict[str, Any] = {}
-
+        # Convert Bitrix values back to PWA format
+        converted_data = {}
         for field_id, value in deal_fields.items():
             if value is None:
                 continue
@@ -203,14 +227,15 @@ class FieldTransformer:
                 if field_id in ("ID", "TITLE", "STAGE_ID", "CATEGORY_ID",
                                 "DATE_CREATE", "DATE_MODIFY", "BEGINDATE",
                                 "CLOSEDATE", "ASSIGNED_BY_ID"):
-                    pwa_data[field_id.lower()] = value
+                    converted_data[field_id.lower()] = value
                 continue
 
             # Convert value back from Bitrix format
             converted = self._convert_value_from_bitrix(field_id, value)
-            pwa_data[pwa_key] = converted
+            converted_data[pwa_key] = converted
 
-        return pwa_data
+        # Unflatten to reconstruct nested structures (Part 5)
+        return self._unflatten_payload(converted_data)
 
     def _convert_value_from_bitrix(self, field_id: str, value: Any) -> Any:
         """Convert a single Bitrix value back to PWA format."""
