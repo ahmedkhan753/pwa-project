@@ -49,6 +49,8 @@ export const mockApi = {
         clientFirstName: "Marek",
         clientLastName: "Nowak",
         clientPhone: "+48 600 123 456",
+        companyName: "Auto Handel Nowak Sp. z o.o.",
+        ownerName: "Marek Nowak",
         location: "Kraków, ul. Floriańska 12",
         status: "scheduled"
       },
@@ -71,6 +73,8 @@ export const mockApi = {
         clientFirstName: "Anna",
         clientLastName: "Wiśniewska",
         clientPhone: "+48 700 456 789",
+        companyName: "Arval Care Service",
+        ownerName: "Anna Wiśniewska",
         location: "Warszawa, ul. Marszałkowska 5",
         status: "scheduled"
       },
@@ -93,6 +97,8 @@ export const mockApi = {
         clientFirstName: "Tomasz",
         clientLastName: "Adamski",
         clientPhone: "+48 502 345 678",
+        companyName: "Mercedes Zasada",
+        ownerName: "Tomasz Adamski",
         location: "Wrocław, ul. Świdnicka 3",
         status: "scheduled"
       }
@@ -118,6 +124,8 @@ export const mockApi = {
         clientFirstName: "Piotr",
         clientLastName: "Kowalczyk",
         clientPhone: "+48 500 789 123",
+        companyName: "VW Financial",
+        ownerName: "Piotr Kowalczyk",
         location: "Poznań, ul. Długa 8",
         status: "unscheduled"
       },
@@ -140,6 +148,8 @@ export const mockApi = {
         clientFirstName: "Katarzyna",
         clientLastName: "Zielińska",
         clientPhone: "+48 601 234 567",
+        companyName: "Audi Select Plus",
+        ownerName: "Katarzyna Zielińska",
         location: "Gdańsk, ul. Długa 15",
         status: "unscheduled"
       }
@@ -155,7 +165,16 @@ export const mockApi = {
 
   async getDeal(dealId: string) {
     await delay(400)
-    const deal = MOCK_DEALS.find(d => d.id === dealId)
+    // Find in dynamic deals
+    const today = new Date().toISOString().split('T')[0]
+    const all = [
+        { id: "213", companyName: "Auto Handel Nowak Sp. z o.o.", ownerName: "Marek Nowak", address: "Kraków, ul. Floriańska 12", scheduledDate: `${today}T10:00:00`, vin: "WBA12345678901234", plates: "KR 12345", brand: "BMW", model: "X5", year: 2022, mileage: 45000, clientName: "Marek Nowak" },
+        { id: "214", companyName: "Arval Care Service", ownerName: "Anna Wiśniewska", address: "Warszawa, ul. Marszałkowska 5", scheduledDate: `${today}T13:00:00`, vin: "SB1K53AE90E123456", plates: "WA 98765", brand: "Toyota", model: "Corolla", year: 2020, mileage: 67000, clientName: "Anna Wiśniewska" },
+        { id: "217", companyName: "Mercedes Zasada", ownerName: "Tomasz Adamski", address: "Wrocław, ul. Świdnicka 3", scheduledDate: `${today}T15:30:00`, vin: "WDD2050341R123456", plates: "WR 22222", brand: "Mercedes-Benz", model: "C-Class", year: 2023, mileage: 12000, clientName: "Tomasz Adamski" },
+        { id: "215", companyName: "VW Financial", ownerName: "Piotr Kowalczyk", address: "Poznań, ul. Długa 8", scheduledDate: null, vin: "WVWZZZ3CZKE123456", plates: "PO 54321", brand: "Volkswagen", model: "Passat", year: 2019, mileage: 112000, clientName: "Piotr Kowalczyk" },
+        { id: "216", companyName: "Audi Select Plus", ownerName: "Katarzyna Zielińska", address: "Gdańsk, ul. Długa 15", scheduledDate: null, vin: "WAUZZZ8V5MA123456", plates: "GD 11111", brand: "Audi", model: "A4", year: 2021, mileage: 38000, clientName: "Katarzyna Zielińska" }
+    ]
+    const deal = all.find(d => d.id === dealId)
     if (!deal) throw new Error("Deal not found")
     return deal
   },

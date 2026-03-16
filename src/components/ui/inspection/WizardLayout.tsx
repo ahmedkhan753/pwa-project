@@ -78,9 +78,9 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             {/* ── Header ─────────────────────────────────────── */}
             <header className="sticky top-0 z-30 bg-surface dark:bg-background/80 backdrop-blur-lg text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-black p-1 rounded-lg">
-                            <Logo variant="icon" size="sm" />
+                    <div className="flex items-center gap-3 overflow-visible">
+                        <div className="bg-black p-1 rounded-lg w-10 h-10 overflow-visible flex items-center justify-center flex-shrink-0">
+                            <Logo variant="icon" size="sm" className="!overflow-visible" />
                         </div>
                         <div>
                             <h2 className="text-sm font-bold tracking-tight text-foreground leading-tight">

@@ -4,7 +4,7 @@ import React from 'react';
 import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { InspectionJob, useInspectionStore } from '@/store/useInspectionStore';
-import { cn } from '@/lib/utils';
+import { cn, formatLocaleDate } from '@/lib/utils';
 
 interface MissionCardProps {
     job: InspectionJob;
@@ -55,7 +55,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
     const handleNavigate = (e: React.MouseEvent) => {
         e.stopPropagation();
-        const query = encodeURIComponent(`${job.city || ''} ${job.plates}`);
+        const address = job.location || `${job.city || ''} ${job.plates}`;
+        const query = encodeURIComponent(address);
         window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
     };
 
@@ -162,13 +163,13 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     </div>
                 </div>
                 <div className={cn(
-                    "flex items-center gap-1.5 font-mono text-xs px-3 py-1.5 rounded-xl border transition-colors",
+                    "flex items-center gap-1.5 font-mono text-[10px] px-3 py-1.5 rounded-xl border transition-colors",
                     job.hasConflict 
                         ? "bg-danger-light text-danger border-danger/30" 
                         : "text-muted bg-surface-raised border-border/50"
                 )}>
-                    <Clock className="w-3.5 h-3.5" />
-                    {job.scheduledDate ? new Date(job.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '??:??'}
+                    <Clock className="w-3 h-3" />
+                    {job.scheduledDate ? formatLocaleDate(job.scheduledDate) : '??:??'}
                 </div>
             </div>
 

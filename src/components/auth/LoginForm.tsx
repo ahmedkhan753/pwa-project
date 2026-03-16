@@ -54,8 +54,10 @@ export const LoginForm: React.FC = () => {
 
             <div className="w-full max-w-md relative">
                 {/* Logo Section */}
-                <div className="flex flex-col items-center space-y-4 mb-8">
-                    <Logo variant="full" size="lg" />
+                <div className="flex flex-col items-center space-y-4 mb-8 overflow-visible">
+                    <div className="overflow-visible flex items-center justify-center">
+                        <Logo variant="full" size="lg" className="!overflow-visible" />
+                    </div>
                     <p className="text-muted text-[10px] font-black uppercase tracking-[0.3em] text-center opacity-80">
                         Vehicle Inspection System
                     </p>

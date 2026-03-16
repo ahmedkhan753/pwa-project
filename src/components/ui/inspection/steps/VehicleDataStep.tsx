@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { VinScanner } from "../VinScanner";
 import { SmartDropdown } from "../SmartDropdown";
 import { apiClient } from "@/api/client";
-import { cn } from "@/lib/utils";
+import { cn, formatLocaleDate } from "@/lib/utils";
 
 const VEHICLE_BRANDS = [
   "Abarth", "Acura", "Alfa Romeo", "Alpina", "Aston Martin", "Audi", "Bentley", "BMW", 
@@ -71,7 +71,7 @@ export function VehicleDataStep() {
                     <ReadOnlyField icon={<Building2 size={14} />} label="Firma" value={bi.companyName} placeholder="Nazwa firmy" />
                     <ReadOnlyField icon={<User size={14} />} label="Właściciel / Użytkownik" value={bi.userOwner} placeholder="Imię i nazwisko" />
                     <ReadOnlyField icon={<MapPin size={14} />} label="Miejsce oględzin" value={bi.inspectionPlace} placeholder="Adres" />
-                    <ReadOnlyField icon={<Calendar size={14} />} label="Data oględzin" value={bi.inspectionDate} placeholder="DD.MM.YYYY" />
+                    <ReadOnlyField icon={<Calendar size={14} />} label="Data oględzin" value={formatLocaleDate(bi.inspectionDate)} placeholder="DD.MM.YYYY" />
                     <ReadOnlyField icon={<UserCheck size={14} />} label="Inspektor" value={bi.inspectorName} placeholder="Imię i nazwisko" />
                 </div>
             </div>

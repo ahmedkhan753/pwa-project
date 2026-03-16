@@ -23,6 +23,7 @@ export interface InspectionJob {
   make?: string;
   model?: string;
   city?: string;
+  location?: string;
   jobType?: 'WYCENA' | 'CFM' | 'UNKNOWN';
   scheduledDate?: string; // UF_CRM_1772108256983
   hasConflict?: boolean;

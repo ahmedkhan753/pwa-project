@@ -31,7 +31,7 @@ export const Logo: React.FC<LogoProps> = ({
     return (
         <div 
             className={cn(
-                "relative flex items-center justify-center mx-auto",
+                "relative flex items-center justify-center mx-auto overflow-visible", // Added overflow-visible
                 onLightBackground && "bg-black rounded-lg p-1.5",
                 className
             )}
@@ -41,7 +41,7 @@ export const Logo: React.FC<LogoProps> = ({
             }}
         >
             <div 
-                className="relative w-full h-full"
+                className="relative w-full h-full overflow-visible"
                 style={{ 
                     aspectRatio: variant === 'icon' ? '1/1' : '2.5/1', // Approximate aspect ratio from the logo image
                 }}
@@ -49,9 +49,10 @@ export const Logo: React.FC<LogoProps> = ({
                 <Image
                     src="/images/logo.png"
                     alt="RZeczoznawcy Logo"
-                    fill
+                    width={variant === 'icon' ? 40 : 140}
+                    height={variant === 'icon' ? 40 : 56}
                     className={cn(
-                        "object-contain",
+                        "object-contain w-full h-full",
                         variant === 'icon' ? "object-left" : "object-center"
                     )}
                     // Crop logic for 'icon' variant:
