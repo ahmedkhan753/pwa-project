@@ -319,6 +319,7 @@ class BitrixGateway:
 
     async def schedule_inspection(self, deal_id: int, scheduled_date: str) -> dict:
         """Schedule an inspection with conflict checking and stage transition. (Problem 3)"""
+        # Improved Conflict Detection: Check for overlapping windows (assuming 60 min duration)
         day_only = scheduled_date.split('T')[0]
         filters = {
             ">=BEGINDATE": f"{day_only} 00:00:00",
@@ -327,21 +328,45 @@ class BitrixGateway:
         day_deals = await self.get_deal_list(filters)
         has_conflict = False
         
-        # Hardcoded date field from Problem 3 instructions
+        # Hardcoded date field
         DATE_FIELD = "UF_CRM_1772108256983"
         
-        for d in day_deals:
-            if int(d.get("ID")) == deal_id: continue
-            if d.get(DATE_FIELD) == scheduled_date:
-                has_conflict = True
-                break
+        try:
+            from datetime import datetime, timedelta
+            new_dt = datetime.fromisoformat(scheduled_date.replace('Z', ''))
+            new_start = new_dt
+            new_end = new_dt + timedelta(minutes=59) # Window of 1 hour
+            
+            for d in day_deals:
+                if int(d.get("ID")) == deal_id: continue
+                
+                other_val = d.get(DATE_FIELD)
+                if not other_val: continue
+                
+                try:
+                    # Bitrix might return YYYY-MM-DDTHH:MM:SS+02:00 or similar
+                    clean_val = other_val.replace('Z', '')
+                    if '+' in clean_val:
+                        clean_val = clean_val.split('+')[0]
+                    
+                    other_dt = datetime.fromisoformat(clean_val)
+                    other_start = other_dt
+                    other_end = other_dt + timedelta(minutes=59)
+                    
+                    # Intersecting windows check: (StartA < EndB) and (EndA > StartB)
+                    if (new_start < other_end) and (new_end > other_start):
+                        has_conflict = True
+                        logger.warning(f"Conflict detected between deal {deal_id} and {d.get('ID')} at {other_val}")
+                        break
+                except (ValueError, TypeError):
+                    continue
+        except Exception as e:
+            logger.error(f"Conflict check error: {e}")
         
         stage_id = await self.get_status_id_by_label("ustalone")
         if not stage_id:
-            logger.warning("Could not find stage containing 'ustalone', using C1:USTALONE fallback")
             stage_id = "C1:USTALONE"
             
-        # Build payload directly (Problem 3.2)
         payload = {
             "STAGE_ID": stage_id,
             DATE_FIELD: scheduled_date

@@ -22,6 +22,9 @@ WORKDIR /app
 
 ENV NODE_ENV production
 
+# Install dependencies for sharp and other image processing if needed
+RUN apk add --no-cache libc6-compat
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
@@ -29,6 +32,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+
+# Fix permissions for image cache
+RUN mkdir -p /app/.next/cache/images && chmod -R 777 /app/.next/cache
+
+# Install sharp explicitly in the runner if not already in node_modules
+# Usually better to have it in package.json, but user specifically asked for RUN npm install sharp
+RUN npm install sharp
 
 USER nextjs
 

@@ -7,7 +7,7 @@ Enum fields use Python Enum classes (not raw strings).
 
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ─── Enumerations ─────────────────────────────────────────────
@@ -115,6 +115,7 @@ class InteriorCondition(str, Enum):
 
 class VehicleIdentity(BaseModel):
     """Step 1 — Vehicle identification data."""
+    model_config = ConfigDict(extra="allow")
     vin: Optional[str] = Field(None, description="Vehicle Identification Number")
     registration_number: Optional[str] = Field(None, description="Registration plates")
     vehicle_brand: Optional[str] = Field(None, description="Make / Marka")
@@ -136,6 +137,7 @@ class VehicleIdentity(BaseModel):
 
 class ClientInfo(BaseModel):
     """Step 2 — Client / owner information."""
+    model_config = ConfigDict(extra="allow")
     company_name: Optional[str] = Field(None, description="Company name")
     client_name: Optional[str] = Field(None, description="Client / owner name")
     client_phone: Optional[str] = Field(None, description="Client phone")
@@ -146,6 +148,7 @@ class ClientInfo(BaseModel):
 
 class InspectionSchedule(BaseModel):
     """Step 3 — Inspection schedule and location."""
+    model_config = ConfigDict(extra="allow")
     inspection_date: Optional[str] = Field(None, description="Inspection date (YYYY-MM-DD)")
     inspection_place: Optional[str] = Field(None, description="Inspection location")
     inspector_name: Optional[str] = Field(None, description="Inspector / appraiser name")
@@ -156,6 +159,7 @@ class InspectionSchedule(BaseModel):
 
 class DocumentsCheck(BaseModel):
     """Step 4 — Vehicle documents verification."""
+    model_config = ConfigDict(extra="allow")
     documents_completeness: Optional[Dict[str, Any]] = Field(None, description="Document checklist")
     registration_cert: Optional[bool] = Field(None, description="Registration certificate present")
     insurance_policy: Optional[bool] = Field(None, description="Insurance policy present")
@@ -168,6 +172,7 @@ class DocumentsCheck(BaseModel):
 
 class PaintMeasurements(BaseModel):
     """Step 5 — Paint thickness measurements for 17 body panels."""
+    model_config = ConfigDict(extra="allow")
     paint_hood: Optional[float] = Field(None, description="Hood / bonnet (μm)")
     paint_roof: Optional[float] = Field(None, description="Roof (μm)")
     paint_trunk: Optional[float] = Field(None, description="Trunk lid (μm)")
@@ -192,6 +197,7 @@ class PaintMeasurements(BaseModel):
 
 class MechanicalCheck(BaseModel):
     """Step 6 — Mechanical condition: fluids, warning lights, etc."""
+    model_config = ConfigDict(extra="allow")
     engine_oil_level: Optional[Any] = None
     coolant_level: Optional[Any] = None
     brake_fluid_level: Optional[Any] = None
@@ -205,6 +211,7 @@ class MechanicalCheck(BaseModel):
 
 class SingleTire(BaseModel):
     """Data for a single tire/wheel."""
+    model_config = ConfigDict(extra="allow")
     brand: Optional[str] = None
     size: Optional[str] = None
     width: Optional[str] = None
@@ -219,6 +226,7 @@ class SingleTire(BaseModel):
 
 class TireData(BaseModel):
     """Step 7 — Tire data for all 4 wheels."""
+    model_config = ConfigDict(extra="allow")
     front_left: Optional[Any] = None
     front_right: Optional[Any] = None
     rear_left: Optional[Any] = None
@@ -254,6 +262,7 @@ class TireData(BaseModel):
 
 class PhotoRef(BaseModel):
     """Reference to an uploaded photo."""
+    model_config = ConfigDict(extra="allow")
     field_key: Optional[str] = None
     file_id: Optional[str] = None
     url: Optional[str] = None
@@ -263,6 +272,7 @@ class PhotoRef(BaseModel):
 
 class ExteriorPhotos(BaseModel):
     """Step 8 — Exterior photo references."""
+    model_config = ConfigDict(extra="allow")
     photo_front: Optional[Any] = None
     photo_rear: Optional[Any] = None
     photo_left: Optional[Any] = None
@@ -279,6 +289,7 @@ class ExteriorPhotos(BaseModel):
 
 class DamageEntry(BaseModel):
     """Single damage record."""
+    model_config = ConfigDict(extra="allow")
     part: Optional[str] = Field(None, description="Damaged part name")
     damage_type: Optional[DamageType] = None
     size: Optional[DamageSize] = None
@@ -290,6 +301,7 @@ class DamageEntry(BaseModel):
 
 class InteriorAssessment(BaseModel):
     """Step 9 — Interior condition and damage (groups 1–5)."""
+    model_config = ConfigDict(extra="allow")
     interior_condition: Optional[Any] = None
     seat_condition: Optional[Any] = None
     dashboard_condition: Optional[Any] = None
@@ -306,6 +318,7 @@ class InteriorAssessment(BaseModel):
 
 class BodyDamage(BaseModel):
     """Step 10 — Body / exterior damage (groups 1–7)."""
+    model_config = ConfigDict(extra="allow")
     damage_group_1: Optional[Any] = None
     damage_group_2: Optional[Any] = None
     damage_group_3: Optional[Any] = None
@@ -321,6 +334,7 @@ class BodyDamage(BaseModel):
 
 class SummaryAndSignature(BaseModel):
     """Step 11 — Final summary, valuation, and signatures."""
+    model_config = ConfigDict(extra="allow")
     estimated_value: Optional[str] = Field(None, description="Estimated vehicle value")
     general_comments: Optional[str] = Field(None, description="General notes / comments")
     vin_confirmed: Optional[bool] = Field(None, description="VIN physically confirmed")
@@ -347,6 +361,7 @@ class InspectionPayload(BaseModel):
     Master model wrapping all 12 inspection steps.
     All fields are Optional to support partial / step saves.
     """
+    model_config = ConfigDict(extra="allow")
     # Step 1
     vehicle: Optional[VehicleIdentity] = None
     # Step 2
@@ -415,6 +430,7 @@ class StepPartialData(BaseModel):
     Partial data for a single wizard step.
     Used by PATCH /inspection/{deal_id}/step/{step_number}.
     """
+    model_config = ConfigDict(extra="allow")
     step_number: int = Field(..., ge=1, le=12, description="Step number (1-12)")
     data: Dict[str, Any] = Field(..., description="Step fields as key-value pairs")
 

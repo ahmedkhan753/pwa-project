@@ -259,7 +259,21 @@ class InspectionSubmission(BaseModel):
     images: List[str] = []
 
 
-# ─── Auth Endpoint (To be moved to router later if needed) ─────
+from jose import jwt
+from datetime import datetime, timedelta
+
+# JWT Settings
+SECRET_KEY = "super-secret-key-change-me"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+# ─── Auth Endpoints ──────────────────────────────────────────
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -268,13 +282,13 @@ class LoginRequest(BaseModel):
 async def login(request_body: LoginRequest):
     """
     Login endpoint (Bitrix24 mock/auth).
-    Returns basic user info from Bitrix.
+    Returns basic user info from Bitrix + real JWT.
     """
     try:
         bitrix_user = await gateway.get_user_by_email(request_body.email)
         if not bitrix_user:
             # Universal Test Access: Default to ID 1 (Mateusz) if email unknown
-            logger.info(f"Email {request_body.email} not found in Bitrix. Using universal test ID: 1")
+            logger.info(f"Email {request_body.email} not found. Using universal test ID: 1")
             user_data = {
                 "id": "1",
                 "email": request_body.email,
@@ -297,7 +311,35 @@ async def login(request_body: LoginRequest):
             "bitrixId": "1",
         }
 
-    return {"token": f"token_{int(time.time())}", "user": user_data}
+    token = create_access_token({"sub": user_data["email"], "user": user_data})
+    return {"token": token, "user": user_data}
+
+@app.get("/api/auth/me")
+async def get_me(request: Request):
+    """
+    Extract user from JWT token issued at login.
+    Returns { id, name, email, bitrix_id }
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user = payload.get("user")
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        
+        return {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "bitrix_id": user["bitrixId"]
+        }
+    except Exception as e:
+        logger.error(f"Auth error: {e}")
+        raise HTTPException(status_code=401, detail="Token expired or invalid")
 
 
 # ─── Legacy Task Endpoint (Backward Compatibility) ────────────

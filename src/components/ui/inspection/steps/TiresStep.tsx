@@ -2,8 +2,16 @@
 
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { TireSpecLock } from "../TireSpecLock";
+import { SmartDropdown } from "../SmartDropdown";
 import { Copy, CircleDot, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const TIRE_BRANDS = [
+  "Bridgestone", "Continental", "Dunlop", "Falken",
+  "Firestone", "Goodyear", "Hankook", "Kleber", 
+  "Kumho", "Michelin", "Nexen", "Nokian", "Pirelli",
+  "Uniroyal", "Vredestein", "Yokohama", "Inne"
+];
 
 const WHEELS: { key: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight'; label: string; position: string }[] = [
     { key: "frontLeft", label: "Przednie Lewe", position: "PL" },
@@ -90,16 +98,26 @@ export function TiresStep() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-1">
+                                <div className="col-span-2">
+                                    <SmartDropdown 
+                                        label="Marka Opony"
+                                        value={w.brand}
+                                        options={TIRE_BRANDS}
+                                        onChange={(val) => handleTireChange(wheel.key, 'brand', val)}
+                                        placeholder="Wybierz lub wpisz markę"
+                                    />
+                                </div>
+
+                                <div className="col-span-2">
                                     <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
-                                        Marka Opony
+                                        Model
                                     </label>
                                     <input
                                         type="text"
-                                        value={w.brand}
-                                        onChange={(e) => handleTireChange(wheel.key, 'brand', e.target.value)}
-                                        placeholder="np. Michelin"
-                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all"
+                                        value={w.model || ''}
+                                        onChange={(e) => handleTireChange(wheel.key, 'model', e.target.value)}
+                                        placeholder="np. Pilot Sport 4"
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
                                     />
                                 </div>
                                 
@@ -114,7 +132,7 @@ export function TiresStep() {
                                         value={w.dot}
                                         onChange={(e) => handleTireChange(wheel.key, 'dot', e.target.value)}
                                         placeholder="2520"
-                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all"
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
                                     />
                                 </div>
 
@@ -123,6 +141,34 @@ export function TiresStep() {
                                     value={w.size}
                                     onChange={(val) => handleTireChange(wheel.key, 'size', val)}
                                 />
+
+                                <div className="col-span-1">
+                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
+                                        Nośność (Load Index)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={w.loadIndex || ''}
+                                        onChange={(e) => handleTireChange(wheel.key, 'loadIndex', e.target.value.replace(/\D/g, ''))}
+                                        placeholder="np. 98"
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                    />
+                                </div>
+
+                                <div className="col-span-1">
+                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
+                                        Indeks Prędkości
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={w.speedIndex || ''}
+                                        maxLength={1}
+                                        onChange={(e) => handleTireChange(wheel.key, 'speedIndex', e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+                                        placeholder="np. T"
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                    />
+                                </div>
                             </div>
 
                             {/* Tire Type */}

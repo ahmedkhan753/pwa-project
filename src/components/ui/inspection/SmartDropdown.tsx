@@ -12,7 +12,7 @@ interface Option {
 interface SmartDropdownProps {
     label: string;
     value: string;
-    options: Option[];
+    options: (string | Option)[];
     onChange: (value: string) => void;
     placeholder?: string;
     allowCustom?: boolean;
@@ -30,7 +30,11 @@ export function SmartDropdown({
     const [search, setSearch] = useState("");
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const filteredOptions = options.filter(opt =>
+    const normalizedOptions = options.map(opt => 
+        typeof opt === 'string' ? { label: opt, value: opt } : opt
+    );
+
+    const filteredOptions = normalizedOptions.filter(opt =>
         opt.label.toLowerCase().includes(search.toLowerCase())
     );
 

@@ -11,6 +11,9 @@ interface MissionCardProps {
 
 export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const { drafts, selectJob, scheduleJob } = useInspectionStore();
+    const fetchFullDeal = useInspectionStore(state => state.fetchFullDeal);
+    const setStep = useInspectionStore(state => state.setStep);
+
     const [isScheduling, setIsScheduling] = React.useState(!job.scheduledDate);
     const [selectedDate, setSelectedDate] = React.useState(job.scheduledDate?.split('T')[0] || '');
     const [selectedTime, setSelectedTime] = React.useState(job.scheduledDate?.split('T')[1]?.substring(0, 5) || '');
@@ -44,12 +47,29 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
     };
 
-    const handleStart = () => {
+    const handleStart = async () => {
         if (!job.scheduledDate) {
             setIsScheduling(true);
             return;
         }
-        selectJob(job.id);
+
+        if (isInProgress && drafts[job.id]) {
+            // If already in drafts, just select it and go to Step 1 (or wherever they were)
+            selectJob(job.id);
+            setStep(1); // Force Step 1 as requested for pre-fill verification
+            return;
+        }
+
+        // Fresh Start: Fetch full data from Bitrix
+        setIsSubmitting(true);
+        try {
+            await fetchFullDeal(job.id);
+            // navigate is handled by the component that renders MissionCard or we can rely on store state change
+        } catch (err) {
+            setError("Błąd pobierania danych deala");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const onConfirmSchedule = async (e: React.MouseEvent) => {
@@ -66,10 +86,12 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         
         if (res.success) {
             setIsScheduling(false);
+            // After scheduling, automatically start/fetch
+            handleStart();
         } else {
             setError(res.message);
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     return (
@@ -217,7 +239,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     >
                         <Play className="w-5 h-5 fill-current text-white" />
                         <span className="text-[9px] font-black uppercase text-white tracking-widest">
-                            {isInProgress ? 'Wznów' : 'Start'}
+                            {isSubmitting ? 'Czekaj...' : (isInProgress ? 'Wznów' : 'Start')}
                         </span>
                     </button>
                 </div>

@@ -8,6 +8,19 @@ import { SmartDropdown } from "../SmartDropdown";
 import { apiClient } from "@/api/client";
 import { cn } from "@/lib/utils";
 
+const VEHICLE_BRANDS = [
+  "Abarth", "Acura", "Alfa Romeo", "Alpina", "Aston Martin", "Audi", "Bentley", "BMW", 
+  "Bugatti", "Buick", "Cadillac", "Chevrolet", "Chrysler", "Citroen", "Cupra", "Dacia", 
+  "Daewoo", "Daihatsu", "Dodge", "DS Bikes", "DS Automobiles", "Ferrari", "Fiat", "Ford", 
+  "Genesis", "GMC", "Honda", "Hummer", "Hyundai", "Infiniti", "Isuzu", "Iveco", "Jaguar", 
+  "Jeep", "Kia", "Koenigsegg", "Lamborghini", "Lancia", "Land Rover", "Lexus", "Lincoln", 
+  "Lotus", "Maserati", "Maybach", "Mazda", "McLaren", "Mercedes-Benz", "Mercury", "MG", 
+  "Mini", "Mitsubishi", "Nissan", "Oldsmobile", "Opel", "Pagani", "Peugeot", "Plymouth", 
+  "Pontiac", "Porsche", "Ram", "Renault", "Rolls-Royce", "Rover", "Saab", "Saturn", 
+  "Scania", "Scion", "Seat", "Skoda", "Smart", "SsangYong", "Subaru", "Suzuki", "Tata", 
+  "Tesla", "Toyota", "Volkswagen", "Volvo"
+];
+
 export function VehicleDataStep() {
     const { data, updateField } = useInspectionStore();
     const v = data.vehicleData;
@@ -32,10 +45,6 @@ export function VehicleDataStep() {
 
     const handleChange = (field: string, value: string) => {
         updateField('vehicleData', field, value);
-    };
-
-    const handleBasicInfoChange = (field: string, value: string) => {
-        updateField('vehicleData', 'basicInfo', { ...bi, [field]: value });
     };
 
     if (isLoading) {
@@ -118,7 +127,7 @@ export function VehicleDataStep() {
                     <SmartDropdown 
                         label="Marka" 
                         value={v.make} 
-                        options={metadata.vehicle_brand || []} 
+                        options={metadata.vehicle_brand?.length > 0 ? metadata.vehicle_brand : VEHICLE_BRANDS} 
                         onChange={(v) => handleChange('make', v)} 
                         placeholder="Szukaj marki..."
                     />
@@ -131,7 +140,14 @@ export function VehicleDataStep() {
                         placeholder="Szukaj modelu..."
                     />
 
-                    <FormField label="Rok produkcji" value={v.year} onChange={(val) => handleChange('year', val)} placeholder="2020" type="number" />
+                    <FormField 
+                        label="Rok produkcji" 
+                        value={v.year} 
+                        onChange={(val) => handleChange('year', val)} 
+                        placeholder="2020" 
+                        type="number" 
+                        min={1970}
+                    />
                     <FormField label="Kolor (tekst)" value={v.color} onChange={(val) => handleChange('color', val)} placeholder="np. Czarny Metallic" />
                     <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" />
                     <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" />
@@ -182,8 +198,8 @@ export function VehicleDataStep() {
 }
 
 // ── Reusable Form Field ──
-function FormField({ label, value, onChange, placeholder, type = 'text' }: {
-    label: string; value: string; onChange: (v: string) => void; placeholder: string; type?: string;
+function FormField({ label, value, onChange, placeholder, type = 'text', min }: {
+    label: string; value: string; onChange: (v: string) => void; placeholder: string; type?: string; min?: number;
 }) {
     return (
         <div>
@@ -193,6 +209,7 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: {
             <input
                 type={type}
                 value={value}
+                min={min}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
                 aria-label={label}

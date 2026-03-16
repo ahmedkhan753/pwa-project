@@ -5,6 +5,7 @@ Submit full inspections and save individual wizard steps.
 """
 
 import logging
+import json
 from typing import Dict, Any
 from fastapi import APIRouter, Request, HTTPException
 
@@ -131,7 +132,10 @@ async def save_step(
 
         # Problem 2: Log actual request body for steps 6, 7, 8
         if step_number in (6, 7, 8):
-            logger.info(f"Step {step_number} PWA Payload: {step_fields}")
+            logger.info("=" * 40)
+            logger.info(f"🚨 DEBUG PLAYLOAD - STEP {step_number}")
+            logger.info(json.dumps(step_fields, indent=2, ensure_ascii=False))
+            logger.info("=" * 40)
 
         logger.info(
             f"Saving step {step_number} for deal {deal_id} "

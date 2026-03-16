@@ -12,11 +12,13 @@ const CHECKLIST_ITEMS: { key: string; label: string }[] = [
     { key: "serviceBookPresented", label: "Przedstawiono książkę serwisową" },
     { key: "antiTheftSystem", label: "Zabezpieczenie antykradzieżowe" },
     { key: "immobilizerWorking", label: "Immobilizer sprawny" },
-    { key: "spareTire", label: "Koło zapasowe" },
+    { key: "spareWheel", label: "Koło zapasowe" },
     { key: "jackAndTools", label: "Podnośnik i narzędzia" },
-    { key: "warningTriangle", label: "Trójkąt ostrzegawczy" },
+    { key: "triangular", label: "Trójkąt ostrzegawczy" },
     { key: "firstAidKit", label: "Apteczka" },
     { key: "fireExtinguisher", label: "Gaśnica" },
+    { key: "compressor", label: "Kompresor" },
+    { key: "repairKit", label: "Zestaw naprawczy" },
     { key: "ownerManual", label: "Instrukcja obsługi" },
 ];
 

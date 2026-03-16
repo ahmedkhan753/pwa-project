@@ -57,22 +57,19 @@ class FieldTransformer:
     def transform_to_bitrix(self, payload: dict) -> Dict[str, Any]:
         """
         Transform a PWA inspection payload into Bitrix24 deal fields.
-
-        - Resolves each PWA key to its real UF_CRM_* ID dynamically
-        - Converts enum values to their numeric IDs
-        - Converts booleans to "1"/"0"
-        - Converts dates to Bitrix format (YYYY-MM-DD)
-        - Converts datetimes to ISO 8601
-        - Skips None values and file fields
         """
         if not self.discovery:
             logger.error("Discovery engine not available — cannot transform")
             return {}
 
+        # 1. Recursive Flattening
+        # { tires: { frontLeft: { brand: "X" } } } -> { "tires.frontLeft.brand": "X" }
+        flat_payload = self._flatten_payload(payload)
+        
         bitrix_fields: Dict[str, Any] = {}
         warnings = []
 
-        for pwa_key, value in payload.items():
+        for pwa_key, value in flat_payload.items():
             # Skip None values
             if value is None:
                 continue
@@ -84,6 +81,8 @@ class FieldTransformer:
             # Resolve to Bitrix field ID
             field_id = self.discovery.get_field_id(pwa_key)
             if not field_id:
+                # Also try camelCase vs snake_case if one fails?
+                # For now just log warnings
                 warnings.append(pwa_key)
                 continue
 
@@ -99,6 +98,17 @@ class FieldTransformer:
             )
 
         return bitrix_fields
+
+    def _flatten_payload(self, d: dict, parent_key: str = '', sep: str = '.') -> dict:
+        """Helper to flatten nested dictionaries."""
+        items = []
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict) and k not in JSON_BLOB_KEYS:
+                items.extend(self._flatten_payload(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
 
     def _convert_value_to_bitrix(
         self, field_id: str, value: Any, pwa_key: str

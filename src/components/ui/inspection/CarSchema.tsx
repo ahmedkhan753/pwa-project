@@ -11,39 +11,59 @@ interface CarSchemaProps {
 }
 
 const ZONES: { id: string; label: string; x: number; y: number; w: number; h: number }[] = [
+    // 1. Mask
     { id: "hood", label: "Pokrywa przednia", x: 30, y: 6, w: 40, h: 18 },
+    // 2. Roof
+    { id: "roof", label: "Dach", x: 32, y: 25, w: 36, h: 36 },
+    // 3. Trunk
+    { id: "trunk", label: "Pokrywa tylna", x: 30, y: 64, w: 40, h: 15 },
+    // 4. LF Fender
     { id: "leftFrontFender", label: "Błotnik P.L", x: 10, y: 5, w: 18, h: 18 },
+    // 5. LR Fender
+    { id: "leftRearFender", label: "Błotnik T.L", x: 10, y: 70, w: 18, h: 18 },
+    // 6. RF Fender
+    { id: "rightFrontFender", label: "Błotnik P.P", x: 72, y: 5, w: 18, h: 18 },
+    // 7. RR Fender
+    { id: "rightRearFender", label: "Błotnik T.P", x: 72, y: 70, w: 18, h: 18 },
+    // 8. Doors
     { id: "leftFrontDoor", label: "Drzwi P.L", x: 10, y: 24, w: 18, h: 22 },
+    { id: "leftRearDoor", label: "Drzwi T.L", x: 10, y: 47, w: 18, h: 22 },
+    { id: "rightFrontDoor", label: "Drzwi P.P", x: 72, y: 24, w: 18, h: 22 },
+    { id: "rightRearDoor", label: "Drzwi T.P", x: 72, y: 47, w: 18, h: 22 },
+    // 9. Sills
+    { id: "leftSill", label: "Próg L", x: 5, y: 25, w: 4, h: 45 },
+    { id: "rightSill", label: "Próg P", x: 91, y: 25, w: 4, h: 45 },
+    // 10. Pillars
     { id: "leftAColumn", label: "Słupek P.L", x: 28, y: 24, w: 4, h: 6 },
     { id: "leftBColumn", label: "Słupek Śr.L", x: 28, y: 44, w: 4, h: 6 },
-    { id: "leftRearDoor", label: "Drzwi T.L", x: 10, y: 47, w: 18, h: 22 },
-    { id: "leftRearFender", label: "Błotnik T.L", x: 10, y: 70, w: 18, h: 18 },
-    { id: "leftSill", label: "Próg L", x: 5, y: 25, w: 4, h: 45 },
-    { id: "trunk", label: "Pokrywa tylna", x: 30, y: 64, w: 40, h: 15 },
-    { id: "rightSill", label: "Próg P", x: 91, y: 25, w: 4, h: 45 },
-    { id: "rightRearFender", label: "Błotnik T.P", x: 72, y: 70, w: 18, h: 18 },
-    { id: "rightRearDoor", label: "Drzwi T.P", x: 72, y: 47, w: 18, h: 22 },
-    { id: "rightBColumn", label: "Słupek Śr.P", x: 68, y: 44, w: 4, h: 6 },
+    { id: "leftCColumn", label: "Słupek T.L", x: 28, y: 56, w: 4, h: 6 },
     { id: "rightAColumn", label: "Słupek P.P", x: 68, y: 24, w: 4, h: 6 },
-    { id: "rightFrontDoor", label: "Drzwi P.P", x: 72, y: 24, w: 18, h: 22 },
-    { id: "rightFrontFender", label: "Błotnik P.P", x: 72, y: 5, w: 18, h: 18 },
-    { id: "roof", label: "Dach", x: 32, y: 25, w: 36, h: 36 },
+    { id: "rightBColumn", label: "Słupek Śr.P", x: 68, y: 44, w: 4, h: 6 },
+    { id: "rightCColumn", label: "Słupek T.P", x: 68, y: 56, w: 4, h: 6 },
 ];
 
 const PAINT_RANGES = [
     "0-150µm",
     "150-200µm",
-    "150-300µm",
+    "200-300µm",
+    "300-500µm",
     "500-1000µm",
-    "500-2000µm"
+    "1000-2000µm"
 ];
 
 function getZoneColor(zone: PaintZone): string {
     if (!zone.value) return "fill-surface-raised stroke-border";
     const val = zone.value;
-    if (zone.status === 'putty' || val.includes('500-')) return "fill-danger stroke-danger-hover";
-    if (zone.status === 'repainted' || val.includes('150-200') || val.includes('150-300')) return "fill-warning stroke-warning-hover";
+    
+    // Auto-status logic
+    if (val.includes('500-') || val.includes('1000-')) return "fill-danger stroke-danger-hover";
+    if (val.includes('150-') || val.includes('200-') || val.includes('300-')) return "fill-warning stroke-warning-hover";
     if (val === '0-150µm') return "fill-success stroke-success-hover";
+    
+    // Explicit status check if manual override was used
+    if (zone.status === 'putty') return "fill-danger stroke-danger-hover";
+    if (zone.status === 'repainted') return "fill-warning stroke-warning-hover";
+    
     return "fill-success stroke-success-hover";
 }
 
@@ -206,53 +226,43 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                         </div>
 
                         <div className="p-8 pt-4 space-y-8">
-                            {/* Value Selector */}
-                            <div className="grid grid-cols-1 gap-3">
+                            {/* Value Selector - PRIMARY INPUT */}
+                            <div className="grid grid-cols-2 gap-3">
                                 {PAINT_RANGES.map((range) => (
                                     <button
                                         key={range}
                                         onClick={() => {
                                             setModalValue(range);
                                             // Auto-detect status based on range for efficiency
-                                            if (range.includes('500-')) setModalStatus('putty');
-                                            else if (range.includes('150-')) setModalStatus('repainted');
+                                            if (range.includes('500-') || range.includes('1000-')) setModalStatus('putty');
+                                            else if (range.includes('150-') || range.includes('200-') || range.includes('300-')) setModalStatus('repainted');
                                             else setModalStatus('ok');
                                         }}
                                         className={cn(
-                                            "w-full py-5 rounded-2xl text-lg font-black transition-all border-2 flex items-center justify-between px-6",
+                                            "w-full py-6 rounded-2xl text-base font-black transition-all border-2 flex flex-col items-center justify-center gap-1",
                                             modalValue === range
                                                 ? "bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-[1.02]"
                                                 : "bg-surface-raised border-transparent text-muted hover:border-border"
                                         )}
                                     >
-                                        <span>{range}</span>
-                                        {modalValue === range && <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">✓</div>}
+                                        <span className="text-lg leading-none">{range.replace('µm', '')}</span>
+                                        <span className="text-[9px] uppercase tracking-widest opacity-60">µm</span>
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Status Override (Optional manual change if needed) */}
+                            {/* Additional Info / Note (Optional) */}
                             <div className="space-y-3">
-                                <span className="text-xs font-black text-muted/40 uppercase tracking-widest px-1">Dodatkowa Kwalifikacja</span>
+                                <span className="text-xs font-black text-muted/40 uppercase tracking-widest px-1">Status powłoki</span>
                                 <div className="flex gap-3">
-                                    {([
-                                        { v: 'ok', l: 'Fabryczny', c: 'bg-success shadow-success/20' },
-                                        { v: 'repainted', l: 'Lakierowany', c: 'bg-warning shadow-warning/20' },
-                                        { v: 'putty', l: 'Szpachla', c: 'bg-danger shadow-danger/20' },
-                                    ] as const).map((opt) => (
-                                        <button
-                                            key={opt.v}
-                                            onClick={() => setModalStatus(opt.v)}
-                                            className={cn(
-                                                "flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-wider transition-all border-2",
-                                                modalStatus === opt.v
-                                                    ? `${opt.c} text-white border-transparent shadow-lg scale-105`
-                                                    : "bg-surface-raised border-transparent text-muted"
-                                            )}
-                                        >
-                                            {opt.l}
-                                        </button>
-                                    ))}
+                                    <div className={cn(
+                                        "flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase text-center border-2 transition-all",
+                                        modalStatus === 'ok' ? "bg-success/10 border-success text-success" : 
+                                        modalStatus === 'repainted' ? "bg-warning/10 border-warning text-warning" :
+                                        modalStatus === 'putty' ? "bg-danger/10 border-danger text-danger" : "bg-surface-raised border-transparent text-muted"
+                                    )}>
+                                        {modalStatus === 'ok' ? 'FABRYCZNY' : modalStatus === 'repainted' ? 'LAKIEROWANY' : modalStatus === 'putty' ? 'SZPACHLA' : 'BRAK'}
+                                    </div>
                                 </div>
                             </div>
 

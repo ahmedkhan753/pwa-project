@@ -74,11 +74,13 @@ export interface EquipmentCompleteness {
   antiTheftSystem: ToggleValue;
   immobilizerWorking: ToggleValue;
   keysCount: string;
-  spareTire: ToggleValue;
+  spareWheel: ToggleValue;
   jackAndTools: ToggleValue;
-  warningTriangle: ToggleValue;
+  triangular: ToggleValue;
   firstAidKit: ToggleValue;
   fireExtinguisher: ToggleValue;
+  compressor: ToggleValue;
+  repairKit: ToggleValue;
   ownerManual: ToggleValue;
 }
 
@@ -162,8 +164,11 @@ export interface PaintMeasurement {
 // ─── Step 5: Tires ─────────────────────────────────────────
 export interface WheelData {
   brand: string;
+  model: string;
   size: string;
   dot: string;
+  loadIndex: string;
+  speedIndex: string;
   treadDepth: string;
   type: string;    // summer | winter | all-season
   condition: ToggleValue;
@@ -356,6 +361,7 @@ interface InspectionState {
   syncStepWithBitrix: (stepNumber: number) => Promise<void>;
   submitToBitrix: () => Promise<{ success: boolean; message: string }>;
   fetchDealsForCalendar: (date: string) => Promise<void>;
+  fetchFullDeal: (dealId: string) => Promise<void>;
 }
 
 // ─── Default Paint Zone ───────────────────────────────────
@@ -363,34 +369,53 @@ const emptyZone: PaintZone = { value: '', status: '' };
 
 // ─── Default Wheel ────────────────────────────────────────
 const emptyWheel: WheelData = {
-  brand: '', size: '', dot: '', treadDepth: '', type: '', condition: null,
+  brand: '', model: '', size: '', dot: '', loadIndex: '', speedIndex: '', treadDepth: '', type: '', condition: null,
 };
 
 // ─── Photo Slots ──────────────────────────────────────────
 const defaultPhotoSlots: PhotoSlot[] = [
-  { id: 'front', label: 'Przód pojazdu', base64: '', required: true },
-  { id: 'rear', label: 'Tył pojazdu', base64: '', required: true },
-  { id: 'left_side', label: 'Lewy bok', base64: '', required: true },
-  { id: 'right_side', label: 'Prawy bok', base64: '', required: true },
-  { id: 'front_seats', label: 'Wnętrze (Fotele przód)', base64: '', required: true },
-  { id: 'dashboard', label: 'Deska rozdzielcza (Kokpit)', base64: '', required: true },
-  { id: 'odometer', label: 'Licznik (Przebieg)', base64: '', required: true },
-  { id: 'vin_plate', label: 'Tabliczka znamionowa (VIN)', base64: '', required: true },
-  { id: 'engine', label: 'Komora silnika', base64: '', required: false },
-  { id: 'trunk', label: 'Bagażnik', base64: '', required: false },
-  { id: 'tire_dot_front_left', label: 'Opona PL (DOT)', base64: '', required: false },
-  { id: 'tire_dot_front_right', label: 'Opona PP (DOT)', base64: '', required: false },
-  { id: 'tire_dot_rear_left', label: 'Opona TL (DOT)', base64: '', required: false },
-  { id: 'tire_dot_rear_right', label: 'Opona TP (DOT)', base64: '', required: false },
-  { id: 'extra_1', label: 'Dodatkowe 1', base64: '', required: false },
-  { id: 'extra_2', label: 'Dodatkowe 2', base64: '', required: false },
-  { id: 'extra_3', label: 'Dodatkowe 3', base64: '', required: false },
-  // D1-D5 Document Slots
-  { id: 'doc_reg_front', label: 'Dowód rejestracyjny (przód)', base64: '', required: false },
-  { id: 'doc_reg_rear', label: 'Dowód rejestracyjny (tył)', base64: '', required: false },
-  { id: 'doc_insurance', label: 'Polisa ubezpieczeniowa', base64: '', required: false },
-  { id: 'doc_manual', label: 'Instrukcja / Książka', base64: '', required: false },
-  { id: 'doc_extra', label: 'Inne dokumenty', base64: '', required: false },
+  // Exterior Sequence
+  { id: 'rear', label: '1. Tył', base64: '', required: true },
+  { id: 'rear_left', label: '2. Tył Lewy', base64: '', required: true },
+  { id: 'left_side', label: '3. Lewy Bok', base64: '', required: true },
+  { id: 'front_left', label: '4. Przód Lewy', base64: '', required: true },
+  { id: 'front', label: '5. Przód', base64: '', required: true },
+  { id: 'front_right', label: '6. Przód Prawy', base64: '', required: true },
+  { id: 'right_side', label: '7. Prawy Bok', base64: '', required: true },
+  { id: 'rear_right', label: '8. Tył Prawy', base64: '', required: true },
+  { id: 'roof', label: '9. Dach', base64: '', required: true },
+  
+  // Interior & Engine
+  { id: 'dashboard', label: '10. Kokpit / Deska', base64: '', required: true },
+  { id: 'odometer', label: '11. Licznik (Przebieg)', base64: '', required: true },
+  { id: 'front_seats', label: '12. Fotele przód', base64: '', required: true },
+  { id: 'rear_seats', label: '13. Kanapa tył', base64: '', required: true },
+  { id: 'trunk', label: '14. Bagażnik', base64: '', required: true },
+  { id: 'engine', label: '15. Komora silnika', base64: '', required: true },
+  { id: 'vin_plate', label: '16. Tabliczka VIN', base64: '', required: true },
+  { id: 'tire_sticker', label: '17. Naklejka ciśnienia', base64: '', required: false },
+
+  // Tires & Rims
+  { id: 'tire_fl', label: '18. Opona PL', base64: '', required: true },
+  { id: 'rim_fl', label: '19. Felga PL', base64: '', required: true },
+  { id: 'tire_fr', label: '20. Opona PP', base64: '', required: true },
+  { id: 'rim_fr', label: '21. Felga PP', base64: '', required: true },
+  { id: 'tire_rl', label: '22. Opona TL', base64: '', required: true },
+  { id: 'rim_rl', label: '23. Felga TL', base64: '', required: false },
+  { id: 'tire_rr', label: '24. Opona TP', base64: '', required: true },
+  { id: 'rim_rr', label: '25. Felga TP', base64: '', required: true },
+
+  // Documents
+  { id: 'doc_1', label: '26. Dokumenty 1', base64: '', required: true },
+  { id: 'doc_2', label: '27. Dokumenty 2', base64: '', required: true },
+
+  // Expandable Extra Slots (Phased in UI)
+  ...Array.from({ length: 15 }, (_, i) => ({
+    id: `extra_${i + 1}`,
+    label: `Dodatkowe ${i + 1}`,
+    base64: '',
+    required: false
+  }))
 ];
 
 // ─── Initial Data ─────────────────────────────────────────
@@ -411,9 +436,10 @@ const initialData: StepData = {
     registrationDocPresented: null, vehicleCardPresented: null,
     purchaseInvoicePresented: null, serviceBookPresented: null,
     antiTheftSystem: null, immobilizerWorking: null,
-    keysCount: '', spareTire: null, jackAndTools: null,
-    warningTriangle: null, firstAidKit: null,
-    fireExtinguisher: null, ownerManual: null,
+    keysCount: '', spareWheel: null, jackAndTools: null,
+    triangular: null, firstAidKit: null,
+    fireExtinguisher: null, compressor: null, repairKit: null,
+    ownerManual: null,
   },
   fullEquipment: {
     abs: null, esp: null, airbagDriver: null, airbagPassenger: null,
@@ -556,12 +582,12 @@ export const useInspectionStore = create<InspectionState>()(
       fetchMe: async () => {
         try {
           const response = await inspectionApi.getCurrentUser();
-          if (response && response.ID) {
+          if (response && response.id) {
             set((state) => ({
               auth: {
                 ...state.auth,
-                currentUserId: Number(response.ID),
-                currentUserName: `${response.NAME || ''} ${response.LAST_NAME || ''}`.trim() || 'Rzeczoznawca'
+                currentUserId: Number(response.bitrix_id),
+                currentUserName: response.name || 'Rzeczoznawca'
               }
             }));
           }
@@ -573,6 +599,47 @@ export const useInspectionStore = create<InspectionState>()(
               currentUserName: state.auth.currentUserName || 'Rzeczoznawca'
             }
           }));
+        }
+      },
+
+      fetchFullDeal: async (dealId: string) => {
+        set((state) => ({ jobs: { ...state.jobs, loading: true, error: null } }));
+        try {
+          const deal = await inspectionApi.getDeal(dealId);
+          set((state) => {
+            const initial = JSON.parse(JSON.stringify(initialData));
+            // Merge deal data into vehicleData.basicInfo and core fields
+            const newVehicleData = {
+              ...initial.vehicleData,
+              basicInfo: {
+                ...initial.vehicleData.basicInfo,
+                companyName: deal.clientName || deal.companyName || '',
+                userOwner: deal.clientName || '',
+                inspectionPlace: deal.address || deal.inspectionPlace || '',
+                inspectionDate: deal.scheduledDate || '',
+                inspectorName: state.auth.currentUserName || 'Rzeczoznawca',
+              },
+              vin: deal.vin || '',
+              registrationPlates: deal.plates || '',
+              make: deal.make || '',
+              model: deal.model || '',
+              year: deal.year?.toString() || '',
+              mileage: deal.mileage?.toString() || '',
+            };
+
+            return {
+              jobs: { ...state.jobs, currentJobId: dealId, loading: false },
+              data: { ...initial, vehicleData: newVehicleData },
+              currentStep: 1,
+              maxVisitedStep: 1
+            };
+          });
+        } catch (error: any) {
+          console.error("Failed to fetch full deal:", error);
+          set((state) => ({ 
+            jobs: { ...state.jobs, loading: false, error: "Nie udało się pobrać danych z Bitrix24" } 
+          }));
+          throw error;
         }
       },
 

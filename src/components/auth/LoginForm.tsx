@@ -44,9 +44,11 @@ export const LoginForm: React.FC = () => {
 
             <div className="w-full max-w-md relative">
                 {/* Logo Section */}
-                <div className="space-y-3">
+                <div className="flex flex-col items-center space-y-4 mb-8">
                     <Logo variant="full" size="lg" />
-                    <p className="text-muted text-xs font-bold uppercase tracking-[0.2em]">System Inspekcji Pojazdów</p>
+                    <p className="text-muted text-[10px] font-black uppercase tracking-[0.3em] text-center opacity-80">
+                        Vehicle Inspection System
+                    </p>
                 </div>
 
                 {/* Form Card */}
@@ -119,7 +121,7 @@ export const LoginForm: React.FC = () => {
 
                 {/* Footer Info */}
                 <div className="text-center mt-8 text-muted/60 text-xs font-medium tracking-widest uppercase">
-                    v1.0 Anti-Oops Architecture
+
                 </div>
             </div>
         </div>

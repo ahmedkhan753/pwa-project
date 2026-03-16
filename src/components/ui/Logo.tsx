@@ -31,7 +31,7 @@ export const Logo: React.FC<LogoProps> = ({
     return (
         <div 
             className={cn(
-                "relative flex items-center justify-center",
+                "relative flex items-center justify-center mx-auto",
                 onLightBackground && "bg-black rounded-lg p-1.5",
                 className
             )}
