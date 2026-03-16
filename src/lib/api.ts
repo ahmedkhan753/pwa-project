@@ -1,7 +1,11 @@
 import { mockApi } from './mockApiService'
 
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
-console.log('[API] DEMO_MODE isActive:', DEMO_MODE)
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== 'false'
+
+console.log(
+  `[API] Mode: ${DEMO_MODE ? 'DEMO' : 'REAL'} |`,
+  `NEXT_PUBLIC_DEMO_MODE: ${process.env.NEXT_PUBLIC_DEMO_MODE}`
+)
 
 // Real API client (unchanged functionality, just wrapped)
 const realApi = {

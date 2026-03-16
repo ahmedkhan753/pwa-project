@@ -23,23 +23,133 @@ export const mockApi = {
 
   // Deals
   async getDeals(dateFrom?: string, dateTo?: string) {
-    await delay(600)
+    await new Promise(r => setTimeout(r, 600))
+    
+    // Always use TODAY's date for scheduled deals
     const today = new Date().toISOString().split('T')[0]
-    const filterDate = dateFrom || today
-
-    const scheduled = MOCK_DEALS.filter(d => {
-      if (!d.scheduledDate) return false
-      return d.scheduledDate.startsWith(filterDate)
-    })
-
-    const unscheduled = MOCK_DEALS.filter(
-      d => !d.scheduledDate
-    )
-
+    
+    // Build deals with today's date dynamically
+    const scheduled = [
+      {
+        id: "213",
+        title: "Wycena - BMW X5 2022",
+        type: "WYCENA",
+        stage: "Ustalone oględziny",
+        scheduledDate: `${today}T10:00:00`,
+        registrationNumber: "KR 12345",
+        vin: "WBA12345678901234",
+        brand: "BMW",
+        model: "X5",
+        year: "2022",
+        color: "Czarny",
+        fuelType: "BENZYNA",
+        bodyType: "SUV",
+        gearboxType: "AUTOMATYCZNA",
+        mileage: "45000",
+        clientFirstName: "Marek",
+        clientLastName: "Nowak",
+        clientPhone: "+48 600 123 456",
+        location: "Kraków, ul. Floriańska 12",
+        status: "scheduled"
+      },
+      {
+        id: "214",
+        title: "CFM - Toyota Corolla 2020",
+        type: "CFM",
+        stage: "Ustalone oględziny",
+        scheduledDate: `${today}T13:00:00`,
+        registrationNumber: "WA 98765",
+        vin: "SB1K53AE90E123456",
+        brand: "Toyota",
+        model: "Corolla",
+        year: "2020",
+        color: "Srebrny",
+        fuelType: "HYBRYDA",
+        bodyType: "SEDAN",
+        gearboxType: "CVT",
+        mileage: "67000",
+        clientFirstName: "Anna",
+        clientLastName: "Wiśniewska",
+        clientPhone: "+48 700 456 789",
+        location: "Warszawa, ul. Marszałkowska 5",
+        status: "scheduled"
+      },
+      {
+        id: "217",
+        title: "Wycena - Mercedes C-Class 2023",
+        type: "WYCENA",
+        stage: "Ustalone oględziny",
+        scheduledDate: `${today}T15:30:00`,
+        registrationNumber: "WR 22222",
+        vin: "WDD2050341R123456",
+        brand: "Mercedes-Benz",
+        model: "C-Class",
+        year: "2023",
+        color: "Niebieski",
+        fuelType: "BENZYNA",
+        bodyType: "SEDAN",
+        gearboxType: "AUTOMATYCZNA",
+        mileage: "12000",
+        clientFirstName: "Tomasz",
+        clientLastName: "Adamski",
+        clientPhone: "+48 502 345 678",
+        location: "Wrocław, ul. Świdnicka 3",
+        status: "scheduled"
+      }
+    ]
+    
+    const unscheduled = [
+      {
+        id: "215",
+        title: "Wycena - Volkswagen Passat 2019",
+        type: "WYCENA",
+        stage: "Nowe zlecenie",
+        scheduledDate: null,
+        registrationNumber: "PO 54321",
+        vin: "WVWZZZ3CZKE123456",
+        brand: "Volkswagen",
+        model: "Passat",
+        year: "2019",
+        color: "Biały",
+        fuelType: "DIESEL",
+        bodyType: "KOMBI",
+        gearboxType: "MANUALNA",
+        mileage: "112000",
+        clientFirstName: "Piotr",
+        clientLastName: "Kowalczyk",
+        clientPhone: "+48 500 789 123",
+        location: "Poznań, ul. Długa 8",
+        status: "unscheduled"
+      },
+      {
+        id: "216",
+        title: "CFM - Audi A4 2021",
+        type: "CFM",
+        stage: "Nowe zlecenie",
+        scheduledDate: null,
+        registrationNumber: "GD 11111",
+        vin: "WAUZZZ8V5MA123456",
+        brand: "Audi",
+        model: "A4",
+        year: "2021",
+        color: "Szary",
+        fuelType: "DIESEL",
+        bodyType: "SEDAN",
+        gearboxType: "AUTOMATYCZNA",
+        mileage: "38000",
+        clientFirstName: "Katarzyna",
+        clientLastName: "Zielińska",
+        clientPhone: "+48 601 234 567",
+        location: "Gdańsk, ul. Długa 15",
+        status: "unscheduled"
+      }
+    ]
+    
     return {
       scheduled,
       unscheduled,
-      total_in_bitrix: MOCK_DEALS.length
+      total_in_bitrix: scheduled.length + 
+                       unscheduled.length
     }
   },
 
