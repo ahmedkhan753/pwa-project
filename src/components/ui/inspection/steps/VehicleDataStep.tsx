@@ -90,7 +90,7 @@ export function VehicleDataStep() {
                     <label className="text-xs font-black text-muted uppercase tracking-widest mb-2 block px-1">
                         Numer VIN
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-3">
                         <input
                             type="text"
                             value={v.vin}
@@ -98,15 +98,15 @@ export function VehicleDataStep() {
                             maxLength={17}
                             placeholder="Wpisz lub zeskanuj VIN"
                             aria-label="VIN number"
-                            className="flex-1 py-4 px-5 font-mono text-xl tracking-[0.2em] rounded-2xl border-2 border-border bg-surface text-foreground uppercase shadow-inner"
+                            className="w-full sm:flex-1 py-4 px-5 font-mono text-xl tracking-[0.2em] rounded-2xl border-2 border-border bg-surface text-foreground uppercase shadow-inner"
                         />
                         <button
                             onClick={() => setShowScanner(true)}
-                            className="px-6 py-4 bg-primary text-white rounded-2xl flex items-center gap-2 font-black text-xs uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all"
+                            className="w-full sm:w-auto px-8 py-4 bg-primary text-white rounded-2xl flex items-center justify-center gap-2 font-black text-sm uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all whitespace-nowrap"
                             aria-label="Scan VIN with camera"
                         >
                             <ScanLine size={20} />
-                            OCR
+                            <span>Skanuj VIN (OCR)</span>
                         </button>
                     </div>
                     {v.vin && v.vin.length !== 17 && (
@@ -135,7 +135,7 @@ export function VehicleDataStep() {
                     <SmartDropdown 
                         label="Model" 
                         value={v.model} 
-                        options={metadata.vehicle_model || []} 
+                        options={v.make && metadata.vehicle_models ? (metadata.vehicle_models[v.make] || []) : (metadata.vehicle_model || [])} 
                         onChange={(v) => handleChange('model', v)} 
                         placeholder="Szukaj modelu..."
                     />

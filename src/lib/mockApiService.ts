@@ -247,6 +247,16 @@ export const mockApi = {
         "Seat", "Skoda", "Subaru", "Suzuki",
         "Tesla", "Toyota", "Volkswagen", "Volvo"
       ],
+      vehicle_models: {
+        "BMW": ["X1","X3","X5","X7","3 Series","5 Series","7 Series","M3","M5"],
+        "Toyota": ["Corolla","Camry","RAV4","Yaris","Highlander","Land Cruiser","Prius"],
+        "Volkswagen": ["Golf","Passat","Tiguan","Polo","Touareg","ID.4"],
+        "Audi": ["A3","A4","A6","Q3","Q5","Q7","TT","R8"],
+        "Mercedes-Benz": ["A-Class","C-Class","E-Class","S-Class","GLC","GLE","GLS"],
+        "Skoda": ["Octavia","Superb","Kodiaq","Fabia","Kamiq","Karoq"],
+        "Ford": ["Focus","Fiesta","Mondeo","Kuga","Puma","Explorer"],
+        "Opel": ["Astra","Insignia","Mokka","Corsa","Grandland","Crossland"]
+      },
       tire_brands: [
         "Bridgestone", "Continental", "Dunlop",
         "Falken", "Firestone", "Goodyear", "Hankook",
