@@ -1,7 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
-import SignatureCanvas from "react-signature-canvas";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,30 +12,106 @@ interface SignaturePadProps {
 }
 
 export function SignaturePad({ label, value, onSave, disabled }: SignaturePadProps) {
-    const sigRef = useRef<SignatureCanvas>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
 
-    const handleEnd = useCallback(() => {
-        if (sigRef.current && !sigRef.current.isEmpty()) {
-            const data = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
+    // DPI Scaling and Resize Handling
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || value) return;
+
+        const handleResize = () => {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.scale(dpr, dpr);
+                ctx.lineCap = 'round';
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = window.matchMedia('(prefers-color-scheme: dark)').matches ? "#6366f1" : "#0f172a";
+            }
+        };
+
+        handleResize();
+        const observer = new ResizeObserver(handleResize);
+        observer.observe(canvas);
+
+        return () => observer.disconnect();
+    }, [value]);
+
+    const getPos = (e: any) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    };
+
+    const startDrawing = (e: any) => {
+        if (disabled) return;
+        if (e.type === 'touchstart') e.preventDefault();
+        const pos = getPos(e);
+        setIsDrawing(true);
+        setLastPos(pos);
+    };
+
+    const draw = (e: any) => {
+        if (!isDrawing || disabled) return;
+        if (e.type === 'touchmove') e.preventDefault();
+        
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+
+        const pos = getPos(e);
+        ctx.beginPath();
+        ctx.moveTo(lastPos.x, lastPos.y);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        setLastPos(pos);
+    };
+
+    const stopDrawing = (e: any) => {
+        if (isDrawing) {
+            setIsDrawing(false);
+            saveCanvas();
+        }
+    };
+
+    const saveCanvas = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            // Check if canvas is empty (simplified check)
+            const data = canvas.toDataURL("image/png");
             onSave(data);
         }
-    }, [onSave]);
+    };
 
     const handleClear = () => {
         if (disabled) return;
-        sigRef.current?.clear();
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx && canvas) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
         onSave('');
     };
 
     return (
         <div className={cn("section-card", disabled && "opacity-60 pointer-events-none")}>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
                 <label className="text-sm font-bold text-foreground">{label}</label>
                 {!disabled && (
                     <button
                         onClick={handleClear}
-                        className="flex items-center gap-1 text-xs text-secondary hover:text-danger transition-colors"
-                        aria-label={`Clear ${label}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-raised hover:bg-danger/10 text-xs font-black text-muted hover:text-danger rounded-xl border border-border transition-all active:scale-95"
                     >
                         <RotateCcw size={14} />
                         Wyczyść
@@ -44,47 +119,39 @@ export function SignaturePad({ label, value, onSave, disabled }: SignaturePadPro
                 )}
             </div>
 
-            <div className="signature-canvas-wrapper border-2 border-border rounded-[2rem] overflow-hidden bg-surface relative group">
-                {/* Background Grid for better UX */}
-                {!value && (
-                    <div className="absolute inset-0 grid grid-cols-12 grid-rows-6 opacity-[0.05] pointer-events-none">
-                        {Array.from({ length: 72 }).map((_, i) => (
-                            <div key={i} className="border-[0.5px] border-foreground"></div>
-                        ))}
-                    </div>
-                )}
-
+            <div className="relative w-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner cursor-crosshair" style={{ height: '220px' }}>
                 {value ? (
-                    <div className="relative h-[220px] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 flex items-center justify-center p-4">
                         <img
                             src={value}
-                            alt={`Signature: ${label}`}
+                            alt={label}
                             className="max-w-full max-h-full object-contain filter dark:invert"
                         />
-                        {!disabled && (
-                            <div className="absolute inset-0 bg-background/0 group-hover:bg-background/5 transition-colors flex items-center justify-center pointer-events-none">
-                                <span className="text-[10px] font-black uppercase text-muted opacity-0 group-hover:opacity-100 transition-opacity">
-                                    Kliknij "Wyczyść" aby zmienić
-                                </span>
-                            </div>
-                        )}
                     </div>
                 ) : (
-                    <SignatureCanvas
-                        ref={sigRef}
-                        penColor={typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? "#6366f1" : "#0f172a"}
-                        canvasProps={{
-                            className: "w-full cursor-crosshair",
-                            height: 220,
-                        }}
-                        onEnd={handleEnd}
+                    <canvas
+                        ref={canvasRef}
+                        className="block w-full h-full touch-none"
+                        onMouseDown={startDrawing}
+                        onMouseMove={draw}
+                        onMouseUp={stopDrawing}
+                        onMouseLeave={stopDrawing}
+                        onTouchStart={startDrawing}
+                        onTouchMove={draw}
+                        onTouchEnd={stopDrawing}
                     />
+                )}
+                
+                {!value && !isDrawing && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Podpisz się tutaj</p>
+                    </div>
                 )}
             </div>
 
             {!value && (
-                <p className="text-[10px] text-muted mt-1 text-center">
-                    Podpis palcem lub rysikiem (min. 200px wys.)
+                <p className="text-[10px] text-muted mt-2 text-center font-bold uppercase tracking-wider">
+                    Użyj palca lub rysika do złożenia podpisu
                 </p>
             )}
         </div>

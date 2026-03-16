@@ -131,19 +131,19 @@ export function SummaryStep() {
             </div>
 
             {/* ── Section: Inspector & Yard Signatures ──── */}
-            <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm text-slate-900">
-                <div className="flex flex-col items-center text-center mb-8 border-b-2 border-slate-100 pb-8">
-                    <div className="bg-black p-3 rounded-2xl mb-4">
+            <div className="section-card bg-surface border-border shadow-lg">
+                <div className="flex flex-col items-center text-center mb-10 border-b border-border/50 pb-8">
+                    <div className="bg-black p-4 rounded-2xl mb-4 shadow-xl">
                         <Logo variant="full" size="md" />
                     </div>
-                    <h3 className="text-lg font-black uppercase tracking-tight">Protokół Inspekcji Pojazdu</h3>
-                    <div className="flex gap-4 mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <h3 className="text-xl font-black uppercase tracking-tight text-foreground">Protokół Inspekcji Pojazdu</h3>
+                    <div className="flex gap-4 mt-3 text-[10px] font-bold text-muted uppercase tracking-widest">
                         <span>Data: {new Date().toLocaleDateString('pl-PL')}</span>
                         <span>Zlecenie: #{jobs.currentJobId || 'BRAK ID'}</span>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-10">
+                <div className="grid grid-cols-1 gap-8">
                     <SignaturePad
                         label="Podpis Rzeczoznawcy"
                         value={summary.signatureAppraiser}
@@ -158,6 +158,10 @@ export function SummaryStep() {
                         disabled={isLocked}
                     />
                 </div>
+
+                <p className="text-[10px] text-muted mt-8 text-center italic font-medium">
+                    Wygenerowano elektronicznie przez system Zaufaj Rzeczoznawcy
+                </p>
             </div>
 
             {/* Final Verification */}
