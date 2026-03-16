@@ -102,11 +102,29 @@ export const Dashboard: React.FC = () => {
             {/* Premium Header */}
             <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-2xl border-b border-border transition-colors duration-300">
                 <div className="flex items-center justify-between max-w-2xl mx-auto w-full px-6 py-4">
-                    <div className="flex items-center gap-4 overflow-visible">
-                        <div className="relative overflow-visible">
-                            <div className="w-12 h-12 rounded-2xl bg-black flex items-center justify-center border border-border/50 shadow-sm p-1 overflow-visible flex-shrink-0">
-                                <Logo variant="icon" size="md" className="!overflow-visible" />
-                            </div>
+                    <div className="flex items-center gap-4">
+                        <div style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '10px',
+                            overflow: 'visible',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#000000',
+                            padding: '2px'
+                        }}>
+                            <img
+                                src="/images/logo.png"
+                                alt="R"
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'contain',
+                                    display: 'block'
+                                }}
+                            />
                         </div>
                         <div>
                             <h2 className="font-black text-lg tracking-tight leading-none mb-0.5">
