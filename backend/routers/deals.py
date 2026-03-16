@@ -35,7 +35,8 @@ async def get_deals(
 
     try:
         if user_id and date_from:
-            deals = await gateway.get_appraiser_deals(
+            # get_appraiser_deals now returns {scheduled, unscheduled, total_in_bitrix, total_returned}
+            return await gateway.get_appraiser_deals(
                 user_id=user_id,
                 date_from=date_from,
                 date_to=date_to,
@@ -50,15 +51,21 @@ async def get_deals(
             if status:
                 filters["STAGE_ID"] = status
 
-            deals = await gateway.get_deal_list(filters)
+            deals_list = await gateway.get_deal_list(filters)
 
             # Transform each deal using the field transformer
             from services.field_transformer import FieldTransformer
             disc = request.app.state.discovery
             transformer = FieldTransformer(disc)
-            deals = [transformer.transform_from_bitrix(d) for d in deals]
+            deals = [transformer.transform_from_bitrix(d) for d in deals_list]
 
-        return deals
+            # Return consistent dict structure
+            return {
+                "scheduled": deals,
+                "unscheduled": [],
+                "total_in_bitrix": len(deals),
+                "total_returned": len(deals)
+            }
 
     except Exception as e:
         logger.error(f"Error fetching deals: {e}")
