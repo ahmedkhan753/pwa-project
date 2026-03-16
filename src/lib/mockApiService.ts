@@ -168,11 +168,11 @@ export const mockApi = {
     // Find in dynamic deals
     const today = new Date().toISOString().split('T')[0]
     const all = [
-        { id: "213", companyName: "Auto Handel Nowak Sp. z o.o.", ownerName: "Marek Nowak", address: "Kraków, ul. Floriańska 12", scheduledDate: `${today}T10:00:00`, vin: "WBA12345678901234", plates: "KR 12345", brand: "BMW", model: "X5", year: 2022, mileage: 45000, clientName: "Marek Nowak" },
-        { id: "214", companyName: "Arval Care Service", ownerName: "Anna Wiśniewska", address: "Warszawa, ul. Marszałkowska 5", scheduledDate: `${today}T13:00:00`, vin: "SB1K53AE90E123456", plates: "WA 98765", brand: "Toyota", model: "Corolla", year: 2020, mileage: 67000, clientName: "Anna Wiśniewska" },
-        { id: "217", companyName: "Mercedes Zasada", ownerName: "Tomasz Adamski", address: "Wrocław, ul. Świdnicka 3", scheduledDate: `${today}T15:30:00`, vin: "WDD2050341R123456", plates: "WR 22222", brand: "Mercedes-Benz", model: "C-Class", year: 2023, mileage: 12000, clientName: "Tomasz Adamski" },
-        { id: "215", companyName: "VW Financial", ownerName: "Piotr Kowalczyk", address: "Poznań, ul. Długa 8", scheduledDate: null, vin: "WVWZZZ3CZKE123456", plates: "PO 54321", brand: "Volkswagen", model: "Passat", year: 2019, mileage: 112000, clientName: "Piotr Kowalczyk" },
-        { id: "216", companyName: "Audi Select Plus", ownerName: "Katarzyna Zielińska", address: "Gdańsk, ul. Długa 15", scheduledDate: null, vin: "WAUZZZ8V5MA123456", plates: "GD 11111", brand: "Audi", model: "A4", year: 2021, mileage: 38000, clientName: "Katarzyna Zielińska" }
+        { id: "213", companyName: "Auto Handel Nowak Sp. z o.o.", ownerName: "Marek Nowak", address: "Kraków, ul. Floriańska 12", scheduledDate: `${today}T10:00:00`, vin: "WBA12345678901234", plates: "KR 12345", make: "BMW", model: "X5", year: 2022, mileage: 45000, clientName: "Marek Nowak" },
+        { id: "214", companyName: "Arval Care Service", ownerName: "Anna Wiśniewska", address: "Warszawa, ul. Marszałkowska 5", scheduledDate: `${today}T13:00:00`, vin: "SB1K53AE90E123456", plates: "WA 98765", make: "Toyota", model: "Corolla", year: 2020, mileage: 67000, clientName: "Anna Wiśniewska" },
+        { id: "217", companyName: "Mercedes Zasada", ownerName: "Tomasz Adamski", address: "Wrocław, ul. Świdnicka 3", scheduledDate: `${today}T15:30:00`, vin: "WDD2050341R123456", plates: "WR 22222", make: "Mercedes-Benz", model: "C-Class", year: 2023, mileage: 12000, clientName: "Tomasz Adamski" },
+        { id: "215", companyName: "VW Financial", ownerName: "Piotr Kowalczyk", address: "Poznań, ul. Długa 8", scheduledDate: null, vin: "WVWZZZ3CZKE123456", plates: "PO 54321", make: "Volkswagen", model: "Passat", year: 2019, mileage: 112000, clientName: "Piotr Kowalczyk" },
+        { id: "216", companyName: "Audi Select Plus", ownerName: "Katarzyna Zielińska", address: "Gdańsk, ul. Długa 15", scheduledDate: null, vin: "WAUZZZ8V5MA123456", plates: "GD 11111", make: "Audi", model: "A4", year: 2021, mileage: 38000, clientName: "Katarzyna Zielińska" }
     ]
     const deal = all.find(d => d.id === dealId)
     if (!deal) throw new Error("Deal not found")
@@ -239,49 +239,54 @@ export const mockApi = {
     await delay(100)
     return {
       vehicle_brands: [
-        "Alfa Romeo", "Audi", "BMW", "Chevrolet",
-        "Citroën", "Dacia", "Fiat", "Ford", "Honda",
-        "Hyundai", "Jeep", "Kia", "Lexus", "Mazda",
-        "Mercedes-Benz", "Mitsubishi", "Nissan",
-        "Opel", "Peugeot", "Porsche", "Renault",
-        "Seat", "Skoda", "Subaru", "Suzuki",
-        "Tesla", "Toyota", "Volkswagen", "Volvo"
+        "Alfa Romeo", "Audi", "BMW", "Chevrolet", "Citroën", "Dacia", "Fiat", "Ford", 
+        "Honda", "Hyundai", "Jeep", "Kia", "Lexus", "Mazda", "Mercedes-Benz", 
+        "Mitsubishi", "Nissan", "Opel", "Peugeot", "Porsche", "Renault", "Seat", 
+        "Skoda", "Subaru", "Suzuki", "Tesla", "Toyota", "Volkswagen", "Volvo", "Inne"
       ],
       vehicle_models: {
-        "BMW": ["X1","X3","X5","X7","3 Series","5 Series","7 Series","M3","M5"],
-        "Toyota": ["Corolla","Camry","RAV4","Yaris","Highlander","Land Cruiser","Prius"],
-        "Volkswagen": ["Golf","Passat","Tiguan","Polo","Touareg","ID.4"],
-        "Audi": ["A3","A4","A6","Q3","Q5","Q7","TT","R8"],
-        "Mercedes-Benz": ["A-Class","C-Class","E-Class","S-Class","GLC","GLE","GLS"],
-        "Skoda": ["Octavia","Superb","Kodiaq","Fabia","Kamiq","Karoq"],
-        "Ford": ["Focus","Fiesta","Mondeo","Kuga","Puma","Explorer"],
-        "Opel": ["Astra","Insignia","Mokka","Corsa","Grandland","Crossland"]
+        "BMW": ["X1","X2","X3","X5","X6","X7","Seria 1","Seria 2","Seria 3","Seria 4","Seria 5","Seria 7","M3","M5"],
+        "Toyota": ["Corolla","Camry","RAV4","Yaris","C-HR","Highlander","Land Cruiser","Prius","Aygo","Hilux"],
+        "Volkswagen": ["Golf","Passat","Tiguan","Polo","T-Roc","T-Cross","Touareg","Arteon","ID.3","ID.4"],
+        "Audi": ["A1","A3","A4","A5","A6","A7","A8","Q2","Q3","Q5","Q7","Q8","TT","R8","e-tron"],
+        "Mercedes-Benz": ["A-Class","B-Class","C-Class","E-Class","S-Class","CLA","CLS","GLA","GLB","GLC","GLE","GLS","AMG GT"],
+        "Ford": ["Fiesta","Focus","Mondeo","Kuga","Puma","Explorer","Mustang","Transit"],
+        "Opel": ["Corsa","Astra","Insignia","Mokka","Grandland","Crossland","Zafira"],
+        "Skoda": ["Fabia","Scala","Octavia","Superb","Kamiq","Karoq","Kodiaq","Enyaq"],
+        "Hyundai": ["i20","i30","i40","Tucson","Santa Fe","Kona","IONIQ","Nexo"],
+        "Kia": ["Picanto","Rio","Ceed","Sportage","Sorento","Stinger","EV6","Niro"],
+        "Renault": ["Clio","Megane","Kadjar","Koleos","Captur","Zoe","Talisman"],
+        "Peugeot": ["208","308","508","2008","3008","5008","e-208","e-2008"],
+        "Fiat": ["500","Panda","Tipo","500X","500L","Ducato","Doblo"],
+        "Volvo": ["V40","V60","V90","S60","S90","XC40","XC60","XC90","C40"],
+        "Inne": ["Inny"]
       },
-      tire_brands: [
-        "Bridgestone", "Continental", "Dunlop",
-        "Falken", "Firestone", "Goodyear", "Hankook",
-        "Kleber", "Kumho", "Michelin", "Nexen",
-        "Nokian", "Pirelli", "Uniroyal",
-        "Vredestein", "Yokohama", "Inne"
-      ],
       fuel_types: [
-        "BENZYNA", "DIESEL", "LPG", "HYBRYDA",
-        "ELEKTRYCZNY", "HYBRYDA PLUG-IN", "INNE"
+        "BENZYNA", "DIESEL", "LPG", "HYBRYDA", "ELEKTRYCZNY", 
+        "HYBRYDA PLUG-IN", "HYBRYDA DIESEL", "WODÓR", "NIE DOTYCZY"
       ],
       body_types: [
-        "HATCHBACK", "SEDAN", "KOMBI", "SUV",
-        "COUPE", "CABRIO", "VAN/MINIVAN", "PICKUP"
+        "HATCHBACK", "SEDAN", "KOMBI", "SUV", "COUPE", "CABRIO", 
+        "VAN/MINIVAN", "PICKUP", "CROSSOVER"
       ],
       gearbox_types: [
-        "MANUALNA", "AUTOMATYCZNA", "CVT",
-        "DSG/DCT"
+        "MANUALNA", "AUTOMATYCZNA", "CVT", "DSG/DCT (DWUSPRZĘGŁOWA)"
       ],
-      drive_types: ["4x4", "4x2"],
+      drive_types: [
+        "4x2 (FWD)", "4x2 (RWD)", "4x4 (AWD)", "4x4 (4WD)"
+      ],
+      seats_options: ["2","4","5","6","7","8","9+"],
+      doors_options: ["2","3","4","5"],
       colors: [
-        "Biały", "Czarny", "Szary", "Srebrny",
-        "Czerwony", "Niebieski", "Zielony",
-        "Żółty", "Pomarańczowy", "Brązowy",
-        "Bordowy", "Inny"
+        "Biały", "Czarny", "Szary", "Srebrny", "Czerwony", "Niebieski", 
+        "Zielony", "Żółty", "Pomarańczowy", "Brązowy", "Bordowy", 
+        "Beżowy", "Złoty", "Inny"
+      ],
+      tire_brands: [
+        "Bridgestone", "Continental", "Dunlop", "Falken", "Firestone", 
+        "Goodyear", "Hankook", "Kleber", "Kumho", "Michelin", "Nexen", 
+        "Nokian", "Pirelli", "Uniroyal", "Vredestein", "Yokohama", 
+        "Toyo", "Maxxis", "BFGoodrich", "Inne"
       ]
     }
   }

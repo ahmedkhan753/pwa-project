@@ -5,9 +5,16 @@ import { ScanLine, Car, User, Building2, MapPin, Calendar, UserCheck, Loader2 } 
 import { useState, useEffect } from "react";
 import { VinScanner } from "../VinScanner";
 import { SmartDropdown } from "../SmartDropdown";
-import { apiClient } from "@/api/client";
+import { api as apiClient } from "@/lib/api";
 import { cn, formatLocaleDate } from "@/lib/utils";
 
+const FUEL_TYPES = ["BENZYNA", "DIESEL", "LPG", "HYBRYDA", "ELEKTRYCZNY", "HYBRYDA PLUG-IN", "HYBRYDA DIESEL", "WODÓR", "NIE DOTYCZY"];
+const BODY_TYPES = ["HATCHBACK", "SEDAN", "KOMBI", "SUV", "COUPE", "CABRIO", "VAN/MINIVAN", "PICKUP", "CROSSOVER"];
+const GEARBOX_TYPES = ["MANUALNA", "AUTOMATYCZNA", "CVT", "DSG/DCT (DWUSPRZĘGŁOWA)"];
+const DRIVE_TYPES = ["4x2 (FWD)", "4x2 (RWD)", "4x4 (AWD)", "4x4 (4WD)"];
+const SEATS_OPTIONS = ["2", "4", "5", "6", "7", "8", "9+"];
+const DOORS_OPTIONS = ["2", "3", "4", "5"];
+const COLORS = ["Biały", "Czarny", "Szary", "Srebrny", "Czerwony", "Niebieski", "Zielony", "Żółty", "Pomarańczowy", "Brązowy", "Bordowy", "Beżowy", "Złoty", "Inny"];
 const VEHICLE_BRANDS = [
   "Abarth", "Acura", "Alfa Romeo", "Alpina", "Aston Martin", "Audi", "Bentley", "BMW", 
   "Bugatti", "Buick", "Cadillac", "Chevrolet", "Chrysler", "Citroen", "Cupra", "Dacia", 
@@ -32,7 +39,8 @@ export function VehicleDataStep() {
     useEffect(() => {
         const loadMetadata = async () => {
             try {
-                const meta = await apiClient.getMetadata();
+                const meta = await apiClient.getMetadataOptions();
+                console.log("METADATA RECEIVED:", meta);
                 setMetadata(meta);
             } catch (e) {
                 console.error("Failed to load vehicle metadata", e);
@@ -127,28 +135,35 @@ export function VehicleDataStep() {
                     <SmartDropdown 
                         label="Marka" 
                         value={v.make} 
-                        options={metadata.vehicle_brand?.length > 0 ? metadata.vehicle_brand : VEHICLE_BRANDS} 
-                        onChange={(v) => handleChange('make', v)} 
+                        options={metadata?.vehicle_brands || metadata?.vehicle_brand || VEHICLE_BRANDS} 
+                        onChange={(val) => handleChange('make', val)} 
                         placeholder="Szukaj marki..."
                     />
                     
                     <SmartDropdown 
                         label="Model" 
                         value={v.model} 
-                        options={v.make && metadata.vehicle_models ? (metadata.vehicle_models[v.make] || []) : (metadata.vehicle_model || [])} 
-                        onChange={(v) => handleChange('model', v)} 
-                        placeholder="Szukaj modelu..."
+                        options={v.make && metadata?.vehicle_models?.[v.make] ? metadata.vehicle_models[v.make] : (metadata?.vehicle_models?.Inne || ["Inny"])} 
+                        onChange={(val) => handleChange('model', val)} 
+                        placeholder={v.make ? "Szukaj modelu..." : "Najpierw wybierz markę"}
+                        disabled={!v.make}
                     />
 
                     <FormField 
                         label="Rok produkcji" 
                         value={v.year} 
                         onChange={(val) => handleChange('year', val)} 
-                        placeholder="2020" 
+                        placeholder="2024" 
                         type="number" 
                         min={1970}
                     />
-                    <FormField label="Kolor (tekst)" value={v.color} onChange={(val) => handleChange('color', val)} placeholder="np. Czarny Metallic" />
+                    <SmartDropdown 
+                        label="Kolor" 
+                        value={v.color} 
+                        options={metadata?.colors || COLORS} 
+                        onChange={(val) => handleChange('color', val)} 
+                        placeholder="Wybierz kolor"
+                    />
                     <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" />
                     <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" />
                     <FormField label="Moc (KM)" value={v.enginePower} onChange={(val) => handleChange('enginePower', val)} placeholder="np. 150" type="number" />
@@ -156,16 +171,16 @@ export function VehicleDataStep() {
                     <SmartDropdown 
                         label="Rodzaj paliwa" 
                         value={v.fuelType} 
-                        options={metadata.fuel_type || []} 
-                        onChange={(v) => handleChange('fuelType', v)} 
+                        options={metadata?.fuel_types || FUEL_TYPES} 
+                        onChange={(val) => handleChange('fuelType', val)} 
                         placeholder="Wybierz paliwo"
                     />
 
                     <SmartDropdown 
                         label="Typ nadwozia" 
                         value={v.bodyType} 
-                        options={metadata.body_type || []} 
-                        onChange={(v) => handleChange('bodyType', v)} 
+                        options={metadata?.body_types || BODY_TYPES} 
+                        onChange={(val) => handleChange('bodyType', val)} 
                         placeholder="Wybierz nadwozie"
                     />
 
@@ -174,23 +189,37 @@ export function VehicleDataStep() {
                     <SmartDropdown 
                         label="Skrzynia biegów" 
                         value={v.gearboxType} 
-                        options={metadata.gearbox_type || []} 
-                        onChange={(v) => handleChange('gearboxType', v)} 
+                        options={metadata?.gearbox_types || GEARBOX_TYPES} 
+                        onChange={(val) => handleChange('gearboxType', val)} 
                         placeholder="Wybierz skrzynię"
                     />
 
                     <SmartDropdown 
                         label="Napęd" 
                         value={v.driveType} 
-                        options={metadata.drive_type || []} 
-                        onChange={(v) => handleChange('driveType', v)} 
+                        options={metadata?.drive_types || DRIVE_TYPES} 
+                        onChange={(val) => handleChange('driveType', val)} 
                         placeholder="Wybierz napęd"
                     />
                     
                     <FormField label="Masa własna (kg)" value={v.ownWeight} onChange={(val) => handleChange('ownWeight', val)} placeholder="np. 1500" type="number" />
                     <FormField label="Masa całkowita (kg)" value={v.totalWeight} onChange={(val) => handleChange('totalWeight', val)} placeholder="np. 2000" type="number" />
-                    <FormField label="Liczba miejsc" value={v.seatsCount} onChange={(val) => handleChange('seatsCount', val)} placeholder="5" type="number" />
-                    <FormField label="Liczba drzwi" value={v.doorsCount} onChange={(val) => handleChange('doorsCount', val)} placeholder="5" type="number" />
+                    
+                    <SmartDropdown 
+                        label="Liczba miejsc" 
+                        value={v.seatsCount} 
+                        options={metadata?.seats_options || SEATS_OPTIONS} 
+                        onChange={(val) => handleChange('seatsCount', val)} 
+                        placeholder="Wybierz..."
+                    />
+
+                    <SmartDropdown 
+                        label="Liczba drzwi" 
+                        value={v.doorsCount} 
+                        options={metadata?.doors_options || DOORS_OPTIONS} 
+                        onChange={(val) => handleChange('doorsCount', val)} 
+                        placeholder="Wybierz..."
+                    />
                 </div>
             </div>
         </div>

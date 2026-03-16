@@ -16,6 +16,7 @@ interface SmartDropdownProps {
     onChange: (value: string) => void;
     placeholder?: string;
     allowCustom?: boolean;
+    disabled?: boolean;
 }
 
 export function SmartDropdown({
@@ -24,7 +25,8 @@ export function SmartDropdown({
     options,
     onChange,
     placeholder = "Wybierz...",
-    allowCustom = true
+    allowCustom = true,
+    disabled = false
 }: SmartDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -63,12 +65,14 @@ export function SmartDropdown({
             
             <button
                 type="button"
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                disabled={disabled}
                 className={cn(
                     "w-full py-4 px-4 pr-10 rounded-2xl border-2 transition-all flex items-center justify-between text-left",
                     isOpen 
                         ? "border-primary bg-surface shadow-lg shadow-primary/10" 
-                        : "border-border bg-surface"
+                        : "border-border bg-surface",
+                    disabled && "opacity-50 cursor-not-allowed bg-surface-raised"
                 )}
             >
                 <span className={cn(
