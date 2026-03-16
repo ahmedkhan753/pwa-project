@@ -204,6 +204,7 @@ class MechanicalCheck(BaseModel):
     power_steering_level: Optional[Any] = None
     warning_lights: Optional[Any] = None
     mechanical_json: Optional[Any] = None
+    notes: Optional[str] = None
     extra_data: Optional[Dict[str, Any]] = None
 
 
@@ -255,6 +256,7 @@ class TireData(BaseModel):
     tire_rr_width: Optional[Any] = None
     tire_rr_depth: Optional[Any] = None
     tire_rr_type: Optional[Any] = None
+    notes: Optional[str] = None
     extra_data: Optional[Dict[str, Any]] = None
 
 
@@ -311,6 +313,7 @@ class InteriorAssessment(BaseModel):
     damage_group_4: Optional[Any] = None
     damage_group_5: Optional[Any] = None
     interior_damage_json: Optional[Any] = None
+    notes: Optional[str] = None
     extra_data: Optional[Dict[str, Any]] = None
 
 

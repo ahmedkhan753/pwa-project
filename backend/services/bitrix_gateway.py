@@ -485,7 +485,7 @@ class BitrixGateway:
                 break
 
         # Requirement 6: Log every fetch
-        logger.info(f"Bitrix returned {total_in_bitrix} total deals for appraiser {user_id}")
+        logger.info(f"Total deals fetched from Bitrix: {total_in_bitrix}")
         
         # Requirement 3: Filtering
         from datetime import datetime
