@@ -138,15 +138,21 @@ class BitrixGateway:
             return str(result["ID"])
         return None
 
-    async def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    async def call(
+        self, 
+        method: str, 
+        params: Optional[Dict[str, Any]] = None, 
+        return_raw: bool = False
+    ) -> Any:
         """
-        Make a POST request to {webhook_url}/{method}.
-        Handles retries on 5xx, raises typed exceptions on 4xx.
-        Returns the 'result' portion of the Bitrix response.
+        Make an async call to Bitrix24 REST API with robust retries, 
+        logging, and error handling.
         """
-        url = f"{self.webhook_url}/{method}"
-        params = params or {}
-        client = await self._get_client()
+        if not self.webhook_url:
+            raise BitrixAuthError("Bitrix24 webhook URL not configured")
+
+        url = f"{self.webhook_url.rstrip('/')}/{method}"
+        client = httpx.AsyncClient(timeout=30.0) # Requirement: 30s timeout
 
         last_error = None
         for attempt in range(1, self._max_retries + 1):
@@ -154,6 +160,8 @@ class BitrixGateway:
             try:
                 response = await client.post(url, json=params)
                 elapsed = time.time() - start_time
+                
+                # Part 7 Item 4: Response time logging
                 logger.info(
                     f"Bitrix24 {method} — {response.status_code} — "
                     f"{elapsed:.2f}s (attempt {attempt})"
@@ -162,10 +170,11 @@ class BitrixGateway:
                 # Parse response
                 data = response.json()
 
-                # Bitrix24 returns errors inside the JSON body
+                # Bitrix24 returns errors inside the JSON body (Part 6 Item 5)
                 if "error" in data:
                     error_code = data.get("error", "")
                     error_desc = data.get("error_description", str(data))
+                    logger.error(f"Bitrix error: {error_code} - {error_desc}")
                     self._raise_typed_error(error_code, error_desc, data)
 
                 # HTTP-level errors
@@ -177,6 +186,8 @@ class BitrixGateway:
                 if response.status_code >= 400:
                     response.raise_for_status()
 
+                if return_raw:
+                    return data
                 return data.get("result")
 
             except (BitrixAuthError, BitrixScopeError, BitrixNotFoundError):
@@ -249,10 +260,10 @@ class BitrixGateway:
 
     async def get_deal(self, deal_id: int) -> dict:
         """
-        Fetch a single CRM deal with all its fields.
+        Fetch a single CRM deal with all its fields. (Part 2 Item 2)
         Returns a dict with translated PWA field names.
         """
-        result = await self.call("crm.deal.get", {"ID": deal_id})
+        result = await self.call("crm.deal.get", {"ID": deal_id, "select": ["*", "UF_*"]})
         if not result:
             raise BitrixNotFoundError(f"Deal {deal_id} not found")
 
@@ -415,34 +426,107 @@ class BitrixGateway:
         user_id: int,
         date_from: str,
         date_to: str = None,
-    ) -> list:
+    ) -> dict:
         """
-        Fetch deals assigned to a specific appraiser from a given date.
-        Uses the dynamically discovered "appraiser_mobile" field ID.
+        Fetch ALL deals assigned to a specific appraiser and filter in Python. (Part 1)
         """
-        # Resolve the appraiser field dynamically
-        appraiser_field = None
+        # Requirement 2: Select specific fields
+        SCHEDULED_FIELD = "UF_CRM_1772108256983"
+        
+        select_fields = [
+            "ID", "TITLE", "STAGE_ID", "TYPE_ID", "CATEGORY_ID",
+            "ASSIGNED_BY_ID", "BEGINDATE", "CLOSEDATE",
+            "DATE_CREATE", "DATE_MODIFY",
+            SCHEDULED_FIELD,
+            "UF_CRM_1766057515315", # registration number
+            "UF_CRM_1766057539531", # VIN
+            "UF_CRM_1766057839684", # brand/make
+            "UF_CRM_1766057849818", # model
+            "UF_CRM_1771579888",     # appraiser
+            "UF_CRM_1766057686053"  # internal order number
+        ]
+
+        # Use appraiser field from discovery or fallback
+        appraiser_field = "UF_CRM_1771579888"
         if self.discovery:
-            appraiser_field = self.discovery.get_field_id("appraiser_mobile")
+            field_id = self.discovery.get_field_id("appraiser_mobile")
+            if field_id: appraiser_field = field_id
 
-        filters = {}
-        if appraiser_field:
-            filters[appraiser_field] = user_id
-        filters[">=BEGINDATE"] = date_from
-        if date_to:
-            filters["<=BEGINDATE"] = date_to
+        # Requirement 3: Filter in Python, NOT in Bitrix params for date
+        filters = {appraiser_field: user_id}
+        
+        # Requirement 1: Pagination (fetch ALL)
+        all_deals = []
+        start = 0
+        total_in_bitrix = 0
+        
+        while True:
+            params = {
+                "filter": filters,
+                "select": select_fields,
+                "start": start
+            }
+            data = await self.call("crm.deal.list", params, return_raw=True)
+            if not data: break
+            
+            batch = data.get("result", [])
+            total_in_bitrix = data.get("total", 0)
+            
+            if isinstance(batch, list):
+                all_deals.extend(batch)
+                if len(all_deals) >= total_in_bitrix or len(batch) < 50:
+                    break
+                start += 50
+            else:
+                break
+            
+            if start >= 5000: 
+                logger.warning("Pagination safety cap reached (5000)")
+                break
 
-        deals = await self.get_deal_list(filters)
+        # Requirement 6: Log every fetch
+        logger.info(f"Bitrix returned {total_in_bitrix} total deals for appraiser {user_id}")
+        
+        # Requirement 3: Filtering
+        from datetime import datetime
+        def parse_bitrix_date(d_str):
+            if not d_str: return None
+            try:
+                clean = d_str.replace(' ', 'T').split('+')[0].replace('Z', '')
+                return datetime.fromisoformat(clean).date()
+            except Exception as e:
+                # Log error as per Requirement 3
+                logger.error(f"Date parsing failed for {d_str}: {e}")
+                return None
 
-        # Return simplified list with key fields only
+        target_date = parse_bitrix_date(date_from)
+        
+        scheduled = []
+        unscheduled = []
+        
+        for d in all_deals:
+            d_sched = parse_bitrix_date(d.get(SCHEDULED_FIELD))
+            d_begin = parse_bitrix_date(d.get("BEGINDATE"))
+            
+            deal_date = d_sched or d_begin
+            
+            if not deal_date:
+                unscheduled.append(d)
+            elif target_date and deal_date == target_date:
+                scheduled.append(d)
+        
+        logger.info(f"After filter: {len(scheduled)} scheduled, {len(unscheduled)} unscheduled")
+        
+        # Transform results
         from services.field_transformer import FieldTransformer
         transformer = FieldTransformer(self.discovery)
-
-        results = []
-        for deal in deals:
-            translated = transformer.transform_from_bitrix(deal)
-            results.append(translated)
-        return results
+        
+        return {
+            "scheduled": [transformer.transform_from_bitrix(d) for d in scheduled],
+            "unscheduled": [transformer.transform_from_bitrix(d) for d in unscheduled],
+            "total_in_bitrix": total_in_bitrix,
+            "total_returned": len(scheduled) + len(unscheduled)
+        }
 
     async def get_deal_list(self, filters: dict = None) -> list:
         """
