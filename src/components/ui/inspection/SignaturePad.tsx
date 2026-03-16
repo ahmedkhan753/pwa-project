@@ -44,12 +44,12 @@ export function SignaturePad({ label, value, onSave, disabled }: SignaturePadPro
                 )}
             </div>
 
-            <div className="signature-canvas-wrapper border-2 border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden bg-white dark:bg-slate-950 relative group">
+            <div className="signature-canvas-wrapper border-2 border-border rounded-[2rem] overflow-hidden bg-surface relative group">
                 {/* Background Grid for better UX */}
                 {!value && (
-                    <div className="absolute inset-0 grid grid-cols-12 grid-rows-6 opacity-[0.03] pointer-events-none">
+                    <div className="absolute inset-0 grid grid-cols-12 grid-rows-6 opacity-[0.05] pointer-events-none">
                         {Array.from({ length: 72 }).map((_, i) => (
-                            <div key={i} className="border-[0.5px] border-slate-900 dark:border-white"></div>
+                            <div key={i} className="border-[0.5px] border-foreground"></div>
                         ))}
                     </div>
                 )}

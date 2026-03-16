@@ -76,9 +76,9 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         <div 
             onClick={!isScheduling ? handleStart : undefined}
             className={cn(
-                "group relative bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-2 rounded-[2.5rem] p-6 shadow-xl dark:shadow-2xl transition-all duration-500",
-                !isScheduling && "hover:border-blue-500/30 active:scale-[0.98] cursor-pointer",
-                job.hasConflict ? "border-red-500/50 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]" : "border-slate-200 dark:border-slate-800"
+                "group relative bg-surface-glass backdrop-blur-xl border-2 rounded-[2.5rem] p-6 shadow-xl dark:shadow-2xl transition-all duration-500",
+                !isScheduling && "hover:border-primary/30 active:scale-[0.98] cursor-pointer",
+                job.hasConflict ? "border-danger/50 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]" : "border-border"
             )}
         >
             {/* Conflict Warning Badge */}
@@ -105,8 +105,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 <div className={cn(
                     "flex items-center gap-1.5 font-mono text-xs px-3 py-1.5 rounded-xl border transition-colors",
                     job.hasConflict 
-                        ? "bg-red-500/10 text-red-500 border-red-500/30" 
-                        : "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/50"
+                        ? "bg-danger-light text-danger border-danger/30" 
+                        : "text-muted bg-surface-raised border-border/50"
                 )}>
                     <Clock className="w-3.5 h-3.5" />
                     {job.scheduledDate ? new Date(job.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '??:??'}
@@ -115,12 +115,12 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
             {/* Vehicle Info */}
             <div className="mb-6">
-                <h3 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors uppercase leading-none mb-2">
+                <h3 className="text-3xl font-black tracking-tighter text-foreground group-hover:text-primary transition-colors uppercase leading-none mb-2">
                     {job.plates}
                 </h3>
                 <div className="flex items-center gap-2">
-                    <Car className="w-4 h-4 text-blue-500" />
-                    <p className="text-slate-500 dark:text-slate-400 text-sm font-bold uppercase tracking-tight">
+                    <Car className="w-4 h-4 text-primary" />
+                    <p className="text-muted text-sm font-bold uppercase tracking-tight">
                         {job.make} {job.model}
                     </p>
                 </div>
@@ -128,35 +128,35 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
             {/* Scheduling UI OR Info */}
             {isScheduling ? (
-                <div className="bg-blue-50/50 dark:bg-blue-900/20 rounded-[1.5rem] p-4 border border-blue-100 dark:border-blue-800/50 mb-6 space-y-4 animate-in fade-in slide-in-from-bottom-2" onClick={e => e.stopPropagation()}>
+                <div className="bg-primary-light/50 rounded-[1.5rem] p-4 border border-primary/20 mb-6 space-y-4 animate-in fade-in slide-in-from-bottom-2" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-2 mb-1">
-                        <Clock className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Zaplanuj Oględziny</h4>
+                        <Clock className="w-4 h-4 text-primary" />
+                        <h4 className="text-[10px] font-black text-primary uppercase tracking-widest">Zaplanuj Oględziny</h4>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Data</label>
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest ml-1">Data</label>
                             <input 
                                 type="date" 
                                 value={selectedDate}
                                 onChange={e => setSelectedDate(e.target.value)}
-                                className="w-full bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold focus:border-blue-500 outline-none"
+                                className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-xs font-bold focus:border-primary outline-none"
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Godzina</label>
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest ml-1">Godzina</label>
                             <input 
                                 type="time" 
                                 value={selectedTime}
                                 onChange={e => setSelectedTime(e.target.value)}
-                                className="w-full bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold focus:border-blue-500 outline-none"
+                                className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-xs font-bold focus:border-primary outline-none"
                             />
                         </div>
                     </div>
 
                     {error && (
-                        <div className="flex items-center gap-2 text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-800/50">
+                        <div className="flex items-center gap-2 text-danger bg-danger-light p-2 rounded-lg border border-danger/10">
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span className="text-[10px] font-bold">{error}</span>
                         </div>
@@ -165,7 +165,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     <button
                         onClick={onConfirmSchedule}
                         disabled={isSubmitting}
-                        className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-50"
+                        className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50"
                     >
                         {isSubmitting ? 'Zapisywanie...' : 'Zatwierdź i Rozpocznij'}
                     </button>
@@ -173,7 +173,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     {job.scheduledDate && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); setIsScheduling(false); }}
-                            className="w-full text-[10px] font-black text-slate-400 uppercase hover:text-slate-600"
+                            className="w-full text-[10px] font-black text-muted uppercase hover:text-foreground"
                         >
                             Anuluj
                         </button>
@@ -181,10 +181,10 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-3 mb-6">
-                    <div className="flex items-start gap-3 text-slate-500 text-xs bg-slate-50 dark:bg-slate-800/20 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/50">
-                        <MapPin className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-3 text-muted text-xs bg-surface-raised p-3 rounded-2xl border border-border/50">
+                        <MapPin className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                         <div>
-                            <p className="font-black text-slate-900 dark:text-white uppercase text-[10px] mb-0.5">Lokalizacja</p>
+                            <p className="font-black text-foreground uppercase text-[10px] mb-0.5">Lokalizacja</p>
                             <span className="font-medium">{job.city || 'Lokalizacja nieznana'}</span>
                         </div>
                     </div>
@@ -196,23 +196,23 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 <div className="grid grid-cols-3 gap-2">
                     <button
                         onClick={handleCall}
-                        className="flex flex-col items-center justify-center gap-1.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-800 py-4 rounded-3xl transition-all"
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
                     >
-                        <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Dzwoń</span>
+                        <Phone className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
                     </button>
                     <button
                         onClick={handleNavigate}
-                        className="flex flex-col items-center justify-center gap-1.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-800 py-4 rounded-3xl transition-all"
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
                     >
-                        <Navigation className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Jedź</span>
+                        <Navigation className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
                     </button>
                     <button
                         onClick={(e) => { e.stopPropagation(); handleStart(); }}
                         className={cn(
                             "flex flex-col items-center justify-center gap-1.5 py-4 rounded-3xl transition-all shadow-xl active:scale-95",
-                            isInProgress ? "bg-orange-500 hover:bg-orange-600 shadow-orange-500/30" : "bg-blue-600 hover:bg-blue-500 shadow-blue-500/30"
+                            isInProgress ? "bg-accent hover:bg-accent-hover shadow-accent/30" : "bg-primary hover:bg-primary-hover shadow-primary/30"
                         )}
                     >
                         <Play className="w-5 h-5 fill-current text-white" />

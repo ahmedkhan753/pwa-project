@@ -34,9 +34,9 @@ export function PhotosStep() {
             </div>
 
             {/* Progress */}
-            <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-surface-raised h-2 rounded-full overflow-hidden">
                 <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-primary to-success rounded-full transition-all duration-500"
                     style={{ width: `${(filledCount / photos.length) * 100}%` }}
                 />
             </div>
@@ -46,8 +46,8 @@ export function PhotosStep() {
 
             {/* Required Photos */}
             <div className="section-card">
-                <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <h4 className="text-xs font-bold text-warning uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
                     📸 Wymagane ({requiredFilledCount}/{required.length})
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
@@ -65,8 +65,8 @@ export function PhotosStep() {
             </div>
 
             {/* Documents Section (D1-D5) */}
-            <div className="section-card border-l-4 border-l-blue-500">
-                <h4 className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">
+            <div className="section-card border-l-4 border-l-primary/50">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3">
                     📄 Dokumenty (D1-D5)
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
@@ -106,7 +106,7 @@ export function PhotosStep() {
 
             {/* Extra Slots */}
             <div className="section-card opacity-60">
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                <h4 className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
                     ➕ Dodatkowe sloty
                 </h4>
                 <div className="grid grid-cols-3 gap-2">

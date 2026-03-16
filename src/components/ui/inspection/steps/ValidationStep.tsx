@@ -54,10 +54,10 @@ export function ValidationStep() {
                 )}>
                     {isReady ? <CheckCircle2 size={32} className="text-white" /> : <AlertTriangle size={32} className="text-white" />}
                 </div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                <h3 className="text-2xl font-black text-foreground uppercase tracking-tight">
                     {isReady ? "Wszystko Gotowe!" : "Wykryto Braki"}
                 </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-[200px] mx-auto font-medium">
+                <p className="text-sm text-muted max-w-[200px] mx-auto font-medium">
                     {isReady 
                         ? "Protokół jest kompletny i gotowy do podpisania." 
                         : "Uzupełnij poniższe dane przed wysłaniem raportu."}
@@ -69,24 +69,24 @@ export function ValidationStep() {
                     <button
                         key={idx}
                         onClick={() => setStep(err.step)}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all hover:border-amber-500/50 group"
+                        className="w-full bg-surface border border-border rounded-3xl p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all hover:border-accent/50 group"
                     >
-                        <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 flex-shrink-0">
+                        <div className="w-12 h-12 rounded-2xl bg-warning-light flex items-center justify-center text-warning flex-shrink-0">
                             {err.step === 6 ? <Camera size={20} /> : err.step === 1 ? <ClipboardList size={20} /> : <FileText size={20} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-0.5">{err.category}</p>
-                            <h4 className="font-black text-sm text-slate-900 dark:text-white truncate">{err.label}</h4>
-                            {err.details && <p className="text-[10px] text-slate-400 truncate font-bold">{err.details}</p>}
+                            <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-0.5">{err.category}</p>
+                            <h4 className="font-black text-sm text-foreground truncate">{err.label}</h4>
+                            {err.details && <p className="text-[10px] text-muted truncate font-bold">{err.details}</p>}
                         </div>
-                        <ChevronRight size={18} className="text-slate-300 group-hover:text-amber-500" />
+                        <ChevronRight size={18} className="text-muted/40 group-hover:text-accent" />
                     </button>
                 ))}
 
                 {isReady && (
                     <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-3xl p-8 text-center space-y-4">
                         <CheckCircle2 size={40} className="text-emerald-500 mx-auto" />
-                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        <p className="text-sm font-bold text-success">
                             Walidacja przebiegła pomyślnie. Możesz przejść do składania podpisów.
                         </p>
                     </div>
@@ -94,8 +94,8 @@ export function ValidationStep() {
             </div>
 
             {!isReady && (
-                <div className="p-4 bg-slate-100 dark:bg-slate-800/50 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800">
-                    <p className="text-[10px] text-slate-400 font-bold text-center uppercase leading-normal">
+                <div className="p-4 bg-surface-raised rounded-2xl border-2 border-dashed border-border">
+                    <p className="text-[10px] text-muted font-bold text-center uppercase leading-normal">
                         Kliknij w brakujący element, aby szybko przejść do odpowiedniego kroku inspekcji.
                     </p>
                 </div>

@@ -75,7 +75,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden transition-colors duration-300">
             {/* ── Header ─────────────────────────────────────── */}
-            <header className="sticky top-0 z-30 bg-white dark:bg-slate-950 text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
+            <header className="sticky top-0 z-30 bg-surface dark:bg-background/80 backdrop-blur-lg text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
                     <div>
                         <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
@@ -108,14 +108,14 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                         </div>
                         <button
                             onClick={() => selectJob(null)}
-                            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500 dark:text-slate-400"
+                            className="p-1.5 hover:bg-surface-raised rounded-lg transition-colors text-muted hover:text-foreground"
                             title="Dashboard"
                         >
                             <Home size={18} />
                         </button>
                         <button
                             onClick={logout}
-                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors text-red-500 dark:text-red-400"
+                            className="p-1.5 hover:bg-danger-light rounded-lg transition-colors text-danger/70 hover:text-danger"
                             title="Wyloguj"
                         >
                             <LogOut size={18} />
@@ -160,8 +160,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     className={cn(
                         "flex-1 py-5 px-6 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.95]",
                         currentStep === 1
-                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
-                            : "bg-white border-2 border-slate-200 text-slate-700 hover:border-primary/50 shadow-sm"
+                            ? "bg-muted/10 text-muted/30 cursor-not-allowed"
+                            : "bg-surface border-2 border-border text-foreground hover:border-primary/50 shadow-sm"
                     )}
                 >
                     <ChevronLeft size={20} className="stroke-[3]" />
