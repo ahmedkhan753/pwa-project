@@ -304,7 +304,9 @@ interface InspectionState {
   };
   // Jobs
   jobs: {
-    list: InspectionJob[];
+    scheduled: InspectionJob[];
+    unscheduled: InspectionJob[];
+    totalInBitrix: number;
     currentJobId: string | null;
     loading: boolean;
     error: string | null;
@@ -524,7 +526,9 @@ export const useInspectionStore = create<InspectionState>()(
         currentUserName: null,
       },
       jobs: {
-        list: [],
+        scheduled: [],
+        unscheduled: [],
+        totalInBitrix: 0,
         currentJobId: null,
         loading: false,
         error: null,
@@ -568,7 +572,14 @@ export const useInspectionStore = create<InspectionState>()(
             currentUserId: null,
             currentUserName: null,
           },
-          jobs: { list: [], currentJobId: null, loading: false, error: null },
+          jobs: { 
+            scheduled: [], 
+            unscheduled: [], 
+            totalInBitrix: 0,
+            currentJobId: null, 
+            loading: false, 
+            error: null 
+          },
           calendar: {
             selectedDate: new Date().toISOString().split('T')[0],
             expanded: false,
@@ -647,8 +658,17 @@ export const useInspectionStore = create<InspectionState>()(
       setJobsLoading: (loading) =>
         set((state) => ({ jobs: { ...state.jobs, loading } })),
 
-      setJobs: (list) =>
-        set((state) => ({ jobs: { ...state.jobs, list, loading: false, error: null } })),
+      setJobs: (scheduled, unscheduled, total) =>
+        set((state) => ({ 
+          jobs: { 
+            ...state.jobs, 
+            scheduled, 
+            unscheduled, 
+            totalInBitrix: total || (scheduled.length + unscheduled.length),
+            loading: false, 
+            error: null 
+          } 
+        })),
 
       setJobsError: (error) =>
         set((state) => ({ jobs: { ...state.jobs, error, loading: false } })),
@@ -670,7 +690,7 @@ export const useInspectionStore = create<InspectionState>()(
             };
           }
 
-          const job = state.jobs.list.find((j) => j.id === jobId);
+          const job = [...state.jobs.scheduled, ...state.jobs.unscheduled].find((j) => j.id === jobId);
           if (!job) return state;
 
           // Load from drafts or pre-fill Step 1
@@ -714,7 +734,12 @@ export const useInspectionStore = create<InspectionState>()(
         set((state) => ({
           jobs: {
             ...state.jobs,
-            list: state.jobs.list.map((j) =>
+            scheduled: state.jobs.scheduled.map((j) =>
+              j.id === dealId
+                ? { ...j, scheduledDate: isoDate, hasConflict: response.conflict }
+                : j
+            ),
+            unscheduled: state.jobs.unscheduled.map((j) =>
               j.id === dealId
                 ? { ...j, scheduledDate: isoDate, hasConflict: response.conflict }
                 : j
@@ -827,7 +852,19 @@ export const useInspectionStore = create<InspectionState>()(
         })),
 
       // ── Reset ──
-      reset: () => set({ currentStep: 1, maxVisitedStep: 1, data: initialData }),
+      reset: () => set({ 
+        currentStep: 1, 
+        maxVisitedStep: 1, 
+        data: initialData,
+        jobs: {
+          scheduled: [],
+          unscheduled: [],
+          totalInBitrix: 0,
+          currentJobId: null,
+          loading: false,
+          error: null
+        }
+      }),
 
       // ── Bitrix Sync Actions ──
 
@@ -934,24 +971,35 @@ export const useInspectionStore = create<InspectionState>()(
         set((s) => ({ jobs: { ...s.jobs, loading: true, error: null } }));
         try {
           const auth = useInspectionStore.getState().auth;
-          const deals = await inspectionApi.fetchDeals(date, date, auth.currentUserId?.toString());
-          // Transform internal format if needed, but the router already translates fields
+          const res = await inspectionApi.fetchDeals(date, date, auth.currentUserId?.toString());
+          
+          // Handle both old flat array and new grouped object as requested in FIX 1
+          const scheduledRaw = Array.isArray(res) ? res : (res.scheduled || []);
+          const unscheduledRaw = Array.isArray(res) ? [] : (res.unscheduled || []);
+          const totalInBitrix = Array.isArray(res) ? res.length : (res.total_in_bitrix || 0);
+
+          const transform = (d: any) => ({
+            id: String(d.id),
+            clientName: d.client_name || d.TITLE || 'Brak nazwy',
+            vin: d.vin || '',
+            plates: d.registration_number || '',
+            phone: d.client_phone || '',
+            appointmentTime: d.appointment_time || '09:00',
+            deadline: date,
+            status: (d.STAGE_ID === 'WON' || d.STAGE_ID === 'FINAL') ? 'completed' : 'ready',
+            make: d.vehicle_brand || '',
+            model: d.vehicle_model || '',
+            city: d.inspection_place || '',
+            jobType: d.job_type || 'WYCENA',
+            scheduledDate: d.scheduled_date
+          });
+
           set((s) => ({
             jobs: {
               ...s.jobs,
-              list: deals.map((d: any) => ({
-                id: String(d.id),
-                clientName: d.client_name || d.TITLE || 'Brak nazwy',
-                vin: d.vin || '',
-                plates: d.registration_number || '',
-                phone: d.client_phone || '',
-                appointmentTime: '09:00', // Default if not in deal
-                deadline: date,
-                status: (d.STAGE_ID === 'WON' || d.STAGE_ID === 'FINAL') ? 'completed' : 'ready',
-                make: d.vehicle_brand || '',
-                model: d.vehicle_model || '',
-                city: d.inspection_place || ''
-              })),
+              scheduled: scheduledRaw.map(transform),
+              unscheduled: unscheduledRaw.map(transform),
+              totalInBitrix: totalInBitrix,
               loading: false
             }
           }));

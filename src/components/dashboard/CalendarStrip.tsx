@@ -37,8 +37,7 @@ export const CalendarStrip: React.FC = () => {
 
     const hasTasks = (date: Date) => {
         const isoString = date.toISOString().split('T')[0];
-        // This is simplified; in a real app, we'd check a task map or cache
-        return jobs.list.some(job => job.deadline === isoString);
+        return [...jobs.scheduled, ...jobs.unscheduled].some(job => job.deadline === isoString);
     };
 
     const formatDate = (date: Date) => {

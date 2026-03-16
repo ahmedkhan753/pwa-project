@@ -292,7 +292,7 @@ async def login(request_body: LoginRequest):
             user_data = {
                 "id": "1",
                 "email": request_body.email,
-                "name": "Testing (Mateusz) - Real Bitrix Mode",
+                "name": "Appraiser",
                 "bitrixId": "1",
             }
         else:
@@ -307,7 +307,7 @@ async def login(request_body: LoginRequest):
         user_data = {
             "id": "1",
             "email": request_body.email,
-            "name": "Testing (Mateusz) - Fallback",
+            "name": "Appraiser",
             "bitrixId": "1",
         }
 

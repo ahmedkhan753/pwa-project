@@ -75,8 +75,7 @@ export const Dashboard: React.FC = () => {
         touchStartRef.current = 0;
     };
 
-    // Filter jobs by selected date (though API should handle it, client filter is safer)
-    const filteredJobs = jobs.list.filter(job => job.deadline === calendar.selectedDate);
+    // Unified fetch logic
 
     return (
         <div 
@@ -103,7 +102,7 @@ export const Dashboard: React.FC = () => {
 
             {/* Premium Header */}
             <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-2xl border-b border-border transition-colors duration-300">
-                <div className="flex items-center justify-between max-w-2xl mx-auto w-full">
+                <div className="flex items-center justify-between max-w-2xl mx-auto w-full px-6 py-4">
                     <div className="flex items-center gap-4">
                         <div className="relative">
                             <div className="w-12 h-12 rounded-2xl bg-black flex items-center justify-center border border-border/50 shadow-sm p-1 overflow-visible">
@@ -116,7 +115,7 @@ export const Dashboard: React.FC = () => {
                             </h2>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                                <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Online Appraiser</span>
+                                <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Plan dnia: {jobs.totalInBitrix} zleceń</span>
                             </div>
                         </div>
                     </div>
@@ -152,10 +151,10 @@ export const Dashboard: React.FC = () => {
                 </section>
 
                 <div className="flex items-center justify-between px-1">
-                    <h3 className="text-xl font-black tracking-tight flex items-center gap-3 text-foreground">
-                        Twoje Misje
-                        <span className="text-[10px] bg-primary-light text-primary px-2 py-0.5 rounded-full border border-primary/20">
-                            {filteredJobs.length}
+                    <h3 className="text-xl font-black tracking-tight flex items-center gap-3 text-foreground uppercase">
+                        Zlecenia na dziś
+                        <span className="text-[12px] bg-primary text-white px-2 py-0.5 rounded-lg border border-primary/20">
+                            {jobs.scheduled.length}
                         </span>
                     </h3>
                     <button 
@@ -168,41 +167,49 @@ export const Dashboard: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Job Feed */}
-                <div className="space-y-4 min-h-[300px]">
+                {/* Scheduled Jobs */}
+                <div className="space-y-4">
                     {jobs.loading ? (
                         <>
                             <SkeletonCard />
                             <SkeletonCard />
-                            <SkeletonCard />
                         </>
-                    ) : jobs.error ? (
-                        <div className="glass-card p-10 text-center border-danger/20 bg-danger-light">
-                            <p className="text-danger font-medium mb-6">{jobs.error}</p>
-                            <button
-                                onClick={fetchJobs}
-                                className="px-8 py-3 bg-danger hover:bg-danger/90 text-white rounded-2xl font-black text-sm uppercase transition-all shadow-lg shadow-danger/20 active:scale-95"
-                            >
-                                Spróbuj ponownie
-                            </button>
-                        </div>
-                    ) : filteredJobs.length === 0 ? (
-                        <div className="bg-surface-raised/30 border-2 border-dashed border-border rounded-[2.5rem] py-20 flex flex-col items-center justify-center text-center px-10">
-                            <div className="w-20 h-20 rounded-full bg-surface flex items-center justify-center mb-6 border border-border shadow-sm">
-                                <Search className="w-10 h-10 text-muted/50" />
-                            </div>
-                            <h4 className="text-lg font-bold text-foreground mb-2">Brak zleceń</h4>
-                            <p className="text-sm text-muted font-medium max-w-[200px]">
-                                Wygląda na to, że nie masz zaplanowanych misji na ten dzień.
-                            </p>
+                    ) : jobs.scheduled.length === 0 ? (
+                        <div className="bg-surface-raised/30 border border-dashed border-border rounded-2xl py-8 flex flex-col items-center justify-center text-center px-6">
+                            <p className="text-xs text-muted font-bold uppercase tracking-widest">Brak zaplanowanych misji</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-5 animate-fade-in [animation-delay:200ms]">
-                            {filteredJobs.map((job) => (
+                            {jobs.scheduled.map((job) => (
                                 <MissionCard key={job.id} job={job} />
                             ))}
                         </div>
                     )}
+                </div>
+
+                {/* Unscheduled / Waiting Section */}
+                <div className="pt-8">
+                    <h3 className="text-xl font-black tracking-tight flex items-center gap-3 text-foreground uppercase px-1 mb-6">
+                        Oczekujące / Inne
+                        <span className="text-[12px] bg-muted/20 text-muted px-2 py-0.5 rounded-lg border border-border">
+                            {jobs.unscheduled.length}
+                        </span>
+                    </h3>
+                    <div className="space-y-4">
+                        {jobs.loading ? (
+                            <SkeletonCard />
+                        ) : jobs.unscheduled.length === 0 ? (
+                            <div className="bg-surface-raised/10 border border-dashed border-border/50 rounded-2xl py-8 flex flex-col items-center justify-center text-center px-6 grayscale">
+                                <p className="text-[10px] text-muted/50 font-bold uppercase tracking-widest">Wszystkie misje są przypisane</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-5 animate-fade-in [animation-delay:300ms]">
+                                {jobs.unscheduled.map((job) => (
+                                    <MissionCard key={job.id} job={job} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </main>
 

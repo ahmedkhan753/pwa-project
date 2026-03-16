@@ -428,11 +428,9 @@ class BitrixGateway:
         date_to: str = None,
     ) -> dict:
         """
-        Fetch ALL deals assigned to a specific appraiser and filter in Python. (Part 1)
+        Fetch ALL deals from Bitrix and filter in Python with fallback logic. (Fix 2)
         """
-        # Requirement 2: Select specific fields
         SCHEDULED_FIELD = "UF_CRM_1772108256983"
-        
         select_fields = [
             "ID", "TITLE", "STAGE_ID", "TYPE_ID", "CATEGORY_ID",
             "ASSIGNED_BY_ID", "BEGINDATE", "CLOSEDATE",
@@ -442,7 +440,7 @@ class BitrixGateway:
             "UF_CRM_1766057539531", # VIN
             "UF_CRM_1766057839684", # brand/make
             "UF_CRM_1766057849818", # model
-            "UF_CRM_1771579888",     # appraiser
+            "UF_CRM_1771579888",     # appraiser_mobile
             "UF_CRM_1766057686053"  # internal order number
         ]
 
@@ -452,29 +450,26 @@ class BitrixGateway:
             field_id = self.discovery.get_field_id("appraiser_mobile")
             if field_id: appraiser_field = field_id
 
-        # Requirement 3: Filter in Python, NOT in Bitrix params for date
-        filters = {appraiser_field: user_id}
-        
-        # Requirement 1: Pagination (fetch ALL)
+        # Step 1: Fetch ALL deals (no user filter in Bitrix)
         all_deals = []
         start = 0
-        total_in_bitrix = 0
-        
         while True:
             params = {
-                "filter": filters,
+                "filter": {},  # NO filter in Bitrix for user/date
                 "select": select_fields,
+                "order": {"DATE_CREATE": "DESC"},
                 "start": start
             }
             data = await self.call("crm.deal.list", params, return_raw=True)
             if not data: break
             
             batch = data.get("result", [])
-            total_in_bitrix = data.get("total", 0)
+            total = data.get("total", 0)
             
             if isinstance(batch, list):
                 all_deals.extend(batch)
-                if len(all_deals) >= total_in_bitrix or len(batch) < 50:
+                logger.info(f"Fetched page: {len(batch)} deals ({len(all_deals)}/{total} total)")
+                if len(all_deals) >= total or not batch:
                     break
                 start += 50
             else:
@@ -484,36 +479,44 @@ class BitrixGateway:
                 logger.warning("Pagination safety cap reached (5000)")
                 break
 
-        # Requirement 6: Log every fetch
-        logger.info(f"Total deals fetched from Bitrix: {total_in_bitrix}")
+        # Requirement: Share this specific log line
+        logger.info(f"Total deals fetched from Bitrix: {len(all_deals)}")
         
-        # Requirement 3: Filtering
+        # Step 3: If user_id provided, filter in Python
+        if user_id:
+            user_filtered = [
+                d for d in all_deals
+                if str(d.get("ASSIGNED_BY_ID")) == str(user_id)
+                or str(d.get(appraiser_field, "")) == str(user_id)
+            ]
+            if user_filtered:
+                all_deals = user_filtered
+                logger.info(f"User filter applied: {len(all_deals)} deals for user {user_id}")
+            else:
+                logger.warning(f"User {user_id} has no assigned deals — showing ALL {len(all_deals)} deals as fallback")
+
+        # Split into scheduled vs unscheduled
         from datetime import datetime
         def parse_bitrix_date(d_str):
             if not d_str: return None
             try:
                 clean = d_str.replace(' ', 'T').split('+')[0].replace('Z', '')
                 return datetime.fromisoformat(clean).date()
-            except Exception as e:
-                # Log error as per Requirement 3
-                logger.error(f"Date parsing failed for {d_str}: {e}")
+            except:
                 return None
 
-        target_date = parse_bitrix_date(date_from)
+        # target_date = parse_bitrix_date(date_from) # We can still use this if we want to narrow down "scheduled"
         
         scheduled = []
         unscheduled = []
         
-        for d in all_deals:
-            d_sched = parse_bitrix_date(d.get(SCHEDULED_FIELD))
-            d_begin = parse_bitrix_date(d.get("BEGINDATE"))
-            
-            deal_date = d_sched or d_begin
-            
-            if not deal_date:
-                unscheduled.append(d)
-            elif target_date and deal_date == target_date:
-                scheduled.append(d)
+        for deal in all_deals:
+            # Logic: has scheduled date OR begin date = scheduled
+            has_date = deal.get(SCHEDULED_FIELD) or deal.get("BEGINDATE")
+            if has_date:
+                scheduled.append(deal)
+            else:
+                unscheduled.append(deal)
         
         logger.info(f"After filter: {len(scheduled)} scheduled, {len(unscheduled)} unscheduled")
         
@@ -524,8 +527,7 @@ class BitrixGateway:
         return {
             "scheduled": [transformer.transform_from_bitrix(d) for d in scheduled],
             "unscheduled": [transformer.transform_from_bitrix(d) for d in unscheduled],
-            "total_in_bitrix": total_in_bitrix,
-            "total_returned": len(scheduled) + len(unscheduled)
+            "total_in_bitrix": len(all_deals)
         }
 
     async def get_deal_list(self, filters: dict = None) -> list:
