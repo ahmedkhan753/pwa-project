@@ -55,7 +55,7 @@ export const mockApi = {
     date: string, 
     time: string
   ) {
-    await delay(800)
+    await new Promise(resolve => setTimeout(resolve, 500))
     // In mock mode just return success
     return { 
       success: true, 

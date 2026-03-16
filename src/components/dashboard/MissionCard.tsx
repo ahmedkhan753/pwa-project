@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { InspectionJob, useInspectionStore } from '@/store/useInspectionStore';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +11,7 @@ interface MissionCardProps {
 }
 
 export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
+    const router = useRouter();
     const { drafts, selectJob, scheduleJob } = useInspectionStore();
     const fetchFullDeal = useInspectionStore(state => state.fetchFullDeal);
     const setStep = useInspectionStore(state => state.setStep);
@@ -89,34 +91,43 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             return;
         }
         
-        setIsSubmitting(true);
-        setError(null);
-        const fullIso = `${selectedDate}T${selectedTime}:00`;
-
         try {
-            // Bug 1 Fix: Adding a timeout safety net
+            // 1. Set saving state
+            setIsSubmitting(true);
+            setError(null);
+            const fullIso = `${selectedDate}T${selectedTime}:00`;
+
+            // 2. Call store action with timeout protection
+            console.log(`[Schedule] Attempting to schedule deal ${job.id} for ${fullIso}`);
             const res: any = await Promise.race([
                 scheduleJob(job.id, fullIso),
                 new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Przekroczono czas oczekiwania (timeout)')), 5000)
+                    setTimeout(() => reject(new Error('Przekroczono czas oczekiwania (timeout 5s)')), 5000)
                 )
             ]);
             
             if (res.success) {
+                // 3. Success — update UI
                 setIsScheduledSuccessfully(true);
                 // Wait small delay to show success "Zaplanowano ✓"
                 await new Promise(resolve => setTimeout(resolve, 800));
+                
                 setIsScheduling(false);
-                // After scheduling, automatically start/fetch
+                setIsSubmitting(false);
+
+                // 4. Open Wizard by fetching deal data (which sets currentJobId)
+                // This is the SPA equivalent of router.push in this project
                 await handleStart();
             } else {
                 setError(res.message || "Błąd zapisu");
                 setIsSubmitting(false);
             }
         } catch (err: any) {
-            console.error("Schedule error:", err);
-            setError(err.message || "Wystąpił nieoczekiwany błąd");
+            // 5. Error — show message, stop spinner
+            console.error('Critical Schedule Error:', err);
+            setError(err.message || "Błąd zapisu. Spróbuj ponownie.");
             setIsSubmitting(false);
+            alert(`Błąd zapisu: ${err.message}. Spróbuj ponownie.`);
         }
     };
 
