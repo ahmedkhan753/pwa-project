@@ -21,4 +21,14 @@ services:
       - ./backend/.env
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    dns_search: []
     restart: always
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"

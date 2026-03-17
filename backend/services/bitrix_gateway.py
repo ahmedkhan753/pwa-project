@@ -94,6 +94,9 @@ class BitrixGateway:
                     max_connections=20,
                     max_keepalive_connections=10,
                 ),
+                transport=httpx.AsyncHTTPTransport(
+                    retries=3,
+                )
             )
         return self._client
 
@@ -152,7 +155,12 @@ class BitrixGateway:
             raise BitrixAuthError("Bitrix24 webhook URL not configured")
 
         url = f"{self.webhook_url.rstrip('/')}/{method}"
-        client = httpx.AsyncClient(timeout=30.0) # Requirement: 30s timeout
+        client = httpx.AsyncClient(
+            timeout=30.0,
+            transport=httpx.AsyncHTTPTransport(
+                retries=3,
+            )
+        )
 
         last_error = None
         for attempt in range(1, self._max_retries + 1):
