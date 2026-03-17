@@ -18,6 +18,7 @@ import logging
 import json
 
 # Load .env before any service imports
+import os
 load_dotenv()
 
 from services.bitrix_discovery import discovery
@@ -267,6 +268,15 @@ SECRET_KEY = "super-secret-key-change-me"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 
+MOCK_TEST_TOKEN = "mock_test_token_do_not_use_in_production"
+MOCK_TEST_USER = {
+    "id": "999",
+    "email": "tester@inspection.app",
+    "name": "Test Appraiser",
+    "role": "appraiser",
+    "bitrixId": "1"
+}
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -325,6 +335,17 @@ async def get_me(request: Request):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
     
     token = auth_header.split(" ")[1]
+
+    # Whitelist mock token for testing
+    if token == MOCK_TEST_TOKEN and os.getenv("ENABLE_MOCK_LOGIN") == "true":
+        logger.info("Mock login bypass activated")
+        return {
+            "id": MOCK_TEST_USER["id"],
+            "name": MOCK_TEST_USER["name"],
+            "email": MOCK_TEST_USER["email"],
+            "bitrix_id": MOCK_TEST_USER["bitrixId"]
+        }
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user = payload.get("user")

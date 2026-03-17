@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
 import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/ui/Logo';
@@ -13,8 +14,10 @@ export const LoginForm: React.FC = () => {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
 
     const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+    const ENABLE_MOCK_LOGIN = process.env.NEXT_PUBLIC_ENABLE_MOCK_LOGIN === 'true';
     
     // Auto-fill in demo mode
     React.useEffect(() => {
@@ -25,6 +28,7 @@ export const LoginForm: React.FC = () => {
     }, [DEMO_MODE]);
 
     const loginStore = useInspectionStore((state) => state.login);
+    const mockLogin = useInspectionStore((state) => state.mockLogin);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,6 +38,7 @@ export const LoginForm: React.FC = () => {
         try {
             const response = await api.login(email, password);
             loginStore(response.user.email, response.token, response.user);
+            router.push('/dashboard');
         } catch (err: any) {
             setError(err.message || 'Błąd logowania. Spróbuj ponownie.');
         } finally {
@@ -149,11 +154,29 @@ export const LoginForm: React.FC = () => {
                                     setTimeout(() => {
                                         const form = document.querySelector('form');
                                         form?.requestSubmit();
+                                        router.push('/dashboard');
                                     }, 100);
                                 }}
                                 className="w-full py-3 bg-surface-raised border border-border rounded-xl text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 transition-all text-center"
                             >
                                 Zaloguj jako Demo
+                            </button>
+                        )}
+
+                        {ENABLE_MOCK_LOGIN && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    mockLogin();
+                                    router.push('/dashboard');
+                                }}
+                                className="w-full mt-4 py-3 border-2 border-dashed border-warning/40 
+                                           text-warning rounded-2xl text-xs font-black uppercase 
+                                           tracking-widest hover:bg-warning/5 transition-all
+                                           flex items-center justify-center gap-2"
+                            >
+                                <span className="text-lg">🧪</span>
+                                Test Login (Real Data)
                             </button>
                         )}
                     </form>

@@ -326,6 +326,7 @@ interface InspectionState {
   setAuth: (auth: Partial<InspectionState['auth']>) => void;
   login: (email: string, token: string, user: AuthUser) => void;
   fetchMe: () => Promise<void>;
+  mockLogin: () => void;
   logout: () => void;
   // Job Actions
   setJobsLoading: (loading: boolean) => void;
@@ -558,10 +559,36 @@ export const useInspectionStore = create<InspectionState>()(
             user,
             loading: false,
             error: null,
-            currentUserId: null,
+            currentUserId: user.id ? Number(user.id) : null,
             currentUserName: user.name || 'Rzeczoznawca',
           },
         })),
+
+      mockLogin: () => {
+        const mockToken = "mock_test_token_do_not_use_in_production";
+        const mockUser = {
+          id: "999",
+          email: "tester@inspection.app",
+          name: "Test Appraiser",
+          role: "appraiser",
+          bitrixId: "1", // Use Bitrix ID 1 for real data fetching fallback
+        };
+        
+        set((state) => ({
+          auth: {
+            ...state.auth,
+            isAuthenticated: true,
+            token: mockToken,
+            user: mockUser,
+            currentUserId: null, // As requested: will fetch all deals
+            currentUserName: "Test Appraiser",
+          },
+        }));
+        
+        // Persist to localStorage for survival if not handled by persist middleware
+        // (Zustand persist handles the state, but mirroring for raw fetch if needed)
+        localStorage.setItem("auth_token", mockToken);
+      },
 
       logout: () =>
         set((state) => ({
@@ -592,12 +619,16 @@ export const useInspectionStore = create<InspectionState>()(
         })),
 
       fetchMe: async () => {
+        const token = useInspectionStore.getState().auth.token;
+        if (!token) return;
+
         try {
           const response = await api.getMe();
           if (response && response.id) {
             set((state) => ({
               auth: {
                 ...state.auth,
+                isAuthenticated: true,
                 currentUserId: Number(response.bitrix_id),
                 currentUserName: response.name || 'Rzeczoznawca'
               }
@@ -605,10 +636,15 @@ export const useInspectionStore = create<InspectionState>()(
           }
         } catch (error) {
           console.error("Failed to fetch current user:", error);
+          // If token is invalid, clear auth
           set((state) => ({
             auth: {
               ...state.auth,
-              currentUserName: state.auth.currentUserName || 'Rzeczoznawca'
+              isAuthenticated: false,
+              token: null,
+              user: null,
+              currentUserId: null,
+              currentUserName: null
             }
           }));
         }
@@ -618,25 +654,36 @@ export const useInspectionStore = create<InspectionState>()(
         set((state) => ({ jobs: { ...state.jobs, loading: true, error: null } }));
         try {
           const deal = await api.getDeal(dealId);
+          console.log('[fetchFullDeal] API response keys:', Object.keys(deal));
+          console.log('[fetchFullDeal] Full deal data:', JSON.stringify(deal, null, 2));
           set((state) => {
             const initial = JSON.parse(JSON.stringify(initialData));
-            // Merge deal data into vehicleData.basicInfo and core fields
+            // Backend returns snake_case keys from FieldTransformer.transform_from_bitrix()
+            // Map them to the store's vehicleData.basicInfo structure
             const newVehicleData = {
               ...initial.vehicleData,
               basicInfo: {
                 ...initial.vehicleData.basicInfo,
-                companyName: deal.clientName || deal.companyName || '',
-                userOwner: deal.clientName || '',
-                inspectionPlace: deal.address || deal.inspectionPlace || '',
-                inspectionDate: deal.scheduledDate || '',
-                inspectorName: state.auth.currentUserName || 'Rzeczoznawca',
+                companyName: deal.company_name || deal.clientName || deal.title || '',
+                userOwner: deal.client_name || deal.clientName || deal.title || '',
+                inspectionPlace: deal.inspection_place || deal.planned_address || deal.planned_location || deal.address || '',
+                inspectionDate: deal.inspection_date || deal.scheduled_date || deal.scheduledDate || '',
+                inspectorName: deal.inspector_name || state.auth.currentUserName || 'Rzeczoznawca',
               },
               vin: deal.vin || '',
-              registrationPlates: deal.plates || '',
-              make: deal.make || '',
-              model: deal.model || '',
-              year: deal.year?.toString() || '',
-              mileage: deal.mileage?.toString() || '',
+              registrationPlates: deal.registration_number || deal.plates || '',
+              make: deal.vehicle_brand || deal.make || '',
+              model: deal.vehicle_model || deal.model || '',
+              year: (deal.production_year || deal.year || '').toString(),
+              color: deal.vehicle_color || '',
+              mileage: (deal.mileage || '').toString(),
+              engineCapacity: (deal.engine_capacity || '').toString(),
+              enginePower: (deal.engine_power || '').toString(),
+              fuelType: deal.fuel_type || '',
+              bodyType: deal.body_type || '',
+              gearboxType: deal.gearbox_type || '',
+              driveType: deal.drive_type || '',
+              firstRegistration: deal.first_registration_date || deal.first_registration || '',
             };
 
             return {
@@ -753,8 +800,8 @@ export const useInspectionStore = create<InspectionState>()(
           console.error("Failed to schedule job:", error);
           return {
             success: false,
-            message: error.response?.data?.detail || "Błąd połączenia z serwerem",
-            conflict: error.response?.status === 409
+            message: error.message || "Błąd połączenia z serwerem",
+            conflict: false
           };
         }
       },
