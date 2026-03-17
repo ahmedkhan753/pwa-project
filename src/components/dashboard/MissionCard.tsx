@@ -259,37 +259,35 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
             )}
 
-            {/* Action Bar */}
-            {!isScheduling && (
-                <div className="grid grid-cols-3 gap-2">
-                    <button
-                        onClick={handleCall}
-                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                    >
-                        <Phone className="w-5 h-5 text-primary" />
-                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
-                    </button>
-                    <button
-                        onClick={handleNavigate}
-                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                    >
-                        <Navigation className="w-5 h-5 text-primary" />
-                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleStart(); }}
-                        className={cn(
-                            "flex flex-col items-center justify-center gap-1.5 py-4 rounded-3xl transition-all shadow-xl active:scale-95",
-                            isInProgress ? "bg-accent hover:bg-accent-hover shadow-accent/30" : "bg-primary hover:bg-primary-hover shadow-primary/30"
-                        )}
-                    >
-                        <Play className="w-5 h-5 fill-current text-white" />
-                        <span className="text-[9px] font-black uppercase text-white tracking-widest">
-                            {isSubmitting ? 'Czekaj...' : (isInProgress ? 'Wznów' : 'Start')}
-                        </span>
-                    </button>
-                </div>
-            )}
+            {/* Action Bar - Always visible */}
+            <div className="grid grid-cols-3 gap-2">
+                <button
+                    onClick={handleCall}
+                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                >
+                    <Phone className="w-5 h-5 text-primary" />
+                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
+                </button>
+                <button
+                    onClick={handleNavigate}
+                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                >
+                    <Navigation className="w-5 h-5 text-primary" />
+                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
+                </button>
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleStart(); }}
+                    className={cn(
+                        "flex flex-col items-center justify-center gap-1.5 py-4 rounded-3xl transition-all shadow-xl active:scale-95",
+                        isInProgress ? "bg-accent hover:bg-accent-hover shadow-accent/30" : "bg-primary hover:bg-primary-hover shadow-primary/30"
+                    )}
+                >
+                    <Play className="w-5 h-5 fill-current text-white" />
+                    <span className="text-[9px] font-black uppercase text-white tracking-widest">
+                        {isSubmitting ? 'Czekaj...' : (isInProgress ? 'Wznów' : 'Start')}
+                    </span>
+                </button>
+            </div>
         </div>
     );
 };
