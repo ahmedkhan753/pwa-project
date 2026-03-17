@@ -142,33 +142,7 @@ export function TiresStep() {
                                     onChange={(val) => handleTireChange(wheel.key, 'size', val)}
                                 />
 
-                                <div className="col-span-1">
-                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
-                                        Nośność (Load Index)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={w.loadIndex || ''}
-                                        onChange={(e) => handleTireChange(wheel.key, 'loadIndex', e.target.value.replace(/\D/g, ''))}
-                                        placeholder="np. 98"
-                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
-                                    />
-                                </div>
 
-                                <div className="col-span-1">
-                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
-                                        Indeks Prędkości
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={w.speedIndex || ''}
-                                        maxLength={1}
-                                        onChange={(e) => handleTireChange(wheel.key, 'speedIndex', e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
-                                        placeholder="np. T"
-                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
-                                    />
-                                </div>
                             </div>
 
                             {/* Tire Type */}

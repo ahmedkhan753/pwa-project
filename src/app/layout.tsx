@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { OfflineBanner } from "@/components/OfflineBanner";
-import { DemoBanner } from "@/components/DemoBanner";
 import "./globals.css";
 
 const inter = Inter({
@@ -49,7 +48,6 @@ export default function RootLayout({
                     disableTransitionOnChange
                 >
                     <OfflineBanner />
-                    <DemoBanner />
                     {children}
                 </ThemeProvider>
             </body>

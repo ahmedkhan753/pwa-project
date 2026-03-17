@@ -378,24 +378,24 @@ const emptyWheel: WheelData = {
 // ─── Photo Slots ──────────────────────────────────────────
 const defaultPhotoSlots: PhotoSlot[] = [
   // Exterior Sequence
-  { id: 'rear', label: '1. Tył', base64: '', required: true },
-  { id: 'rear_left', label: '2. Tył Lewy', base64: '', required: true },
+  { id: 'front', label: '1. Przód', base64: '', required: true },
+  { id: 'rear', label: '2. Tył', base64: '', required: true },
   { id: 'left_side', label: '3. Lewy Bok', base64: '', required: true },
-  { id: 'front_left', label: '4. Przód Lewy', base64: '', required: true },
-  { id: 'front', label: '5. Przód', base64: '', required: true },
-  { id: 'front_right', label: '6. Przód Prawy', base64: '', required: true },
-  { id: 'right_side', label: '7. Prawy Bok', base64: '', required: true },
-  { id: 'rear_right', label: '8. Tył Prawy', base64: '', required: true },
-  { id: 'roof', label: '9. Dach', base64: '', required: true },
-
-  // Interior & Engine
-  { id: 'dashboard', label: '10. Kokpit / Deska', base64: '', required: true },
-  { id: 'odometer', label: '11. Licznik (Przebieg)', base64: '', required: true },
-  { id: 'front_seats', label: '12. Fotele przód', base64: '', required: true },
-  { id: 'rear_seats', label: '13. Kanapa tył', base64: '', required: true },
-  { id: 'trunk', label: '14. Bagażnik', base64: '', required: true },
-  { id: 'engine', label: '15. Komora silnika', base64: '', required: true },
-  { id: 'vin_plate', label: '16. Tabliczka VIN', base64: '', required: true },
+  { id: 'right_side', label: '4. Prawy Bok', base64: '', required: true },
+  { id: 'front_seats', label: '5. Wnętrze', base64: '', required: true },
+  { id: 'dashboard', label: '6. Kokpit / Deska', base64: '', required: true },
+  { id: 'vin_plate', label: '7. Tabliczka VIN', base64: '', required: true },
+  
+  // Remaining items re-indexed
+  { id: 'rear_left', label: '8. Tył Lewy', base64: '', required: true },
+  { id: 'front_left', label: '9. Przód Lewy', base64: '', required: true },
+  { id: 'front_right', label: '10. Przód Prawy', base64: '', required: true },
+  { id: 'rear_right', label: '11. Tył Prawy', base64: '', required: true },
+  { id: 'roof', label: '12. Dach', base64: '', required: true },
+  { id: 'odometer', label: '13. Licznik (Przebieg)', base64: '', required: true },
+  { id: 'rear_seats', label: '14. Kanapa tył', base64: '', required: true },
+  { id: 'trunk', label: '15. Bagażnik', base64: '', required: true },
+  { id: 'engine', label: '16. Komora silnika', base64: '', required: true },
   { id: 'tire_sticker', label: '17. Naklejka ciśnienia', base64: '', required: false },
 
   // Tires & Rims

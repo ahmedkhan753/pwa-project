@@ -139,23 +139,7 @@ export const LoginForm: React.FC = () => {
                             )}
                         </button>
 
-                        {DEMO_MODE && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setEmail("demo@zaufajrzeczoznawcy.pl");
-                                    setPassword("demo2024");
-                                    // Submit after a small delay to show filling
-                                    setTimeout(() => {
-                                        const form = document.querySelector('form');
-                                        form?.requestSubmit();
-                                    }, 100);
-                                }}
-                                className="w-full py-3 bg-surface-raised border border-border rounded-xl text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 transition-all text-center"
-                            >
-                                Zaloguj jako Demo
-                            </button>
-                        )}
+
                     </form>
 
                     <div className="mt-8 text-center text-muted">
