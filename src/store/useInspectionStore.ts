@@ -672,6 +672,38 @@ export const useInspectionStore = create<InspectionState>()(
               };
             }
 
+            // SPECIFIC PRE-FILL FOR DEMO ORDER-002
+            if (dealId === "ORDER-002") {
+              console.log('[Store] Applying ORDER-002 pre-fill in fetchFullDeal');
+              newVehicleData = {
+                ...newVehicleData,
+                basicInfo: {
+                  companyName: "PKO Fleet Solutions",
+                  userOwner: "Anna Kowalska",
+                  inspectionPlace: "Leszczyńskiego 4/29, 50-078 Wrocław",
+                  inspectionDate: "",
+                  inspectorName: "John Kowalski",
+                },
+                vin: "TMBAN8NZ6TC021997",
+                registrationPlates: "WI 746RH",
+                make: "ŠKODA",
+                model: "Superb",
+                year: "2025",
+                color: "Silver",
+                mileage: "4320",
+                engineCapacity: "1498",
+                enginePower: "150",
+                fuelType: "MHEV Petrol",
+                bodyType: "Hatchback",
+                gearboxType: "DSG 7-speed",
+                driveType: "4×2",
+                seatsCount: "5",
+                doorsCount: "5",
+                ownWeight: "1673",
+                firstRegistration: "2025-11-31",
+              };
+            }
+
             return {
               jobs: { ...state.jobs, currentJobId: dealId, loading: false },
               data: { ...initial, vehicleData: newVehicleData },
@@ -752,6 +784,38 @@ export const useInspectionStore = create<InspectionState>()(
                   userOwner: "Mariusz Testowy",
                   inspectionPlace: "Al. Jerozolimskie 109, 02-011 Warsaw",
                   inspectionDate: "2026-03-19T10:00:00",
+                  inspectorName: "John Kowalski",
+                },
+                vin: "TMBAN8NZ6TC021997",
+                registrationPlates: "WI 746RH",
+                make: "ŠKODA",
+                model: "Superb",
+                year: "2025",
+                color: "Silver",
+                mileage: "4320",
+                engineCapacity: "1498",
+                enginePower: "150",
+                fuelType: "MHEV Petrol",
+                bodyType: "Hatchback",
+                gearboxType: "DSG 7-speed",
+                driveType: "4×2",
+                seatsCount: "5",
+                doorsCount: "5",
+                ownWeight: "1673",
+                firstRegistration: "2025-11-31",
+              };
+            }
+
+            // SPECIFIC PRE-FILL FOR DEMO ORDER-002
+            if (jobId === "ORDER-002") {
+              console.log('[Store] Applying ORDER-002 pre-fill in selectJob');
+              finalData.vehicleData = {
+                ...finalData.vehicleData,
+                basicInfo: {
+                  companyName: "PKO Fleet Solutions",
+                  userOwner: "Anna Kowalska",
+                  inspectionPlace: "Leszczyńskiego 4/29, 50-078 Wrocław",
+                  inspectionDate: "",
                   inspectorName: "John Kowalski",
                 },
                 vin: "TMBAN8NZ6TC021997",
