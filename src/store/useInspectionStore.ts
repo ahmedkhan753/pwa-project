@@ -615,13 +615,14 @@ export const useInspectionStore = create<InspectionState>()(
       },
 
       fetchFullDeal: async (dealId: string) => {
+        console.log('[Store] fetchFullDeal called with:', dealId);
         set((state) => ({ jobs: { ...state.jobs, loading: true, error: null } }));
         try {
           const deal = await api.getDeal(dealId);
           set((state) => {
             const initial = JSON.parse(JSON.stringify(initialData));
             // Merge deal data into vehicleData.basicInfo and core fields
-            const newVehicleData = {
+            let newVehicleData = {
               ...initial.vehicleData,
               basicInfo: {
                 ...initial.vehicleData.basicInfo,
@@ -638,6 +639,38 @@ export const useInspectionStore = create<InspectionState>()(
               year: deal.year?.toString() || '',
               mileage: deal.mileage?.toString() || '',
             };
+
+            // SPECIFIC PRE-FILL FOR DEMO ORDER-001 (Must match selectJob)
+            if (dealId === "ORDER-001") {
+              console.log('[Store] Applying ORDER-001 pre-fill in fetchFullDeal');
+              newVehicleData = {
+                ...newVehicleData,
+                basicInfo: {
+                  companyName: "Ayvens Fleet Management",
+                  userOwner: "Mariusz Testowy",
+                  inspectionPlace: "Al. Jerozolimskie 109, 02-011 Warsaw",
+                  inspectionDate: "2026-03-19T10:00:00",
+                  inspectorName: "John Kowalski",
+                },
+                vin: "TMBAN8NZ6TC021997",
+                registrationPlates: "WI 746RH",
+                make: "ŠKODA",
+                model: "Superb",
+                year: "2025",
+                color: "Silver",
+                mileage: "4320",
+                engineCapacity: "1498",
+                enginePower: "150",
+                fuelType: "MHEV Petrol",
+                bodyType: "Hatchback",
+                gearboxType: "DSG 7-speed",
+                driveType: "4×2",
+                seatsCount: "5",
+                doorsCount: "5",
+                ownWeight: "1673",
+                firstRegistration: "2025-11-31",
+              };
+            }
 
             return {
               jobs: { ...state.jobs, currentJobId: dealId, loading: false },
@@ -676,6 +709,7 @@ export const useInspectionStore = create<InspectionState>()(
 
       selectJob: (jobId) =>
         set((state) => {
+          console.log('[Store] selectJob called with:', jobId);
           // If a job is currently active, save it to drafts
           const newDrafts = { ...state.drafts };
           if (state.jobs.currentJobId) {
@@ -710,6 +744,7 @@ export const useInspectionStore = create<InspectionState>()(
 
             // SPECIFIC PRE-FILL FOR DEMO ORDER-001
             if (jobId === "ORDER-001") {
+              console.log('[Store] Applying ORDER-001 pre-fill in selectJob');
               finalData.vehicleData = {
                 ...finalData.vehicleData,
                 basicInfo: {
@@ -724,14 +759,14 @@ export const useInspectionStore = create<InspectionState>()(
                 make: "ŠKODA",
                 model: "Superb",
                 year: "2025",
-                color: "Srebrny",
+                color: "Silver",
                 mileage: "4320",
                 engineCapacity: "1498",
                 enginePower: "150",
-                fuelType: "HYBRYDA",
-                bodyType: "HATCHBACK",
-                gearboxType: "DSG/DCT (DWUSPRZĘGŁOWA)",
-                driveType: "4x2 (FWD)",
+                fuelType: "MHEV Petrol",
+                bodyType: "Hatchback",
+                gearboxType: "DSG 7-speed",
+                driveType: "4×2",
                 seatsCount: "5",
                 doorsCount: "5",
                 ownWeight: "1673",
