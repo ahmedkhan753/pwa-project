@@ -62,9 +62,22 @@ class FieldTransformer:
             logger.error("Discovery engine not available — cannot transform")
             return {}
 
-        # 1. Recursive Flattening
-        # { tires: { frontLeft: { brand: "X" } } } -> { "tires.frontLeft.brand": "X" }
-        flat_payload = self._flatten_payload(payload)
+        def flatten_data(data: dict, prefix: str = "") -> dict:
+            """Recursively flatten nested dicts, retaining both dot-notated and raw keys"""
+            result = {}
+            for key, value in data.items():
+                full_key = f"{prefix}.{key}" if prefix else key
+                if isinstance(value, dict) and key not in JSON_BLOB_KEYS:
+                    # Add both the nested version and flat version
+                    result.update(flatten_data(value, full_key))
+                    result.update(flatten_data(value, ""))  # flat version without prefix
+                else:
+                    result[full_key] = value
+                    result[key] = value  # also add without prefix
+            return result
+
+        # Use new rigorous flattening logic
+        flat_payload = flatten_data(payload)
         
         bitrix_fields: Dict[str, Any] = {}
         warnings = []
@@ -107,6 +120,10 @@ class FieldTransformer:
             if isinstance(v, dict) and k not in JSON_BLOB_KEYS:
                 # Recurse for nested dicts not explicitly marked as JSON blobs
                 items.extend(self._flatten_payload(v, new_key, sep=sep).items())
+                # URGENT FIX: Also add raw nested keys to match mapping overrides
+                for nested_k, nested_v in v.items():
+                    if not isinstance(nested_v, dict) and not isinstance(nested_v, list):
+                        items.append((nested_k, nested_v))
             elif isinstance(v, list) and k not in JSON_BLOB_KEYS:
                 # For lists, we don't flatten further but we could if needed. 
                 # Usually photos or damage groups are lists of dicts.

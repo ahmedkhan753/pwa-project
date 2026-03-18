@@ -7,9 +7,10 @@ and builds a zero-hardcoded field registry.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -272,7 +273,7 @@ MOCK_TEST_TOKEN = "mock_test_token_do_not_use_in_production"
 MOCK_TEST_USER = {
     "id": "999",
     "email": "tester@inspection.app",
-    "name": "Test Appraiser",
+    "name": "Mateusz Chłodek",
     "role": "appraiser",
     "bitrixId": "1"
 }
@@ -324,11 +325,10 @@ async def login(request_body: LoginRequest):
     token = create_access_token({"sub": user_data["email"], "user": user_data})
     return {"token": token, "user": user_data}
 
-@app.get("/api/auth/me")
-async def get_me(request: Request):
+async def get_current_user(request: Request):
     """
     Extract user from JWT token issued at login.
-    Returns { id, name, email, bitrix_id }
+    Returns the user dict.
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -338,12 +338,11 @@ async def get_me(request: Request):
 
     # Whitelist mock token for testing
     if token == MOCK_TEST_TOKEN and os.getenv("ENABLE_MOCK_LOGIN") == "true":
-        logger.info("Mock login bypass activated")
         return {
             "id": MOCK_TEST_USER["id"],
             "name": MOCK_TEST_USER["name"],
             "email": MOCK_TEST_USER["email"],
-            "bitrix_id": MOCK_TEST_USER["bitrixId"]
+            "bitrix_user_id": MOCK_TEST_USER["bitrixId"]
         }
 
     try:
@@ -352,15 +351,25 @@ async def get_me(request: Request):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token payload")
         
-        return {
-            "id": user["id"],
-            "name": user["name"],
-            "email": user["email"],
-            "bitrix_id": user["bitrixId"]
-        }
+        # Ensure bitrixId is renamed to bitrix_user_id for consistency in routers
+        user["bitrix_user_id"] = user.get("bitrixId")
+        return user
     except Exception as e:
         logger.error(f"Auth error: {e}")
         raise HTTPException(status_code=401, detail="Token expired or invalid")
+
+
+@app.get("/api/auth/me")
+async def get_me(current_user = Depends(get_current_user)):
+    """
+    Returns current user info.
+    """
+    return {
+        "id": current_user["id"],
+        "name": current_user["name"],
+        "email": current_user["email"],
+        "bitrix_id": current_user.get("bitrix_user_id")
+    }
 
 
 # ─── Legacy Task Endpoint (Backward Compatibility) ────────────
@@ -393,6 +402,17 @@ async def get_tasks(
         return [j for j in MOCK_JOBS if j["deadline"] == date]
     return MOCK_JOBS
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.error(f"422 Unprocessable Entity for {request.url.path}")
+    logger.error(f"Validation errors: {exc.errors()}")
+    logger.error(f"Raw body: {body.decode()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode()},
+    )
 
 @app.get("/")
 async def root():
@@ -482,16 +502,10 @@ async def submit_inspection(data: InspectionSubmission):
         flat_data["inspection_date"] = basic_info.get("inspectionDate", "")
         flat_data["inspector_name"] = basic_info.get("inspectorName", "")
         flat_data["equipment_completeness"] = data.equipmentCompleteness
-        flat_data["full_equipment_json"] = data.fullEquipment
-        flat_data["paint_data_json"] = data.paintMeasurement
-        flat_data["tires_data_json"] = data.tires
-        flat_data["mechanical_json"] = data.mechanical
-        flat_data["notes_valuation_json"] = data.notesValuation
-        flat_data["vin_confirmed"] = data.finalSummary.get("vinConfirmed", False)
-        flat_data["estimated_value"] = data.notesValuation.get("estimatedValue", "")
-        flat_data["general_comments"] = data.notesValuation.get("generalComments", "")
-
+        
+        # Set Stage ID for completed inspection
         dynamic_fields = transformer.transform_to_bitrix(flat_data)
+        dynamic_fields["STAGE_ID"] = "UC_0T9W8E"
         deal_fields.update(dynamic_fields)
     else:
         logger.warning("Discovery not ready — using direct field names (may fail)")

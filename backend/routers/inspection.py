@@ -99,9 +99,20 @@ async def submit_inspection(payload: InspectionPayload, request: Request):
 async def save_step(
     deal_id: int,
     step_number: int,
-    step_data: StepPartialData,
     request: Request,
 ):
+    try:
+        body = await request.json()
+    except Exception as e:
+        logger.error(f"Cannot parse JSON in step endpoint: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    try:
+        step_data = StepPartialData(**body)
+    except Exception as e:
+        logger.error(f"Step {step_number} validation error details: {body}\nException: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
+
     """
     PATCH /inspection/{deal_id}/step/{step_number}
     Saves progress of a single wizard step.
@@ -137,14 +148,23 @@ async def save_step(
             logger.info(json.dumps(step_fields, indent=2, ensure_ascii=False))
             logger.info("=" * 40)
 
+        # Log request body for debugging 422 errors
+        try:
+            body = await request.json()
+            logger.info(f"🚨 STEP {step_number} RAW BODY: {json.dumps(body, ensure_ascii=False)}")
+        except Exception as body_err:
+            logger.error(f"Failed to parse request body for logging: {body_err}")
+
         logger.info(
             f"Saving step {step_number} for deal {deal_id} "
             f"({len(step_fields)} fields)"
         )
 
+        filtered_fields = {k: v for k, v in step_fields.items() if k != 'basicInfo'}
+
         result = await gateway.update_deal(
             deal_id=deal_id,
-            inspection_data=step_fields,
+            inspection_data=filtered_fields,
         )
 
         return StepSaveResult(

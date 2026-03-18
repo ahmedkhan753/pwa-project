@@ -7,10 +7,14 @@ and inspection resume features.
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query, Depends
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/deals", tags=["Deals"])
 logger = logging.getLogger("routers.deals")
+
+class ScheduleRequest(BaseModel):
+    scheduled_datetime: str
 
 
 @router.get("")
@@ -88,8 +92,59 @@ async def get_deal(request: Request, deal_id: int):
         )
 
     try:
-        deal = await gateway.get_deal(deal_id)
+        deal = await gateway.get_deal(deal_id=deal_id)
+        # Ensure date fields are explicitly available for the frontend mapping
+        date_val = deal.get("UF_CRM_1772108256983", "") or deal.get("inspection_date", "") or deal.get("scheduled_date", "")
+        if "inspection_date" not in deal:
+            deal["inspection_date"] = date_val
+        if "scheduled_date" not in deal:
+            deal["scheduled_date"] = date_val
+        
         return deal
     except Exception as e:
         logger.error(f"Error fetching deal {deal_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.patch("/{deal_id}/schedule")
+async def schedule_deal(
+    deal_id: int,
+    schedule_data: ScheduleRequest,
+    request: Request
+):
+    """
+    PATCH /deals/{deal_id}/schedule
+    Updates the planned inspection date and transitions deal stage.
+    """
+    gateway = request.app.state.gateway
+    
+    # ADD THIS DEBUG LOG
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Import here to avoid circular dependencies
+    from main import get_current_user
+    current_user = await get_current_user(request)
+
+    logger.info(f"Schedule called — deal_id: {deal_id}")
+    logger.info(f"current_user: {current_user}")
+    logger.info(f"bitrix_user_id: {current_user.get('bitrix_user_id')}")
+
+    scheduled_datetime = schedule_data.scheduled_datetime
+    
+    schedule_payload = {
+        "id": deal_id,
+        "fields": {
+            "UF_CRM_1772108256983": scheduled_datetime,  # inspection date
+            "STAGE_ID": "PREPAYMENT_INVOICE",             # confirmed correct stage
+            "UF_CRM_1771579888": 1,                       # Mateusz Chłodek user ID
+        }
+    }
+    logger.info(f"Updating deal {deal_id} for scheduling: {schedule_payload['fields']}")
+    try:
+        result = await gateway.call("crm.deal.update", schedule_payload)
+        logger.info(f"Bitrix update result: {result}")
+        return {"success": True, "result": result}
+    except Exception as e:
+        logger.error(f"Scheduling failed for deal {deal_id}: {e}")
         raise HTTPException(status_code=502, detail=str(e))

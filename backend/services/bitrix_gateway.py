@@ -374,22 +374,23 @@ class BitrixGateway:
         except Exception as e:
             logger.error(f"Conflict check error: {e}")
         
-        stage_id = await self.get_status_id_by_label("ustalone")
-        if not stage_id:
-            stage_id = "C1:USTALONE"
-            
-        payload = {
-            "STAGE_ID": stage_id,
-            DATE_FIELD: scheduled_date
+        schedule_payload = {
+            "id": deal_id,
+            "fields": {
+                "UF_CRM_1772108256983": scheduled_date,  # inspection date
+                "STAGE_ID": "PREPAYMENT_INVOICE",             # confirmed correct stage
+                "UF_CRM_1771579888": 1,                       # Mateusz Chłodek user ID
+            }
         }
-        
-        logger.info(f"Updating deal {deal_id} for scheduling: {payload}")
-        await self.call("crm.deal.update", {"ID": deal_id, "fields": payload})
+        logger.info(f"Updating deal {deal_id} for scheduling: {schedule_payload['fields']}")
+        result = await self.call("crm.deal.update", schedule_payload)
+        logger.info(f"Bitrix update result: {result}")
         
         return {
             "success": True, 
             "conflict": has_conflict, 
-            "message": "Termin zapisany" + (" (Wykryto kolizję!)" if has_conflict else "")
+            "message": "Termin zapisany" + (" (Wykryto kolizję!)" if has_conflict else ""),
+            "bitrix_result": result
         }
 
     async def get_status_id_by_label(self, label: str) -> Optional[str]:

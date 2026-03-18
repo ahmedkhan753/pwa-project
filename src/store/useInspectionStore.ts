@@ -667,7 +667,8 @@ export const useInspectionStore = create<InspectionState>()(
                 companyName: deal.company_name || deal.clientName || deal.title || '',
                 userOwner: deal.client_name || deal.clientName || deal.title || '',
                 inspectionPlace: deal.inspection_place || deal.planned_address || deal.planned_location || deal.address || '',
-                inspectionDate: deal.inspection_date || deal.scheduled_date || deal.scheduledDate || '',
+                // Try all possible sources in order: store scheduledDate, then deal payload
+                inspectionDate: useInspectionStore.getState().jobs.scheduled.find(j => j.id === dealId)?.scheduledDate || useInspectionStore.getState().jobs.unscheduled.find(j => j.id === dealId)?.scheduledDate || deal.inspection_date || deal.scheduled_date || deal.scheduledDate || deal.UF_CRM_1772108256983 || '',
                 inspectorName: deal.inspector_name || state.auth.currentUserName || 'Rzeczoznawca',
               },
               vin: deal.vin || '',

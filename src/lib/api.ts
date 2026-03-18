@@ -77,7 +77,10 @@ const realApi = {
       {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+          step_number: step,
+          data: data
+        })
       }
     )
     if (!res.ok) {
