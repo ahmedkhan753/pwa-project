@@ -7,7 +7,7 @@ Enum fields use Python Enum classes (not raw strings).
 
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 # ─── Enumerations ─────────────────────────────────────────────
@@ -432,10 +432,25 @@ class StepPartialData(BaseModel):
     """
     Partial data for a single wizard step.
     Used by PATCH /inspection/{deal_id}/step/{step_number}.
+    Accepts both dict and list for `data` — lists are normalized to dicts.
     """
     model_config = ConfigDict(extra="allow")
     step_number: int = Field(..., ge=1, le=12, description="Step number (1-12)")
-    data: Dict[str, Any] = Field(..., description="Step fields as key-value pairs")
+    data: Any = Field(..., description="Step fields as key-value pairs or array")
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_data(cls, values):
+        data = values.get('data')
+        if isinstance(data, list):
+            if len(data) == 0:
+                values['data'] = {}
+            elif isinstance(data[0], dict) and 'id' in data[0]:
+                # Photo/damage array — convert to dict keyed by id
+                values['data'] = {item.get('id', f'item_{i}'): item for i, item in enumerate(data)}
+            else:
+                values['data'] = {'items': data}
+        return values
 
 
 # ─── Response Models ──────────────────────────────────────────

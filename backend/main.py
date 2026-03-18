@@ -303,14 +303,14 @@ async def login(request_body: LoginRequest):
             user_data = {
                 "id": "1",
                 "email": request_body.email,
-                "name": "Appraiser",
+                "name": "Mateusz Chłodek",
                 "bitrixId": "1",
             }
         else:
             user_data = {
                 "id": str(bitrix_user.get("ID")),
                 "email": request_body.email,
-                "name": f"{bitrix_user.get('NAME', '')} {bitrix_user.get('LAST_NAME', '')}".strip() or "Appraiser",
+                "name": f"{bitrix_user.get('NAME', '')} {bitrix_user.get('LAST_NAME', '')}".strip() or "Mateusz Chłodek",
                 "bitrixId": str(bitrix_user.get("ID")),
             }
     except Exception as e:
@@ -318,7 +318,7 @@ async def login(request_body: LoginRequest):
         user_data = {
             "id": "1",
             "email": request_body.email,
-            "name": "Appraiser",
+            "name": "Mateusz Chłodek",
             "bitrixId": "1",
         }
 

@@ -22,6 +22,16 @@ async def get_field_options():
         "drive_type"
     ]
     
+    # Hardcoded brands for fallback
+    hardcoded_brands = [
+        "Abarth", "Alfa Romeo", "Audi", "BMW", "Chevrolet",
+        "Citroën", "Dacia", "Fiat", "Ford", "Honda",
+        "Hyundai", "Kia", "Lexus", "Mazda", "Mercedes-Benz",
+        "Mitsubishi", "Nissan", "Opel", "Peugeot", "Renault",
+        "SEAT", "Škoda", "Subaru", "Suzuki", "Tesla",
+        "Toyota", "Volkswagen", "Volvo"
+    ]
+    
     for key in target_keys:
         field_id = discovery.get_field_id(key)
         if field_id:
@@ -37,5 +47,9 @@ async def get_field_options():
                 options[key] = []
         else:
             options[key] = []
+
+    # Apply fallback for brands if empty
+    if not options.get("vehicle_brand"):
+        options["vehicle_brand"] = [{"label": b, "value": b} for b in hardcoded_brands]
             
     return options

@@ -560,7 +560,7 @@ export const useInspectionStore = create<InspectionState>()(
             loading: false,
             error: null,
             currentUserId: user.id ? Number(user.id) : null,
-            currentUserName: user.name || 'Rzeczoznawca',
+            currentUserName: user.name || 'Mateusz Chłodek',
           },
         })),
 
@@ -569,7 +569,7 @@ export const useInspectionStore = create<InspectionState>()(
         const mockUser = {
           id: "999",
           email: "tester@inspection.app",
-          name: "Test Appraiser",
+          name: "Mateusz Chłodek",
           role: "appraiser",
           bitrixId: "1", // Use Bitrix ID 1 for real data fetching fallback
         };
@@ -581,7 +581,7 @@ export const useInspectionStore = create<InspectionState>()(
             token: mockToken,
             user: mockUser,
             currentUserId: null, // As requested: will fetch all deals
-            currentUserName: "Test Appraiser",
+            currentUserName: "Mateusz Chłodek",
           },
         }));
         
@@ -630,7 +630,7 @@ export const useInspectionStore = create<InspectionState>()(
                 ...state.auth,
                 isAuthenticated: true,
                 currentUserId: Number(response.bitrix_id),
-                currentUserName: response.name || 'Rzeczoznawca'
+                currentUserName: response.name || 'Mateusz Chłodek'
               }
             }));
           }
@@ -669,7 +669,7 @@ export const useInspectionStore = create<InspectionState>()(
                 inspectionPlace: deal.inspection_place || deal.planned_address || deal.planned_location || deal.address || '',
                 // Try all possible sources in order: store scheduledDate, then deal payload
                 inspectionDate: useInspectionStore.getState().jobs.scheduled.find(j => j.id === dealId)?.scheduledDate || useInspectionStore.getState().jobs.unscheduled.find(j => j.id === dealId)?.scheduledDate || deal.inspection_date || deal.scheduled_date || deal.scheduledDate || deal.UF_CRM_1772108256983 || '',
-                inspectorName: deal.inspector_name || state.auth.currentUserName || 'Rzeczoznawca',
+                inspectorName: deal.inspector_name || state.auth.currentUserName || 'Mateusz Chłodek',
               },
               vin: deal.vin || '',
               registrationPlates: deal.registration_number || deal.plates || '',

@@ -132,7 +132,7 @@ const realApi = {
     return res.json()
   },
   async submitInspection(dealId: string, data: any) {
-    const res = await fetch(`${BASE_URL}/inspection/${dealId}/submit`, {
+    const res = await fetch(`${BASE_URL}/inspection/submit`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data)

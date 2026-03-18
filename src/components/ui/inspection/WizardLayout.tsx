@@ -24,11 +24,13 @@ const STEPS = [
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
-    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
+    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix, submitToBitrix } = useInspectionStore();
     const totalSteps = STEPS.length;
     const [showSaved, setShowSaved] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncError, setSyncError] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     // Bitrix Auto-Sync (Anti-Oops)
     useEffect(() => {
@@ -179,12 +181,43 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
                 {currentStep === totalSteps ? (
                     <button
-                        onClick={() => { }}
+                        onClick={async () => {
+                            if (isSubmitting) return;
+                            setIsSubmitting(true);
+                            setSubmitError(null);
+                            try {
+                                const result = await submitToBitrix();
+                                if (result.success) {
+                                    selectJob(null); // Navigate to dashboard
+                                } else {
+                                    setSubmitError(result.message);
+                                }
+                            } catch (err: any) {
+                                setSubmitError(err.message || 'Submission failed');
+                            } finally {
+                                setIsSubmitting(false);
+                            }
+                        }}
+                        disabled={isSubmitting}
                         aria-label="Submit inspection"
-                        className="flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 text-white flex items-center justify-center gap-2 shadow-xl shadow-orange-500/20 active:scale-[0.95] uppercase ring-2 ring-orange-400 ring-offset-2"
+                        className={cn(
+                            "flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest text-white flex items-center justify-center gap-2 shadow-xl shadow-orange-500/20 active:scale-[0.95] uppercase ring-2 ring-orange-400 ring-offset-2",
+                            isSubmitting
+                                ? "bg-gray-400 cursor-wait"
+                                : "bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500"
+                        )}
                     >
-                        <Send size={20} className="stroke-[3]" />
-                        WYŚLIJ RAPORT
+                        {isSubmitting ? (
+                            <>
+                                <RefreshCcw size={20} className="stroke-[3] animate-spin" />
+                                WYSYŁANIE...
+                            </>
+                        ) : (
+                            <>
+                                <Send size={20} className="stroke-[3]" />
+                                WYŚLIJ RAPORT
+                            </>
+                        )}
                     </button>
                 ) : (
                     <button
