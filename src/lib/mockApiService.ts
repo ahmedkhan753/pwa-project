@@ -129,7 +129,8 @@ export const mockApi = {
         "Alfa Romeo", "Audi", "BMW", "Chevrolet", "Citroën", "Dacia", "Fiat", "Ford", 
         "Honda", "Hyundai", "Jeep", "Kia", "Lexus", "Mazda", "Mercedes-Benz", 
         "Mitsubishi", "Nissan", "Opel", "Peugeot", "Porsche", "Renault", "Seat", 
-        "Skoda", "Subaru", "Suzuki", "Tesla", "Toyota", "Volkswagen", "Volvo", "Inne"
+        "ŠKODA", "Smart", "SsangYong", "Subaru", "Suzuki", "Tata", 
+        "Tesla", "Toyota", "Volkswagen", "Volvo", "Inne"
       ],
       vehicle_models: {
         "BMW": ["X1","X2","X3","X5","X6","X7","Seria 1","Seria 2","Seria 3","Seria 4","Seria 5","Seria 7","M3","M5"],
@@ -139,7 +140,7 @@ export const mockApi = {
         "Mercedes-Benz": ["A-Class","B-Class","C-Class","E-Class","S-Class","CLA","CLS","GLA","GLB","GLC","GLE","GLS","AMG GT"],
         "Ford": ["Fiesta","Focus","Mondeo","Kuga","Puma","Explorer","Mustang","Transit"],
         "Opel": ["Corsa","Astra","Insignia","Mokka","Grandland","Crossland","Zafira"],
-        "Skoda": ["Fabia","Scala","Octavia","Superb","Kamiq","Karoq","Kodiaq","Enyaq"],
+        "ŠKODA": ["Fabia","Scala","Octavia","Superb","Kamiq","Karoq","Kodiaq","Enyaq"],
         "Hyundai": ["i20","i30","i40","Tucson","Santa Fe","Kona","IONIQ","Nexo"],
         "Kia": ["Picanto","Rio","Ceed","Sportage","Sorento","Stinger","EV6","Niro"],
         "Renault": ["Clio","Megane","Kadjar","Koleos","Captur","Zoe","Talisman"],
@@ -149,25 +150,25 @@ export const mockApi = {
         "Inne": ["Inny"]
       },
       fuel_types: [
-        "BENZYNA", "DIESEL", "LPG", "HYBRYDA", "ELEKTRYCZNY", 
-        "HYBRYDA PLUG-IN", "HYBRYDA DIESEL", "WODÓR", "NIE DOTYCZY"
+        "MHEV Petrol", "Petrol", "Diesel", "LPG", "EV", "Hybrid", 
+        "Plug-in Hybrid", "Diesel Hybrid", "N/A"
       ],
       body_types: [
-        "HATCHBACK", "SEDAN", "KOMBI", "SUV", "COUPE", "CABRIO", 
-        "VAN/MINIVAN", "PICKUP", "CROSSOVER"
+        "Hatchback", "Sedan", "Estate", "SUV", "Coupe", "Convertible", 
+        "Van", "Pickup", "Crossover"
       ],
       gearbox_types: [
-        "MANUALNA", "AUTOMATYCZNA", "CVT", "DSG/DCT (DWUSPRZĘGŁOWA)"
+        "Manual", "Automatic", "CVT", "DSG 7-speed"
       ],
       drive_types: [
-        "4x2 (FWD)", "4x2 (RWD)", "4x4 (AWD)", "4x4 (4WD)"
+        "4×2", "4x2 (RWD)", "4×4", "AWD"
       ],
       seats_options: ["2","4","5","6","7","8","9+"],
       doors_options: ["2","3","4","5"],
       colors: [
-        "Biały", "Czarny", "Szary", "Srebrny", "Czerwony", "Niebieski", 
-        "Zielony", "Żółty", "Pomarańczowy", "Brązowy", "Bordowy", 
-        "Beżowy", "Złoty", "Inny"
+        "White", "Black", "Grey", "Silver", "Red", "Blue", 
+        "Green", "Yellow", "Orange", "Brown", "Maroon", 
+        "Beige", "Gold", "Other"
       ],
       tire_brands: [
         "Bridgestone", "Continental", "Dunlop", "Falken", "Firestone", 

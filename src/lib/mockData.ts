@@ -13,7 +13,7 @@ export const MOCK_DEALS = [
     status: "in_progress", // To show RESUME button
     stage: "PREPAYMENT_INVOICE",
     scheduledDate: "2026-03-19T10:00:00",
-    location: "Al. Jerozolimskie 109, 02-011 Warszawa",
+    location: "Al. Jerozolimskie 109, 02-011 Warsaw",
     clientFirstName: "Mariusz",
     clientLastName: "Testowy",
     companyName: "Ayvens Fleet Management",
@@ -35,7 +35,7 @@ export const MOCK_DEALS = [
     seatsCount: "5",
     weight: "1673",
     firstRegistrationDate: "2025-11-30",
-    inspectorName: "Test Appraiser",
+    inspectorName: "John Kowalski",
   },
   {
     id: "ORDER-002",
