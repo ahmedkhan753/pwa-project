@@ -67,9 +67,9 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         }
 
         if (isInProgress && drafts[job.id]) {
-            // If already in drafts, just select it and go to Step 1 (or wherever they were)
+            // If already in drafts, just select it and go to Step 1
             selectJob(job.id);
-            setStep(1); // Force Step 1 as requested for pre-fill verification
+            setStep(1); 
             return;
         }
 
@@ -77,7 +77,6 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         setIsSubmitting(true);
         try {
             await fetchFullDeal(job.id);
-            // navigate is handled by the component that renders MissionCard or we can rely on store state change
         } catch (err) {
             setError("Błąd pobierania danych deala");
         } finally {
@@ -93,12 +92,10 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         }
         
         try {
-            // 1. Set saving state
             setIsSubmitting(true);
             setError(null);
             const fullIso = `${selectedDate}T${selectedTime}:00`;
 
-            // 2. Call store action with timeout protection
             console.log(`[Schedule] Attempting to schedule deal ${job.id} for ${fullIso}`);
             const res: any = await Promise.race([
                 scheduleJob(job.id, fullIso),
@@ -108,23 +105,17 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             ]);
             
             if (res.success) {
-                // 3. Success — update UI
                 setIsScheduledSuccessfully(true);
-                // Wait small delay to show success "Zaplanowano ✓"
                 await new Promise(resolve => setTimeout(resolve, 800));
                 
                 setIsScheduling(false);
                 setIsSubmitting(false);
-
-                // 4. Open Wizard by fetching deal data (which sets currentJobId)
-                // This is the SPA equivalent of router.push in this project
                 await handleStart(true);
             } else {
                 setError(res.message || "Błąd zapisu");
                 setIsSubmitting(false);
             }
         } catch (err: any) {
-            // 5. Error — show message, stop spinner
             console.error('Critical Schedule Error:', err);
             setError(err.message || "Błąd zapisu. Spróbuj ponownie.");
             setIsSubmitting(false);
@@ -134,10 +125,9 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
     return (
         <div 
-            onClick={!isScheduling ? () => handleStart() : undefined}
             className={cn(
                 "group relative bg-surface-glass backdrop-blur-xl border-2 rounded-[2.5rem] p-6 shadow-xl dark:shadow-2xl transition-all duration-500",
-                !isScheduling && "hover:border-primary/30 active:scale-[0.98] cursor-pointer",
+                "hover:border-primary/30 border-border",
                 job.hasConflict ? "border-danger/50 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]" : "border-border"
             )}
         >
@@ -195,8 +185,19 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
             </div>
 
-            {/* Scheduling UI OR Info */}
-            {isScheduling ? (
+            {/* Location Info - Always visible */}
+            <div className="grid grid-cols-1 gap-3 mb-6">
+                <div className="flex items-start gap-3 text-muted text-xs bg-surface-raised p-3 rounded-2xl border border-border/50">
+                    <MapPin className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <div>
+                        <p className="font-black text-foreground uppercase text-[10px] mb-0.5">Lokalizacja</p>
+                        <span className="font-medium">{job.city || 'Lokalizacja nieznana'}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Scheduling UI - Conditional but non-exclusive */}
+            {isScheduling && (
                 <div className="bg-primary-light/50 rounded-[1.5rem] p-4 border border-primary/20 mb-6 space-y-4 animate-in fade-in slide-in-from-bottom-2" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-2 mb-1">
                         <Clock className="w-4 h-4 text-primary" />
@@ -222,11 +223,6 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                                 className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-xs font-bold focus:border-primary outline-none"
                             />
                         </div>
-                    </div>
-
-                    <div className="space-y-1 pt-1">
-                        <label className="text-[9px] font-black text-muted uppercase tracking-widest ml-1">Limit czasu</label>
-                        <p className="text-[8px] text-muted italic ml-1">Automatyczny timeout po 5s</p>
                     </div>
 
                     {error && (
@@ -256,47 +252,24 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         </button>
                     )}
                 </div>
-            ) : (
-                <div className="grid grid-cols-1 gap-3 mb-6">
-                    <div className="flex items-start gap-3 text-muted text-xs bg-surface-raised p-3 rounded-2xl border border-border/50">
-                        <MapPin className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                        <div>
-                            <p className="font-black text-foreground uppercase text-[10px] mb-0.5">Lokalizacja</p>
-                            <span className="font-medium">{job.city || 'Lokalizacja nieznana'}</span>
-                        </div>
-                    </div>
-                </div>
             )}
 
             {/* Action Bar - Always visible */}
-            <div className={cn("grid gap-2", job.scheduledDate ? "grid-cols-3" : "grid-cols-2")}>
-                {job.scheduledDate ? (
-                  <>
-                    <button
-                        onClick={handleCall}
-                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                    >
-                        <Phone className="w-5 h-5 text-primary" />
-                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
-                    </button>
-                    <button
-                        onClick={handleNavigate}
-                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                    >
-                        <Navigation className="w-5 h-5 text-primary" />
-                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                      onClick={(e) => { e.stopPropagation(); setIsScheduling(true); }}
-                      className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                  >
-                      <Bell className="w-5 h-5 text-primary" />
-                      <span className="text-[9px] font-black uppercase text-muted tracking-widest">Zaplanuj</span>
-                  </button>
-                )}
-                
+            <div className="grid grid-cols-3 gap-2">
+                <button
+                    onClick={(e) => { e.stopPropagation(); setIsScheduling(!isScheduling); }}
+                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                >
+                    <Bell className="w-5 h-5 text-primary" />
+                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">BELL</span>
+                </button>
+                <button
+                    onClick={handleNavigate}
+                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                >
+                    <Navigation className="w-5 h-5 text-primary" />
+                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">GO</span>
+                </button>
                 <button
                     onClick={(e) => { e.stopPropagation(); handleStart(true); }}
                     className={cn(
@@ -306,7 +279,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 >
                     <Play className="w-5 h-5 fill-current text-white" />
                     <span className="text-[9px] font-black uppercase text-white tracking-widest">
-                        {isSubmitting ? 'Czekaj...' : (isInProgress ? 'Wznów' : 'Start')}
+                        {isSubmitting ? 'Czekaj...' : (isInProgress ? 'RESUME' : 'START')}
                     </span>
                 </button>
             </div>
