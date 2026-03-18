@@ -25,157 +25,44 @@ export const mockApi = {
   async getDeals(dateFrom?: string, dateTo?: string) {
     await new Promise(r => setTimeout(r, 600))
     
-    // Always use TODAY's date for scheduled deals
-    const today = new Date().toISOString().split('T')[0]
-    
-    // Build deals with today's date dynamically
-    const scheduled = [
-      {
-        id: "213",
-        title: "Wycena - BMW X5 2022",
-        type: "WYCENA",
-        stage: "Ustalone oględziny",
-        scheduledDate: `${today}T10:00:00`,
-        registrationNumber: "KR 12345",
-        vin: "WBA12345678901234",
-        brand: "BMW",
-        model: "X5",
-        year: "2022",
-        color: "Czarny",
-        fuelType: "BENZYNA",
-        bodyType: "SUV",
-        gearboxType: "AUTOMATYCZNA",
-        mileage: "45000",
-        clientFirstName: "Marek",
-        clientLastName: "Nowak",
-        clientPhone: "+48 600 123 456",
-        companyName: "Auto Handel Nowak Sp. z o.o.",
-        ownerName: "Marek Nowak",
-        location: "Kraków, ul. Floriańska 12",
-        status: "scheduled"
-      },
-      {
-        id: "214",
-        title: "CFM - Toyota Corolla 2020",
-        type: "CFM",
-        stage: "Ustalone oględziny",
-        scheduledDate: `${today}T13:00:00`,
-        registrationNumber: "WA 98765",
-        vin: "SB1K53AE90E123456",
-        brand: "Toyota",
-        model: "Corolla",
-        year: "2020",
-        color: "Srebrny",
-        fuelType: "HYBRYDA",
-        bodyType: "SEDAN",
-        gearboxType: "CVT",
-        mileage: "67000",
-        clientFirstName: "Anna",
-        clientLastName: "Wiśniewska",
-        clientPhone: "+48 700 456 789",
-        companyName: "Arval Care Service",
-        ownerName: "Anna Wiśniewska",
-        location: "Warszawa, ul. Marszałkowska 5",
-        status: "scheduled"
-      },
-      {
-        id: "217",
-        title: "Wycena - Mercedes C-Class 2023",
-        type: "WYCENA",
-        stage: "Ustalone oględziny",
-        scheduledDate: `${today}T15:30:00`,
-        registrationNumber: "WR 22222",
-        vin: "WDD2050341R123456",
-        brand: "Mercedes-Benz",
-        model: "C-Class",
-        year: "2023",
-        color: "Niebieski",
-        fuelType: "BENZYNA",
-        bodyType: "SEDAN",
-        gearboxType: "AUTOMATYCZNA",
-        mileage: "12000",
-        clientFirstName: "Tomasz",
-        clientLastName: "Adamski",
-        clientPhone: "+48 502 345 678",
-        companyName: "Mercedes Zasada",
-        ownerName: "Tomasz Adamski",
-        location: "Wrocław, ul. Świdnicka 3",
-        status: "scheduled"
-      }
-    ]
-    
-    const unscheduled = [
-      {
-        id: "215",
-        title: "Wycena - Volkswagen Passat 2019",
-        type: "WYCENA",
-        stage: "Nowe zlecenie",
-        scheduledDate: null,
-        registrationNumber: "PO 54321",
-        vin: "WVWZZZ3CZKE123456",
-        brand: "Volkswagen",
-        model: "Passat",
-        year: "2019",
-        color: "Biały",
-        fuelType: "DIESEL",
-        bodyType: "KOMBI",
-        gearboxType: "MANUALNA",
-        mileage: "112000",
-        clientFirstName: "Piotr",
-        clientLastName: "Kowalczyk",
-        clientPhone: "+48 500 789 123",
-        companyName: "VW Financial",
-        ownerName: "Piotr Kowalczyk",
-        location: "Poznań, ul. Długa 8",
-        status: "unscheduled"
-      },
-      {
-        id: "216",
-        title: "CFM - Audi A4 2021",
-        type: "CFM",
-        stage: "Nowe zlecenie",
-        scheduledDate: null,
-        registrationNumber: "GD 11111",
-        vin: "WAUZZZ8V5MA123456",
-        brand: "Audi",
-        model: "A4",
-        year: "2021",
-        color: "Szary",
-        fuelType: "DIESEL",
-        bodyType: "SEDAN",
-        gearboxType: "AUTOMATYCZNA",
-        mileage: "38000",
-        clientFirstName: "Katarzyna",
-        clientLastName: "Zielińska",
-        clientPhone: "+48 601 234 567",
-        companyName: "Audi Select Plus",
-        ownerName: "Katarzyna Zielińska",
-        location: "Gdańsk, ul. Długa 15",
-        status: "unscheduled"
-      }
-    ]
+    const scheduled = MOCK_DEALS.filter(d => d.status === 'scheduled' || d.status === 'in_progress')
+    const unscheduled = MOCK_DEALS.filter(d => d.status === 'new' || d.status === 'unscheduled')
     
     return {
       scheduled,
       unscheduled,
-      total_in_bitrix: scheduled.length + 
-                       unscheduled.length
+      total_in_bitrix: MOCK_DEALS.length
     }
   },
 
   async getDeal(dealId: string) {
     await delay(400)
-    // Find in dynamic deals
-    const today = new Date().toISOString().split('T')[0]
-    const all = [
-        { id: "213", companyName: "Auto Handel Nowak Sp. z o.o.", ownerName: "Marek Nowak", address: "Kraków, ul. Floriańska 12", scheduledDate: `${today}T10:00:00`, vin: "WBA12345678901234", plates: "KR 12345", make: "BMW", model: "X5", year: 2022, mileage: 45000, clientName: "Marek Nowak" },
-        { id: "214", companyName: "Arval Care Service", ownerName: "Anna Wiśniewska", address: "Warszawa, ul. Marszałkowska 5", scheduledDate: `${today}T13:00:00`, vin: "SB1K53AE90E123456", plates: "WA 98765", make: "Toyota", model: "Corolla", year: 2020, mileage: 67000, clientName: "Anna Wiśniewska" },
-        { id: "217", companyName: "Mercedes Zasada", ownerName: "Tomasz Adamski", address: "Wrocław, ul. Świdnicka 3", scheduledDate: `${today}T15:30:00`, vin: "WDD2050341R123456", plates: "WR 22222", make: "Mercedes-Benz", model: "C-Class", year: 2023, mileage: 12000, clientName: "Tomasz Adamski" },
-        { id: "215", companyName: "VW Financial", ownerName: "Piotr Kowalczyk", address: "Poznań, ul. Długa 8", scheduledDate: null, vin: "WVWZZZ3CZKE123456", plates: "PO 54321", make: "Volkswagen", model: "Passat", year: 2019, mileage: 112000, clientName: "Piotr Kowalczyk" },
-        { id: "216", companyName: "Audi Select Plus", ownerName: "Katarzyna Zielińska", address: "Gdańsk, ul. Długa 15", scheduledDate: null, vin: "WAUZZZ8V5MA123456", plates: "GD 11111", make: "Audi", model: "A4", year: 2021, mileage: 38000, clientName: "Katarzyna Zielińska" }
-    ]
-    const deal = all.find(d => d.id === dealId)
+    const deal = MOCK_DEALS.find(d => d.id === dealId)
     if (!deal) throw new Error("Deal not found")
+    
+    // For demo purposes, if it's ORDER-001, we ensure all fields are mapped for fetchFullDeal
+    if (dealId === "ORDER-001") {
+      return {
+        ...deal,
+        company_name: deal.companyName,
+        client_name: `${deal.clientFirstName} ${deal.clientLastName}`,
+        inspection_place: deal.location,
+        inspection_date: deal.scheduledDate,
+        vin: deal.vin,
+        registration_number: deal.registrationNumber,
+        vehicle_brand: deal.brand,
+        vehicle_model: deal.model,
+        production_year: deal.year,
+        vehicle_color: deal.color,
+        mileage: deal.mileage,
+        fuel_type: deal.fuelType,
+        body_type: deal.bodyType,
+        gearbox_type: deal.gearboxType,
+        drive_type: deal.driveType,
+        first_registration_date: deal.firstRegistrationDate,
+        inspector_name: deal.inspectorName
+      }
+    }
     return deal
   },
 

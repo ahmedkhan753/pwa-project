@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle } from 'lucide-react';
+import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle, Bell } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { InspectionJob, useInspectionStore } from '@/store/useInspectionStore';
 import { cn, formatLocaleDate } from '@/lib/utils';
@@ -60,8 +60,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
     };
 
-    const handleStart = async () => {
-        if (!job.scheduledDate) {
+    const handleStart = async (force: boolean = false) => {
+        if (!job.scheduledDate && !force) {
             setIsScheduling(true);
             return;
         }
@@ -118,7 +118,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
                 // 4. Open Wizard by fetching deal data (which sets currentJobId)
                 // This is the SPA equivalent of router.push in this project
-                await handleStart();
+                await handleStart(true);
             } else {
                 setError(res.message || "Błąd zapisu");
                 setIsSubmitting(false);
@@ -134,7 +134,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
     return (
         <div 
-            onClick={!isScheduling ? handleStart : undefined}
+            onClick={!isScheduling ? () => handleStart() : undefined}
             className={cn(
                 "group relative bg-surface-glass backdrop-blur-xl border-2 rounded-[2.5rem] p-6 shadow-xl dark:shadow-2xl transition-all duration-500",
                 !isScheduling && "hover:border-primary/30 active:scale-[0.98] cursor-pointer",
@@ -168,8 +168,17 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         ? "bg-danger-light text-danger border-danger/30" 
                         : "text-muted bg-surface-raised border-border/50"
                 )}>
-                    <Clock className="w-3 h-3" />
-                    {job.scheduledDate ? formatLocaleDate(job.scheduledDate) : '??:??'}
+                    {job.scheduledDate ? (
+                        <>
+                            <Clock className="w-3 h-3" />
+                            {formatLocaleDate(job.scheduledDate)}
+                        </>
+                    ) : (
+                        <>
+                            <Bell className="w-3 h-3 text-primary animate-pulse" />
+                            <span className="text-primary font-black uppercase">Zaplanuj</span>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -232,7 +241,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         disabled={isSubmitting}
                         className={cn(
                             "w-full py-3 rounded-xl font-black text-xs uppercase shadow-lg transition-all active:scale-[0.98] disabled:opacity-50",
-                            isScheduledSuccessfully ? "bg-success text-white shadow-success/20" : "bg-primary hover:bg-primary-hover text-white shadow-primary/20"
+                            isScheduledSuccessfully ? "bg-success text-white shadow-success/20" : "bg-primary text-white shadow-primary/20"
                         )}
                     >
                         {isSubmitting ? 'Zapisywanie...' : (isScheduledSuccessfully ? 'Zaplanowano ✓' : 'Zatwierdź i Rozpocznij')}
@@ -260,23 +269,36 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             )}
 
             {/* Action Bar - Always visible */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className={cn("grid gap-2", job.scheduledDate ? "grid-cols-3" : "grid-cols-2")}>
+                {job.scheduledDate ? (
+                  <>
+                    <button
+                        onClick={handleCall}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                    >
+                        <Phone className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
+                    </button>
+                    <button
+                        onClick={handleNavigate}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                    >
+                        <Navigation className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                      onClick={(e) => { e.stopPropagation(); setIsScheduling(true); }}
+                      className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                  >
+                      <Bell className="w-5 h-5 text-primary" />
+                      <span className="text-[9px] font-black uppercase text-muted tracking-widest">Zaplanuj</span>
+                  </button>
+                )}
+                
                 <button
-                    onClick={handleCall}
-                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                >
-                    <Phone className="w-5 h-5 text-primary" />
-                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
-                </button>
-                <button
-                    onClick={handleNavigate}
-                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                >
-                    <Navigation className="w-5 h-5 text-primary" />
-                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
-                </button>
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleStart(); }}
+                    onClick={(e) => { e.stopPropagation(); handleStart(true); }}
                     className={cn(
                         "flex flex-col items-center justify-center gap-1.5 py-4 rounded-3xl transition-all shadow-xl active:scale-95",
                         isInProgress ? "bg-accent hover:bg-accent-hover shadow-accent/30" : "bg-primary hover:bg-primary-hover shadow-primary/30"

@@ -700,12 +700,42 @@ export const useInspectionStore = create<InspectionState>()(
             finalData = newDrafts[jobId];
           } else {
             finalData = JSON.parse(JSON.stringify(initialData));
+            
+            // Default pre-fill
             finalData.vehicleData.basicInfo.userOwner = job.clientName;
             finalData.vehicleData.vin = job.vin;
             finalData.vehicleData.registrationPlates = job.plates;
             finalData.vehicleData.make = job.make || "";
             finalData.vehicleData.model = job.model || "";
-            // Optionally add more pre-filled fields here
+
+            // SPECIFIC PRE-FILL FOR DEMO ORDER-001
+            if (jobId === "ORDER-001") {
+              finalData.vehicleData = {
+                ...finalData.vehicleData,
+                basicInfo: {
+                  companyName: "Ayvens Fleet Management",
+                  userOwner: "Mariusz Testowy",
+                  inspectionPlace: "Al. Jerozolimskie 109, Warszawa",
+                  inspectionDate: "2026-03-19T10:00:00",
+                  inspectorName: "Test Appraiser",
+                },
+                vin: "TMBAN8NZ6TC021997",
+                registrationPlates: "WI 746RH",
+                make: "ŠKODA",
+                model: "SUPERB Selection",
+                year: "2025",
+                color: "Silver",
+                mileage: "4320",
+                engineCapacity: "1498",
+                enginePower: "150",
+                fuelType: "MHEV Petrol",
+                bodyType: "Hatchback",
+                gearboxType: "DSG 7-speed",
+                driveType: "4×2",
+                seatsCount: "5",
+                doorsCount: "5",
+              };
+            }
           }
 
           return {
