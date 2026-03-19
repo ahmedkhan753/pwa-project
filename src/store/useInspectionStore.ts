@@ -327,7 +327,6 @@ interface InspectionState {
   setAuth: (auth: Partial<InspectionState['auth']>) => void;
   login: (email: string, token: string, user: AuthUser) => void;
   fetchMe: () => Promise<void>;
-  mockLogin: () => void;
   logout: () => void;
   // Job Actions
   setJobsLoading: (loading: boolean) => void;
@@ -546,35 +545,10 @@ export const useInspectionStore = create<InspectionState>()(
             loading: false,
             error: null,
             currentUserId: user.id ? Number(user.id) : null,
-            currentUserName: user.name || 'Mateusz Chłodek',
+            currentUserName: user.name || 'Rzeczoznawca',
           },
         })),
 
-      mockLogin: () => {
-        const mockToken = "mock_test_token_do_not_use_in_production";
-        const mockUser = {
-          id: "999",
-          email: "tester@inspection.app",
-          name: "Mateusz Chłodek",
-          role: "appraiser",
-          bitrixId: "1", // Use Bitrix ID 1 for real data fetching fallback
-        };
-
-        set((state) => ({
-          auth: {
-            ...state.auth,
-            isAuthenticated: true,
-            token: mockToken,
-            user: mockUser,
-            currentUserId: null, // As requested: will fetch all deals
-            currentUserName: "Mateusz Chłodek",
-          },
-        }));
-
-        // Persist to localStorage for survival if not handled by persist middleware
-        // (Zustand persist handles the state, but mirroring for raw fetch if needed)
-        localStorage.setItem("auth_token", mockToken);
-      },
 
       logout: () =>
         set((state) => ({

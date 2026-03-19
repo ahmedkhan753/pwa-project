@@ -25,11 +25,11 @@ const authHeaders = (extra: Record<string, string> = {}) => {
 
 // Real API client — all paths prefixed with BASE_URL
 const realApi = {
-  async login(email: string, password: string) {
-    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+  async login(phone: string, pin: string) {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ phone, pin })
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -38,7 +38,7 @@ const realApi = {
     return res.json()
   },
   async getMe() {
-    const res = await fetch(`${BASE_URL}/api/auth/me`, {
+    const res = await fetch(`${BASE_URL}/auth/me`, {
       headers: authHeaders()
     })
     if (!res.ok) {

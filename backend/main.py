@@ -4,6 +4,8 @@ Auto-Inspection PWA Backend
 FastAPI application with dynamic Bitrix24 integration.
 On startup, discovers all CRM Deal fields via the live API
 and builds a zero-hardcoded field registry.
+
+Authentication: Phone + PIN for inspectors, password for admin.
 """
 
 from contextlib import asynccontextmanager
@@ -34,6 +36,13 @@ from services.bitrix_gateway import (
 )
 from services.field_transformer import FieldTransformer
 
+# ─── Database & Models ────────────────────────────────────────
+from database import engine, Base, SessionLocal, get_db
+from models.inspector import Inspector
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 # ─── Global Instances ─────────────────────────────────────────
 gateway = BitrixGateway(discovery=discovery)
 transformer = FieldTransformer(discovery=discovery)
@@ -46,25 +55,77 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 
+def seed_test_inspectors():
+    """Seed default test inspector accounts on startup."""
+    db = SessionLocal()
+    try:
+        test_inspectors = [
+            {
+                "name": "Mateusz Chłodek",
+                "phone": "790469341",
+                "pin": "1234",
+                "email": "chlodekmateusz@gmail.com",
+            },
+            {
+                "name": "Test Inspektor",
+                "phone": "572572744",
+                "pin": "1234",
+                "email": "test@zaufajrzeczoznawcy.pl",
+            },
+        ]
+        for data in test_inspectors:
+            existing = db.query(Inspector).filter(
+                Inspector.phone == data["phone"]
+            ).first()
+            if not existing:
+                inspector = Inspector(
+                    name=data["name"],
+                    phone=data["phone"],
+                    pin_hash=pwd_context.hash(data["pin"]),
+                    email=data["email"],
+                    is_active=True,
+                )
+                db.add(inspector)
+                logger.info(f"  → Seeded inspector: {data['name']} ({data['phone']})")
+        db.commit()
+        logger.info("✅ Test inspectors seeded")
+    except Exception as e:
+        logger.error(f"Error seeding inspectors: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ─── Lifespan (startup / shutdown) ───────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     On startup:
-      1. Test Bitrix24 connectivity
-      2. Discover & cache all CRM Deal fields
+      1. Create database tables
+      2. Seed test inspectors
+      3. Test Bitrix24 connectivity
+      4. Discover & cache all CRM Deal fields
     """
     logger.info("=" * 60)
     logger.info("STARTING Auto-Inspection PWA Backend")
     logger.info("=" * 60)
-    
+
+    # Step 0: Create database tables
+    logger.info("Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    logger.info("✓ Database tables ready")
+
+    # Step 1: Seed test inspectors
+    logger.info("Seeding test inspectors...")
+    seed_test_inspectors()
+
     # Provide gateway/discovery to app state for routers
     app.state.gateway = gateway
     app.state.discovery = discovery
     app.state.bitrix_ready = False
 
     try:
-        # Step 1: Test connectivity
+        # Step 2: Test connectivity
         logger.info("Testing Bitrix24 connection...")
         conn = await gateway.test_connection()
         if not conn["connected"]:
@@ -72,7 +133,7 @@ async def lifespan(app: FastAPI):
         else:
             logger.info(f"✓ Bitrix24 connected — {conn['field_count']} fields available")
 
-            # Step 2: Initialize field discovery
+            # Step 3: Initialize field discovery
             logger.info("Running dynamic field discovery...")
             await discovery.initialize(gateway.call)
 
@@ -94,7 +155,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Auto-Inspection PWA Backend",
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -109,64 +170,51 @@ app.add_middleware(
 )
 
 
-# ─── Global Exception Handler ─────────────────────────────────
+# ─── Global Exception Handlers ────────────────────────────────
 @app.exception_handler(BitrixAuthError)
 async def bitrix_auth_handler(request: Request, exc: BitrixAuthError):
     return JSONResponse(
         status_code=401,
-        content={
-            "error": "bitrix_auth_error",
-            "message": str(exc),
-            "code": exc.error_code,
-        },
+        content={"error": "bitrix_auth_error", "message": str(exc), "code": exc.error_code},
     )
-
 
 @app.exception_handler(BitrixScopeError)
 async def bitrix_scope_handler(request: Request, exc: BitrixScopeError):
     return JSONResponse(
         status_code=403,
-        content={
-            "error": "bitrix_scope_error",
-            "message": str(exc),
-            "code": exc.error_code,
-        },
+        content={"error": "bitrix_scope_error", "message": str(exc), "code": exc.error_code},
     )
-
 
 @app.exception_handler(BitrixNotFoundError)
 async def bitrix_notfound_handler(request: Request, exc: BitrixNotFoundError):
     return JSONResponse(
         status_code=404,
-        content={
-            "error": "bitrix_not_found",
-            "message": str(exc),
-            "code": exc.error_code,
-        },
+        content={"error": "bitrix_not_found", "message": str(exc), "code": exc.error_code},
     )
-
 
 @app.exception_handler(BitrixQuotaError)
 async def bitrix_quota_handler(request: Request, exc: BitrixQuotaError):
     return JSONResponse(
         status_code=429,
-        content={
-            "error": "bitrix_quota_exceeded",
-            "message": str(exc),
-            "code": exc.error_code,
-        },
+        content={"error": "bitrix_quota_exceeded", "message": str(exc), "code": exc.error_code},
     )
-
 
 @app.exception_handler(BitrixError)
 async def bitrix_generic_handler(request: Request, exc: BitrixError):
     return JSONResponse(
         status_code=502,
-        content={
-            "error": "bitrix_error",
-            "message": str(exc),
-            "code": exc.error_code,
-        },
+        content={"error": "bitrix_error", "message": str(exc), "code": exc.error_code},
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.error(f"422 Unprocessable Entity for {request.url.path}")
+    logger.error(f"Validation errors: {exc.errors()}")
+    logger.error(f"Raw body: {body.decode()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode()},
     )
 
 
@@ -185,67 +233,21 @@ async def log_requests(request: Request, call_next):
 
 # ─── Routers ──────────────────────────────────────────────────
 from routers import health, deals, inspection, files, metadata
+from routers import auth as auth_router
+from routers import admin as admin_router
 
 app.include_router(health.router)
 app.include_router(deals.router)
 app.include_router(inspection.router)
 app.include_router(files.router)
 app.include_router(metadata.router)
-
-
-# ─── Mock Data Fallback (Used by Routers if Bitrix Offline) ────
-MOCK_JOBS = [
-    {
-        "id": "job_1",
-        "bitrixTaskId": "mock_1",
-        "clientName": "Jan Kowalski",
-        "vin": "WVGZZZ5NZLW123456",
-        "plates": "WA 12345",
-        "phone": "+48600100200",
-        "appointmentTime": "10:00",
-        "deadline": time.strftime("%Y-%m-%d"),
-        "status": "ready",
-        "make": "Volkswagen",
-        "model": "Tiguan",
-        "city": "Warszawa",
-    },
-    {
-        "id": "job_2",
-        "bitrixTaskId": "mock_2",
-        "clientName": "Anna Nowak",
-        "vin": "TMKDA7NE1L098765",
-        "plates": "PO 98765",
-        "phone": "+48700800900",
-        "appointmentTime": "14:30",
-        "deadline": time.strftime("%Y-%m-%d"),
-        "status": "ready",
-        "make": "Skoda",
-        "model": "Octavia",
-        "city": "Poznań",
-    },
-    {
-        "id": "job_3",
-        "bitrixTaskId": "mock_3",
-        "clientName": "Marek Zegar",
-        "vin": "JLR123HF847294",
-        "plates": "KR 55555",
-        "phone": "+48555444333",
-        "appointmentTime": "09:15",
-        "deadline": time.strftime(
-            "%Y-%m-%d", time.localtime(time.time() + 86400)
-        ),
-        "status": "ready",
-        "make": "Jaguar",
-        "model": "F-Pace",
-        "city": "Kraków",
-    },
-]
+app.include_router(auth_router.router)
+app.include_router(admin_router.router)
 
 
 # ─── Pydantic Models ─────────────────────────────────────────
 class InspectionSubmission(BaseModel):
     """Full inspection data from the Zustand store + base64 images."""
-
     jobId: str
     vehicleData: Dict[str, Any]
     equipmentCompleteness: Dict[str, Any]
@@ -261,115 +263,9 @@ class InspectionSubmission(BaseModel):
     images: List[str] = []
 
 
-from jose import jwt
-from datetime import datetime, timedelta
-
-# JWT Settings
-SECRET_KEY = "super-secret-key-change-me"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
-
-MOCK_TEST_TOKEN = "mock_test_token_do_not_use_in_production"
-MOCK_TEST_USER = {
-    "id": "999",
-    "email": "tester@inspection.app",
-    "name": "Mateusz Chłodek",
-    "role": "appraiser",
-    "bitrixId": "1"
-}
-
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-# ─── Auth Endpoints ──────────────────────────────────────────
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-@app.post("/api/auth/login")
-async def login(request_body: LoginRequest):
-    """
-    Login endpoint (Bitrix24 mock/auth).
-    Returns basic user info from Bitrix + real JWT.
-    """
-    try:
-        bitrix_user = await gateway.get_user_by_email(request_body.email)
-        if not bitrix_user:
-            # Universal Test Access: Default to ID 1 (Mateusz) if email unknown
-            logger.info(f"Email {request_body.email} not found. Using universal test ID: 1")
-            user_data = {
-                "id": "1",
-                "email": request_body.email,
-                "name": "Mateusz Chłodek",
-                "bitrixId": "1",
-            }
-        else:
-            user_data = {
-                "id": str(bitrix_user.get("ID")),
-                "email": request_body.email,
-                "name": f"{bitrix_user.get('NAME', '')} {bitrix_user.get('LAST_NAME', '')}".strip() or "Mateusz Chłodek",
-                "bitrixId": str(bitrix_user.get("ID")),
-            }
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        user_data = {
-            "id": "1",
-            "email": request_body.email,
-            "name": "Mateusz Chłodek",
-            "bitrixId": "1",
-        }
-
-    token = create_access_token({"sub": user_data["email"], "user": user_data})
-    return {"token": token, "user": user_data}
-
-async def get_current_user(request: Request):
-    """
-    Extract user from JWT token issued at login.
-    Returns the user dict.
-    """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-    
-    token = auth_header.split(" ")[1]
-
-    # Whitelist mock token for testing
-    if token == MOCK_TEST_TOKEN and os.getenv("ENABLE_MOCK_LOGIN") == "true":
-        return {
-            "id": MOCK_TEST_USER["id"],
-            "name": MOCK_TEST_USER["name"],
-            "email": MOCK_TEST_USER["email"],
-            "bitrix_user_id": MOCK_TEST_USER["bitrixId"]
-        }
-
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user = payload.get("user")
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        
-        # Ensure bitrixId is renamed to bitrix_user_id for consistency in routers
-        user["bitrix_user_id"] = user.get("bitrixId")
-        return user
-    except Exception as e:
-        logger.error(f"Auth error: {e}")
-        raise HTTPException(status_code=401, detail="Token expired or invalid")
-
-
-@app.get("/api/auth/me")
-async def get_me(current_user = Depends(get_current_user)):
-    """
-    Returns current user info.
-    """
-    return {
-        "id": current_user["id"],
-        "name": current_user["name"],
-        "email": current_user["email"],
-        "bitrix_id": current_user.get("bitrix_user_id")
-    }
+# ─── Legacy Auth Compatibility ────────────────────────────────
+# Keep get_current_user accessible for deals.py import
+from deps import get_current_user
 
 
 # ─── Legacy Task Endpoint (Backward Compatibility) ────────────
@@ -381,49 +277,32 @@ async def get_tasks(
 ):
     """Bridge to new deals router logic if needed, or keep for simple sync."""
     try:
-        # Universal Test Access: Default to ID 1 if email not found
         bitrix_user = await gateway.get_user_by_email(email)
         responsible_id = "1"
         if bitrix_user:
             responsible_id = str(bitrix_user.get("ID"))
         else:
             logger.info(f"Dashboard email {email} not found. Defaulting to responsible_id: 1 for real data.")
-        
-        # Fetch real missions from Bitrix
+
         deals = await gateway.get_appraiser_deals(int(responsible_id), date)
         if deals:
             return deals
     except Exception as e:
         logger.warning(f"Error fetching Bitrix deals for {email}: {e}")
 
-    # Final logic: if Bitrix has no deals even for ID 1, show mock data so UI isn't empty
-    logger.info(f"Using mock data fallback for UI consistency (date: {date})")
-    if date:
-        return [j for j in MOCK_JOBS if j["deadline"] == date]
-    return MOCK_JOBS
+    return []
 
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    body = await request.body()
-    logger.error(f"422 Unprocessable Entity for {request.url.path}")
-    logger.error(f"Validation errors: {exc.errors()}")
-    logger.error(f"Raw body: {body.decode()}")
-    return JSONResponse(
-        status_code=422,
-        content={"detail": exc.errors(), "body": body.decode()},
-    )
 
 @app.get("/")
 async def root():
-    return {"message": "Auto-Inspection PWA API v2.0", "status": "online"}
+    return {"message": "Auto-Inspection PWA API v3.0 — Phone+PIN Auth", "status": "online"}
+
 
 # ─── Task B: Outbound Sync ───────────────────────────────────
 @app.post("/api/submit-inspection")
 async def submit_inspection(data: InspectionSubmission):
     """
     Submit a completed inspection to Bitrix24.
-    Uses the legacy bitrix_service for backward compatibility.
     """
     logger.info(f"Received inspection submission for job: {data.jobId}")
 
@@ -467,7 +346,7 @@ async def submit_inspection(data: InspectionSubmission):
 
     logger.info(f"Uploaded {len(uploaded_file_ids)} files to Bitrix24")
 
-    # Build deal fields using the legacy mapper
+    # Build deal fields
     vehicle = data.vehicleData
     basic_info = vehicle.get("basicInfo", {})
 
@@ -476,10 +355,8 @@ async def submit_inspection(data: InspectionSubmission):
         "CATEGORY_ID": 0,
     }
 
-    # If discovery is ready, use dynamic field mapping
     if discovery.is_initialized:
         transformer = FieldTransformer(discovery)
-        # Flatten vehicle data for the transformer
         flat_data = {}
         flat_data["vin_number"] = vehicle.get("vin", "")
         flat_data["registration_number"] = vehicle.get("registrationPlates", "")
@@ -502,8 +379,7 @@ async def submit_inspection(data: InspectionSubmission):
         flat_data["inspection_date"] = basic_info.get("inspectionDate", "")
         flat_data["inspector_name"] = basic_info.get("inspectorName", "")
         flat_data["equipment_completeness"] = data.equipmentCompleteness
-        
-        # Set Stage ID for completed inspection
+
         dynamic_fields = transformer.transform_to_bitrix(flat_data)
         dynamic_fields["STAGE_ID"] = "UC_0T9W8E"
         deal_fields.update(dynamic_fields)
@@ -511,7 +387,6 @@ async def submit_inspection(data: InspectionSubmission):
         logger.warning("Discovery not ready — using direct field names (may fail)")
 
     if uploaded_file_ids:
-        # Resolve the photos field dynamically (e.g., photo_front)
         files_field_id = discovery.get_field_id("photo_front")
         if files_field_id:
             deal_fields[files_field_id] = uploaded_file_ids

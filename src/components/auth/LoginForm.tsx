@@ -2,33 +2,60 @@
 
 import React, { useState } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
-import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
+import { Phone, Lock, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Logo } from '@/components/ui/Logo';
 import { ThemeToggle } from '@/components/theme-toggle';
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export const LoginForm: React.FC = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const [phone, setPhone] = useState('');
+    const [pin, setPin] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
-    const ENABLE_MOCK_LOGIN = process.env.NEXT_PUBLIC_ENABLE_MOCK_LOGIN === 'true';
-
     const loginStore = useInspectionStore((state) => state.login);
-    const mockLogin = useInspectionStore((state) => state.mockLogin);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!phone || !pin) {
+            setError('Wprowadź numer telefonu i PIN');
+            return;
+        }
+
+        if (pin.length < 4) {
+            setError('PIN musi mieć 4 cyfry');
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
 
         try {
-            const response = await api.login(email, password);
-            loginStore(response.user.email, response.token, response.user);
+            const res = await fetch(`${BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, pin }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.detail || 'Błąd logowania');
+            }
+
+            // Store in Zustand exactly like before
+            const user = {
+                id: String(data.inspector.id),
+                email: data.inspector.email || '',
+                name: data.inspector.name,
+                phone: data.inspector.phone,
+            };
+
+            loginStore(user.email, data.access_token, user);
             router.push('/dashboard');
         } catch (err: any) {
             setError(err.message || 'Błąd logowania. Spróbuj ponownie.');
@@ -86,31 +113,37 @@ export const LoginForm: React.FC = () => {
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-foreground ml-1 transition-colors">Email</label>
+                            <label className="text-sm font-semibold text-foreground ml-1 transition-colors">
+                                Numer telefonu
+                            </label>
                             <div className="relative group">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted transition-colors group-focus-within:text-primary" />
+                                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted transition-colors group-focus-within:text-primary" />
                                 <input
-                                    type="email"
+                                    type="tel"
                                     required
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="marek@firma.pl"
-                                    className="w-full bg-surface-raised border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/10 rounded-2xl py-3.5 pl-12 pr-4 text-foreground placeholder:text-muted/40 outline-none transition-all shadow-sm"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="790469341"
+                                    className="w-full bg-surface-raised border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/10 rounded-2xl py-3.5 pl-12 pr-4 text-foreground placeholder:text-muted/40 outline-none transition-all shadow-sm text-lg font-bold tracking-wide"
                                 />
                             </div>
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-foreground ml-1 transition-colors">Hasło</label>
+                            <label className="text-sm font-semibold text-foreground ml-1 transition-colors">
+                                PIN
+                            </label>
                             <div className="relative group">
                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted transition-colors group-focus-within:text-primary" />
                                 <input
                                     type="password"
+                                    inputMode="numeric"
                                     required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    className="w-full bg-surface-raised border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/10 rounded-2xl py-3.5 pl-12 pr-4 text-foreground placeholder:text-muted/40 outline-none transition-all shadow-sm"
+                                    value={pin}
+                                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                    placeholder="••••"
+                                    maxLength={4}
+                                    className="w-full bg-surface-raised border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/10 rounded-2xl py-3.5 pl-12 pr-4 text-foreground placeholder:text-muted/40 outline-none transition-all shadow-sm text-2xl font-bold tracking-[0.5em] text-center"
                                 />
                             </div>
                         </div>
@@ -134,25 +167,6 @@ export const LoginForm: React.FC = () => {
                                 <span>Zaloguj się</span>
                             )}
                         </button>
-
-
-
-                        {ENABLE_MOCK_LOGIN && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    mockLogin();
-                                    router.push('/dashboard');
-                                }}
-                                className="w-full mt-4 py-3 border-2 border-dashed border-warning/40 
-                                           text-warning rounded-2xl text-xs font-black uppercase 
-                                           tracking-widest hover:bg-warning/5 transition-all
-                                           flex items-center justify-center gap-2"
-                            >
-                                <span className="text-lg">🧪</span>
-                                Test Login (Real Data)
-                            </button>
-                        )}
                     </form>
 
                     <div className="mt-8 text-center text-muted">
@@ -164,7 +178,6 @@ export const LoginForm: React.FC = () => {
 
                 {/* Footer Info */}
                 <div className="text-center mt-8 text-muted/60 text-xs font-medium tracking-widest uppercase">
-
                 </div>
             </div>
         </div>

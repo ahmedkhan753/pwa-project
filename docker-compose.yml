@@ -1,15 +1,4 @@
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-pwa_db}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
   backend:
     build:
       context: ./backend
@@ -17,11 +6,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/pwa_db}
       BITRIX_WEBHOOK_URL: ${BITRIX_WEBHOOK_URL}
-      ENABLE_MOCK_LOGIN: ${ENABLE_MOCK_LOGIN:-true}
-    depends_on:
-      - db
+      BITRIX_STORAGE_ID: ${BITRIX_STORAGE_ID:-1}
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey123}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin2025!}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./inspectors.db}
+    volumes:
+      - backend_data:/app/data
 
   frontend:
     build:
@@ -29,16 +20,12 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-false}
-        NEXT_PUBLIC_ENABLE_MOCK_LOGIN: ${NEXT_PUBLIC_ENABLE_MOCK_LOGIN:-true}
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      NEXT_PUBLIC_ENABLE_MOCK_LOGIN: ${NEXT_PUBLIC_ENABLE_MOCK_LOGIN:-true}
-      NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-false}
     depends_on:
       - backend
 
 volumes:
-  postgres_data:
+  backend_data:

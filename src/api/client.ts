@@ -37,14 +37,14 @@ export interface SubmissionResult {
 }
 
 export const apiClient = {
-    async login(email: string, password: string) {
-        console.log('Logging in...', { email });
+    async login(phone: string, pin: string) {
+        console.log('Logging in...', { phone });
 
         try {
-            const response = await fetch(`${BASE_URL}/api/auth/login`, {
+            const response = await fetch(`${BASE_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ phone, pin }),
             });
 
             const contentType = response.headers.get("content-type");
@@ -57,7 +57,7 @@ export const apiClient = {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Błędne dane logowania');
+                throw new Error(data.detail || 'Nieprawidłowy numer telefonu lub PIN');
             }
 
             return data;
