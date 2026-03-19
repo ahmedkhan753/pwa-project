@@ -9,10 +9,10 @@ export function PhotosStep() {
     const photos = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
-    // Main 27 items
-    const mainPhotos = photos.slice(0, 27);
-    // Extra 15 items
-    const extraPhotos = photos.slice(27);
+    // Main 19 required items
+    const mainPhotos = photos.slice(0, 19);
+    // Extra 15 optional items
+    const extraPhotos = photos.slice(19);
     
     const required = mainPhotos.filter((p) => p.required);
     const filledCount = photos.filter((p) => p.base64).length;

@@ -319,6 +319,18 @@ async def save_step(
         # Log raw body for debugging
         logger.info(f"🚨 STEP {step_number} RAW BODY keys: {list(step_fields.keys()) if isinstance(step_fields, dict) else type(step_fields)}")
 
+        # VIN debug logging for Step 1
+        if step_number == 1 and isinstance(step_fields, dict):
+            logger.info(f"VIN received in step 1: {step_fields.get('vin')}")
+            try:
+                import os
+                overrides_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mapping_overrides.json")
+                with open(overrides_path) as f:
+                    field_map = json.load(f)
+                logger.info(f"VIN mapped to Bitrix field: {field_map.get('vin')}")
+            except Exception as e:
+                logger.warning(f"Could not load mapping overrides for VIN debug: {e}")
+
         # ── Step-specific flattening ──
         if step_number == 4 and isinstance(step_fields, dict):
             # Paint: flatten nested panels

@@ -1,7 +1,6 @@
 import { InspectionJob, StepData } from "@/store/useInspectionStore";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const IS_DEMO = false;
 
 const getAuthToken = () => {
     try {

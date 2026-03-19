@@ -15,18 +15,50 @@ const DRIVE_TYPES = ["4x2 (FWD)", "4x2 (RWD)", "4x4 (AWD)", "4x4 (4WD)"];
 const SEATS_OPTIONS = ["2", "4", "5", "6", "7", "8", "9+"];
 const DOORS_OPTIONS = ["2", "3", "4", "5"];
 const COLORS = ["Biały", "Czarny", "Szary", "Srebrny", "Czerwony", "Niebieski", "Zielony", "Żółty", "Pomarańczowy", "Brązowy", "Bordowy", "Beżowy", "Złoty", "Inny"];
-const VEHICLE_BRANDS = [
-  "Abarth", "Acura", "Alfa Romeo", "Alpina", "Aston Martin", "Audi", "Bentley", "BMW", 
-  "Bugatti", "Buick", "Cadillac", "Chevrolet", "Chrysler", "Citroen", "Cupra", "Dacia", 
-  "Daewoo", "Daihatsu", "Dodge", "DS Bikes", "DS Automobiles", "Ferrari", "Fiat", "Ford", 
-  "Genesis", "GMC", "Honda", "Hummer", "Hyundai", "Infiniti", "Isuzu", "Iveco", "Jaguar", 
-  "Jeep", "Kia", "Koenigsegg", "Lamborghini", "Lancia", "Land Rover", "Lexus", "Lincoln", 
-  "Lotus", "Maserati", "Maybach", "Mazda", "McLaren", "Mercedes-Benz", "Mercury", "MG", 
-  "Mini", "Mitsubishi", "Nissan", "Oldsmobile", "Opel", "Pagani", "Peugeot", "Plymouth", 
-  "Pontiac", "Porsche", "Ram", "Renault", "Rolls-Royce", "Rover", "Saab", "Saturn", 
-  "Scania", "Scion", "Seat", "Skoda", "Smart", "SsangYong", "Subaru", "Suzuki", "Tata", 
-  "Tesla", "Toyota", "Volkswagen", "Volvo"
+
+const CAR_BRANDS = [
+  "Alfa Romeo", "Audi", "BMW", "Chevrolet", "Chrysler", "Citroën",
+  "Dacia", "Daewoo", "Dodge", "DS", "Fiat", "Ford", "Honda",
+  "Hyundai", "Infiniti", "Jaguar", "Jeep", "Kia", "Lamborghini",
+  "Land Rover", "Lexus", "Maserati", "Mazda", "Mercedes-Benz",
+  "Mini", "Mitsubishi", "Nissan", "Opel", "Peugeot", "Porsche",
+  "Renault", "Seat", "Skoda", "Škoda", "Smart", "Subaru", "Suzuki",
+  "Tesla", "Toyota", "Volkswagen", "Volvo", "Other"
 ];
+
+const CAR_MODELS: Record<string, string[]> = {
+  "Škoda": ["Octavia", "Superb", "Fabia", "Kamiq", "Karoq", "Kodiaq", "Scala", "Enyaq", "Rapid", "Roomster", "Other"],
+  "Skoda": ["Octavia", "Superb", "Fabia", "Kamiq", "Karoq", "Kodiaq", "Scala", "Enyaq", "Rapid", "Roomster", "Other"],
+  "Volkswagen": ["Golf", "Passat", "Polo", "Tiguan", "Touareg", "T-Roc", "T-Cross", "Arteon", "Caddy", "Transporter", "Other"],
+  "BMW": ["1 Series", "2 Series", "3 Series", "4 Series", "5 Series", "7 Series", "X1", "X2", "X3", "X4", "X5", "X6", "X7", "Other"],
+  "Mercedes-Benz": ["A-Class", "B-Class", "C-Class", "E-Class", "S-Class", "GLA", "GLB", "GLC", "GLE", "GLS", "CLA", "CLS", "Other"],
+  "Audi": ["A1", "A3", "A4", "A5", "A6", "A7", "A8", "Q2", "Q3", "Q5", "Q7", "Q8", "TT", "R8", "Other"],
+  "Toyota": ["Corolla", "Camry", "Yaris", "RAV4", "C-HR", "Land Cruiser", "Avensis", "Auris", "Hilux", "Prius", "Other"],
+  "Ford": ["Focus", "Fiesta", "Mondeo", "Kuga", "Puma", "EcoSport", "S-Max", "Galaxy", "Ranger", "Transit", "Other"],
+  "Opel": ["Astra", "Corsa", "Insignia", "Mokka", "Crossland", "Grandland", "Zafira", "Meriva", "Other"],
+  "Renault": ["Clio", "Megane", "Laguna", "Kadjar", "Captur", "Scenic", "Talisman", "Zoe", "Duster", "Other"],
+  "Peugeot": ["208", "308", "508", "2008", "3008", "5008", "206", "207", "306", "307", "Other"],
+  "Citroën": ["C1", "C2", "C3", "C4", "C5", "Berlingo", "Picasso", "SpaceTourer", "Other"],
+  "Hyundai": ["i20", "i30", "i40", "Tucson", "Santa Fe", "Ioniq", "Kona", "Other"],
+  "Kia": ["Ceed", "Sportage", "Sorento", "Stinger", "Rio", "Picanto", "Niro", "EV6", "Other"],
+  "Nissan": ["Micra", "Juke", "Qashqai", "X-Trail", "Leaf", "Navara", "Other"],
+  "Mazda": ["Mazda2", "Mazda3", "Mazda6", "CX-3", "CX-5", "CX-30", "MX-5", "Other"],
+  "Honda": ["Civic", "Accord", "Jazz", "CR-V", "HR-V", "Other"],
+  "Fiat": ["500", "Punto", "Bravo", "Tipo", "Panda", "Doblo", "Other"],
+  "Seat": ["Ibiza", "Leon", "Ateca", "Arona", "Tarraco", "Toledo", "Other"],
+  "Volvo": ["V40", "V60", "V70", "V90", "S60", "S90", "XC40", "XC60", "XC90", "Other"],
+  "Dacia": ["Sandero", "Logan", "Duster", "Lodgy", "Spring", "Other"],
+  "Mitsubishi": ["Colt", "Lancer", "Outlander", "Eclipse Cross", "ASX", "L200", "Other"],
+  "Subaru": ["Impreza", "Legacy", "Outback", "Forester", "XV", "WRX", "BRZ", "Other"],
+  "Suzuki": ["Swift", "Vitara", "SX4", "Jimny", "Ignis", "Baleno", "Other"],
+  "Jeep": ["Renegade", "Compass", "Cherokee", "Grand Cherokee", "Wrangler", "Other"],
+  "Land Rover": ["Defender", "Discovery", "Freelander", "Range Rover", "Evoque", "Velar", "Other"],
+  "Porsche": ["911", "Cayenne", "Macan", "Panamera", "Taycan", "Other"],
+  "Lexus": ["IS", "ES", "GS", "LS", "RX", "NX", "UX", "Other"],
+  "Tesla": ["Model 3", "Model S", "Model X", "Model Y", "Other"],
+  "Chevrolet": ["Spark", "Aveo", "Cruze", "Malibu", "Camaro", "Corvette", "Suburban", "Tahoe", "Other"],
+  "Daewoo": ["Matiz", "Lanos", "Nubira", "Leganza", "Tacuma", "Other"],
+};
 
 export function VehicleDataStep() {
     const { data, updateField } = useInspectionStore();
@@ -132,22 +164,46 @@ export function VehicleDataStep() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <FormField label="Nr rejestracyjny" value={v.registrationPlates} onChange={(val) => handleChange('registrationPlates', val)} placeholder="XX 12345" />
                     
-                    <SmartDropdown 
-                        label="Marka" 
-                        value={v.make} 
-                        options={metadata?.vehicle_brands || metadata?.vehicle_brand || VEHICLE_BRANDS} 
-                        onChange={(val) => handleChange('make', val)} 
-                        placeholder="Szukaj marki..."
-                    />
-                    
-                    <SmartDropdown 
-                        label="Model" 
-                        value={v.model} 
-                        options={v.make && metadata?.vehicle_models?.[v.make] ? metadata.vehicle_models[v.make] : (metadata?.vehicle_models?.Inne || ["Inny"])} 
-                        onChange={(val) => handleChange('model', val)} 
-                        placeholder={v.make ? "Szukaj modelu..." : "Najpierw wybierz markę"}
-                        disabled={!v.make}
-                    />
+                    {/* Brand — datalist with free text */}
+                    <div>
+                        <label className="text-xs font-black text-muted uppercase tracking-widest mb-2 block px-1">
+                            Marka
+                        </label>
+                        <input
+                            type="text"
+                            list="brands-list"
+                            value={v.make}
+                            onChange={(e) => {
+                                handleChange('make', e.target.value);
+                                handleChange('model', ''); // reset model when brand changes
+                            }}
+                            placeholder="Wybierz lub wpisz markę..."
+                            aria-label="Marka"
+                            className="w-full py-3.5 px-4 rounded-xl border-2 border-border bg-surface text-foreground text-sm font-bold placeholder:text-muted/40 focus:border-primary transition-all"
+                        />
+                        <datalist id="brands-list">
+                            {CAR_BRANDS.map(b => <option key={b} value={b} />)}
+                        </datalist>
+                    </div>
+
+                    {/* Model — datalist with brand-dependent suggestions + free text */}
+                    <div>
+                        <label className="text-xs font-black text-muted uppercase tracking-widest mb-2 block px-1">
+                            Model
+                        </label>
+                        <input
+                            type="text"
+                            list="models-list"
+                            value={v.model}
+                            onChange={(e) => handleChange('model', e.target.value)}
+                            placeholder={v.make ? "Wybierz lub wpisz model..." : "Najpierw wybierz markę"}
+                            aria-label="Model"
+                            className="w-full py-3.5 px-4 rounded-xl border-2 border-border bg-surface text-foreground text-sm font-bold placeholder:text-muted/40 focus:border-primary transition-all"
+                        />
+                        <datalist id="models-list">
+                            {(CAR_MODELS[v.make] || []).map(m => <option key={m} value={m} />)}
+                        </datalist>
+                    </div>
 
                     <FormField 
                         label="Rok produkcji" 

@@ -13,6 +13,24 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/deals", tags=["Deals"])
 logger = logging.getLogger("routers.deals")
 
+# ── Stage → Status mapping ──
+STAGE_STATUS_MAP = {
+    "NEW":                  "new",
+    "PREPARATION":          "assigned",
+    "PREPAYMENT_INVOICE":   "scheduled",
+    "UC_0T9W8E":            "completed",
+    "EXECUTING":            "in_valuation",
+    "WON":                  "closed",
+    "LOSE":                 "lost",
+}
+
+def _inject_status(deal: dict) -> dict:
+    """Add status and stageId fields to a deal dict based on STAGE_ID."""
+    stage_id = deal.get("STAGE_ID") or deal.get("stage_id") or deal.get("stageId") or "NEW"
+    deal["status"] = STAGE_STATUS_MAP.get(stage_id, "new")
+    deal["stageId"] = stage_id
+    return deal
+
 class ScheduleRequest(BaseModel):
     scheduled_datetime: str
 
@@ -40,11 +58,16 @@ async def get_deals(
     try:
         if user_id and date_from:
             # get_appraiser_deals now returns {scheduled, unscheduled, total_in_bitrix, total_returned}
-            return await gateway.get_appraiser_deals(
+            result = await gateway.get_appraiser_deals(
                 user_id=user_id,
                 date_from=date_from,
                 date_to=date_to,
             )
+            # Inject status into every deal
+            if isinstance(result, dict):
+                result["scheduled"] = [_inject_status(d) for d in result.get("scheduled", [])]
+                result["unscheduled"] = [_inject_status(d) for d in result.get("unscheduled", [])]
+            return result
         else:
             # Build generic filters
             filters = {}
@@ -61,7 +84,7 @@ async def get_deals(
             from services.field_transformer import FieldTransformer
             disc = request.app.state.discovery
             transformer = FieldTransformer(disc)
-            deals = [transformer.transform_from_bitrix(d) for d in deals_list]
+            deals = [_inject_status(transformer.transform_from_bitrix(d)) for d in deals_list]
 
             # Return consistent dict structure
             return {

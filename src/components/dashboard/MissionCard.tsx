@@ -1,10 +1,25 @@
 'use client';
 
 import React from 'react';
-import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle } from 'lucide-react';
+import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle, Bell, Eye, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { InspectionJob, useInspectionStore } from '@/store/useInspectionStore';
 import { cn, formatLocaleDate } from '@/lib/utils';
+
+// ── Status display config ──
+const STATUS_CONFIG: Record<string, { label: string; badge: string }> = {
+    new:           { label: 'Nowe',          badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+    assigned:      { label: 'Przypisane',    badge: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+    scheduled:     { label: 'Zaplanowane',   badge: 'bg-orange-100 text-orange-700 border-orange-200' },
+    completed:     { label: 'Zakończone',    badge: 'bg-green-100 text-green-700 border-green-200' },
+    in_valuation:  { label: 'W wycenie',     badge: 'bg-purple-100 text-purple-700 border-purple-200' },
+    closed:        { label: 'Zamknięte',     badge: 'bg-gray-100 text-gray-500 border-gray-200' },
+    lost:          { label: 'Utracone',      badge: 'bg-red-100 text-red-500 border-red-200' },
+    ready:         { label: 'Gotowe',        badge: 'bg-primary-light text-primary border-primary/20' },
+    in_progress:   { label: 'W toku',        badge: 'bg-warning-light text-warning border-warning/20' },
+};
+
+const FINISHED_STATUSES = ['completed', 'in_valuation', 'closed', 'lost'];
 
 interface MissionCardProps {
     job: InspectionJob;
@@ -16,37 +31,25 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const fetchFullDeal = useInspectionStore(state => state.fetchFullDeal);
     const setStep = useInspectionStore(state => state.setStep);
 
-    // Bug 2 Fix: Date/Time defaults
+    // Date/Time defaults
     const getTodayDate = () => new Date().toISOString().split('T')[0];
     const getNextHour = () => {
         const now = new Date();
         now.setHours(now.getHours() + 1);
         now.setMinutes(0);
-        return now.toTimeString().slice(0, 5); // "11:00"
+        return now.toTimeString().slice(0, 5);
     };
 
-    const [isScheduling, setIsScheduling] = React.useState(!job.scheduledDate);
+    const [isScheduling, setIsScheduling] = React.useState(false);
     const [selectedDate, setSelectedDate] = React.useState(job.scheduledDate?.split('T')[0] || getTodayDate());
     const [selectedTime, setSelectedTime] = React.useState(job.scheduledDate?.split('T')[1]?.substring(0, 5) || getNextHour());
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isScheduledSuccessfully, setIsScheduledSuccessfully] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-    
-    // Check if progress exists in drafts
+
+    const isFinished = FINISHED_STATUSES.includes(job.status);
     const isInProgress = !!drafts[job.id] || job.status === 'in_progress';
-    const isCompleted = job.status === 'completed';
-
-    const getStatusStyles = () => {
-        if (isCompleted) return 'bg-success-light text-success border-success/20';
-        if (isInProgress) return 'bg-warning-light text-warning border-warning/20 shadow-lg shadow-warning/5';
-        return 'bg-primary-light text-primary border-primary/20';
-    };
-
-    const getStatusLabel = () => {
-        if (isCompleted) return 'Ukończono';
-        if (isInProgress) return 'W toku';
-        return 'Gotowe';
-    };
+    const statusConfig = STATUS_CONFIG[job.status] || STATUS_CONFIG['new'];
 
     const handleCall = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -61,15 +64,20 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     };
 
     const handleStart = async () => {
-        if (!job.scheduledDate) {
+        // PART 4: Block re-entry into completed inspections
+        if (isFinished) {
+            alert('Ta inspekcja została już zakończona.');
+            return;
+        }
+
+        if (!job.scheduledDate && job.status !== 'scheduled') {
             setIsScheduling(true);
             return;
         }
 
         if (isInProgress && drafts[job.id]) {
-            // If already in drafts, just select it and go to Step 1 (or wherever they were)
             selectJob(job.id);
-            setStep(1); // Force Step 1 as requested for pre-fill verification
+            setStep(1);
             return;
         }
 
@@ -77,12 +85,17 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         setIsSubmitting(true);
         try {
             await fetchFullDeal(job.id);
-            // navigate is handled by the component that renders MissionCard or we can rely on store state change
         } catch (err) {
             setError("Błąd pobierania danych deala");
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleViewReport = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        // For now, show an alert; replace with actual report viewing logic
+        alert(`Podgląd raportu dla zlecenia #${job.id} — funkcja w przygotowaniu.`);
     };
 
     const onConfirmSchedule = async (e: React.MouseEvent) => {
@@ -93,12 +106,10 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         }
         
         try {
-            // 1. Set saving state
             setIsSubmitting(true);
             setError(null);
             const fullIso = `${selectedDate}T${selectedTime}:00`;
 
-            // 2. Call store action with timeout protection
             console.log(`[Schedule] Attempting to schedule deal ${job.id} for ${fullIso}`);
             const res: any = await Promise.race([
                 scheduleJob(job.id, fullIso),
@@ -108,23 +119,18 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             ]);
             
             if (res.success) {
-                // 3. Success — update UI
                 setIsScheduledSuccessfully(true);
-                // Wait small delay to show success "Zaplanowano ✓"
                 await new Promise(resolve => setTimeout(resolve, 800));
                 
                 setIsScheduling(false);
                 setIsSubmitting(false);
 
-                // 4. Open Wizard by fetching deal data (which sets currentJobId)
-                // This is the SPA equivalent of router.push in this project
                 await handleStart();
             } else {
                 setError(res.message || "Błąd zapisu");
                 setIsSubmitting(false);
             }
         } catch (err: any) {
-            // 5. Error — show message, stop spinner
             console.error('Critical Schedule Error:', err);
             setError(err.message || "Błąd zapisu. Spróbuj ponownie.");
             setIsSubmitting(false);
@@ -134,11 +140,13 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
     return (
         <div 
-            onClick={!isScheduling ? handleStart : undefined}
+            onClick={!isScheduling && !isFinished ? handleStart : undefined}
             className={cn(
                 "group relative bg-surface-glass backdrop-blur-xl border-2 rounded-[2.5rem] p-6 shadow-xl dark:shadow-2xl transition-all duration-500",
-                !isScheduling && "hover:border-primary/30 active:scale-[0.98] cursor-pointer",
-                job.hasConflict ? "border-danger/50 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]" : "border-border"
+                isFinished 
+                    ? "border-border/50 opacity-80" 
+                    : !isScheduling && "hover:border-primary/30 active:scale-[0.98] cursor-pointer",
+                job.hasConflict ? "border-danger/50 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]" : !isFinished && "border-border"
             )}
         >
             {/* Conflict Warning Badge */}
@@ -151,16 +159,24 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
             {/* Status & Time */}
             <div className="flex justify-between items-start mb-6">
-                <div className="flex gap-2">
-                    <div className={cn("px-3 py-1 rounded-full text-[10px] font-bold uppercase border", getStatusStyles())}>
-                        {getStatusLabel()}
+                <div className="flex gap-2 flex-wrap">
+                    {/* Status badge from Bitrix stage */}
+                    <div className={cn("px-3 py-1 rounded-full text-[10px] font-bold uppercase border", statusConfig.badge)}>
+                        {isFinished && '✅ '}{statusConfig.label}
                     </div>
+                    {/* Job type badge */}
                     <div className={cn(
                         "px-3 py-1 rounded-full text-[10px] font-black uppercase border shadow-lg",
                         job.jobType === 'CFM' ? "bg-primary-light text-primary border-primary/30" : "bg-primary text-white border-primary shadow-lg shadow-primary/20"
                     )}>
                         {job.jobType || 'WYCENA'}
                     </div>
+                    {/* In-progress badge */}
+                    {isInProgress && !isFinished && (
+                        <div className="px-3 py-1 rounded-full text-[10px] font-bold uppercase border bg-warning-light text-warning border-warning/20">
+                            W toku
+                        </div>
+                    )}
                 </div>
                 <div className={cn(
                     "flex items-center gap-1.5 font-mono text-[10px] px-3 py-1.5 rounded-xl border transition-colors",
@@ -186,7 +202,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
             </div>
 
-            {/* Scheduling UI OR Info */}
+            {/* Scheduling UI OR Location Info */}
             {isScheduling ? (
                 <div className="bg-primary-light/50 rounded-[1.5rem] p-4 border border-primary/20 mb-6 space-y-4 animate-in fade-in slide-in-from-bottom-2" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-2 mb-1">
@@ -238,14 +254,12 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         {isSubmitting ? 'Zapisywanie...' : (isScheduledSuccessfully ? 'Zaplanowano ✓' : 'Zatwierdź i Rozpocznij')}
                     </button>
                     
-                    {job.scheduledDate && (
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); setIsScheduling(false); }}
-                            className="w-full text-[10px] font-black text-muted uppercase hover:text-foreground"
-                        >
-                            Anuluj
-                        </button>
-                    )}
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setIsScheduling(false); }}
+                        className="w-full text-[10px] font-black text-muted uppercase hover:text-foreground"
+                    >
+                        Anuluj
+                    </button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-3 mb-6">
@@ -259,35 +273,96 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
             )}
 
-            {/* Action Bar - Always visible */}
-            <div className="grid grid-cols-3 gap-2">
-                <button
-                    onClick={handleCall}
-                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                >
-                    <Phone className="w-5 h-5 text-primary" />
-                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
-                </button>
-                <button
-                    onClick={handleNavigate}
-                    className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                >
-                    <Navigation className="w-5 h-5 text-primary" />
-                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
-                </button>
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleStart(); }}
-                    className={cn(
-                        "flex flex-col items-center justify-center gap-1.5 py-4 rounded-3xl transition-all shadow-xl active:scale-95",
-                        isInProgress ? "bg-accent hover:bg-accent-hover shadow-accent/30" : "bg-primary hover:bg-primary-hover shadow-primary/30"
-                    )}
-                >
-                    <Play className="w-5 h-5 fill-current text-white" />
-                    <span className="text-[9px] font-black uppercase text-white tracking-widest">
-                        {isSubmitting ? 'Czekaj...' : (isInProgress ? 'Wznów' : 'Start')}
-                    </span>
-                </button>
-            </div>
+            {/* ── Action Bar — status-dependent ── */}
+            {isFinished ? (
+                /* Completed / Closed / Lost: show report button, no start/schedule */
+                <div className="space-y-3">
+                    <div className="flex items-center justify-center gap-2 py-3 bg-green-50 dark:bg-green-950/30 rounded-2xl border border-green-200 dark:border-green-800">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <span className="text-xs font-black text-green-700 dark:text-green-400 uppercase tracking-widest">
+                            Oględziny zakończone
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            onClick={handleCall}
+                            className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                        >
+                            <Phone className="w-5 h-5 text-primary" />
+                            <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
+                        </button>
+                        <button
+                            onClick={handleNavigate}
+                            className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                        >
+                            <Navigation className="w-5 h-5 text-primary" />
+                            <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
+                        </button>
+                        <button
+                            onClick={handleViewReport}
+                            className="flex flex-col items-center justify-center gap-1.5 bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-900/40 py-4 rounded-3xl transition-all border border-green-200 dark:border-green-800"
+                        >
+                            <Eye className="w-5 h-5 text-green-600" />
+                            <span className="text-[9px] font-black uppercase text-green-700 dark:text-green-400 tracking-widest">Raport</span>
+                        </button>
+                    </div>
+                </div>
+            ) : job.status === 'scheduled' || job.scheduledDate ? (
+                /* Scheduled: show Start button prominently */
+                <div className="grid grid-cols-3 gap-2">
+                    <button
+                        onClick={handleCall}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                    >
+                        <Phone className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
+                    </button>
+                    <button
+                        onClick={handleNavigate}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                    >
+                        <Navigation className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleStart(); }}
+                        className={cn(
+                            "flex flex-col items-center justify-center gap-1.5 py-4 rounded-3xl transition-all shadow-xl active:scale-95",
+                            isInProgress ? "bg-accent hover:bg-accent-hover shadow-accent/30" : "bg-primary hover:bg-primary-hover shadow-primary/30"
+                        )}
+                    >
+                        <Play className="w-5 h-5 fill-current text-white" />
+                        <span className="text-[9px] font-black uppercase text-white tracking-widest">
+                            {isSubmitting ? 'Czekaj...' : (isInProgress ? 'Wznów' : 'Start')}
+                        </span>
+                    </button>
+                </div>
+            ) : (
+                /* New / Assigned: show Schedule (bell) button */
+                <div className="grid grid-cols-3 gap-2">
+                    <button
+                        onClick={handleCall}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                    >
+                        <Phone className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
+                    </button>
+                    <button
+                        onClick={handleNavigate}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
+                    >
+                        <Navigation className="w-5 h-5 text-primary" />
+                        <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setIsScheduling(true); }}
+                        className="flex flex-col items-center justify-center gap-1.5 bg-primary hover:bg-primary-hover py-4 rounded-3xl transition-all shadow-xl shadow-primary/30 active:scale-95"
+                    >
+                        <Bell className="w-5 h-5 text-white" />
+                        <span className="text-[9px] font-black uppercase text-white tracking-widest">Zaplanuj</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

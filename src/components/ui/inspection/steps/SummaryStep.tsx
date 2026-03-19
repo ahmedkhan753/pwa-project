@@ -34,7 +34,13 @@ export function SummaryStep() {
                         {allDamages.map((d, i) => (
                             <div key={i} className="flex-shrink-0 w-24 space-y-2">
                                 <div className="aspect-square rounded-2xl overflow-hidden border-2 border-surface shadow-sm relative group">
-                                    <img src={d.photos[0]} alt="damage" className="w-full h-full object-cover" />
+                                    {d.photos?.[0] ? (
+                                        <img src={d.photos[0]} alt="damage" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full bg-surface-raised flex items-center justify-center">
+                                            <ImageIcon size={16} className="text-muted/30" />
+                                        </div>
+                                    )}
                                     <div className="absolute inset-x-0 bottom-0 bg-black/60 py-1 text-center">
                                         <span className="text-[8px] font-black text-white uppercase">{d.part || 'Element'}</span>
                                     </div>
@@ -110,7 +116,13 @@ export function SummaryStep() {
                             <div className="flex gap-2 overflow-x-auto py-2 no-scrollbar px-1 bg-background rounded-2xl border border-border">
                                 {allDamages.slice(0, 8).map((d, idx) => (
                                     <div key={idx} className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border-2 border-surface shadow-sm">
-                                        <img src={d.photos[0]} alt="" className="w-full h-full object-cover grayscale-[0.5]" />
+                                        {d.photos?.[0] ? (
+                                            <img src={d.photos[0]} alt="" className="w-full h-full object-cover grayscale-[0.5]" />
+                                        ) : (
+                                            <div className="w-full h-full bg-surface-raised flex items-center justify-center">
+                                                <ImageIcon size={10} className="text-muted/30" />
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 {allDamages.length > 8 && (

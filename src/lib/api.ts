@@ -1,8 +1,5 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-console.log(
-  `[API] Mode: REAL | BASE_URL: ${BASE_URL} |`,
-  `NEXT_PUBLIC_DEMO_MODE: ${process.env.NEXT_PUBLIC_DEMO_MODE}`
-)
+console.log(`[API] BASE_URL: ${BASE_URL}`)
 
 // Helper to get auth token from Zustand persisted storage
 const getAuthToken = (): string | null => {

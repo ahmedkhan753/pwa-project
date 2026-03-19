@@ -19,7 +19,8 @@ export interface InspectionJob {
   phone: string;
   appointmentTime: string;
   deadline: string; // ISO date "2026-03-13"
-  status: 'ready' | 'in_progress' | 'completed';
+  status: 'new' | 'assigned' | 'scheduled' | 'completed' | 'in_valuation' | 'closed' | 'lost' | 'ready' | 'in_progress';
+  stageId?: string;
   make?: string;
   model?: string;
   city?: string;
@@ -376,47 +377,32 @@ const emptyWheel: WheelData = {
   brand: '', model: '', size: '', dot: '', loadIndex: '', speedIndex: '', treadDepth: '', type: '', condition: null,
 };
 
-// ─── Photo Slots ──────────────────────────────────────────
 const defaultPhotoSlots: PhotoSlot[] = [
-  // Exterior Sequence
-  { id: 'rear', label: '1. Tył', base64: '', required: true },
-  { id: 'rear_left', label: '2. Tył Lewy', base64: '', required: true },
-  { id: 'left_side', label: '3. Lewy Bok', base64: '', required: true },
-  { id: 'front_left', label: '4. Przód Lewy', base64: '', required: true },
-  { id: 'front', label: '5. Przód', base64: '', required: true },
-  { id: 'front_right', label: '6. Przód Prawy', base64: '', required: true },
-  { id: 'right_side', label: '7. Prawy Bok', base64: '', required: true },
-  { id: 'rear_right', label: '8. Tył Prawy', base64: '', required: true },
-  { id: 'roof', label: '9. Dach', base64: '', required: true },
+  // Required photos (exact order per client spec)
+  { id: 'photo_front', label: 'Przód', base64: '', required: true },
+  { id: 'photo_rear', label: 'Tył', base64: '', required: true },
+  { id: 'photo_left', label: 'Lewy Bok', base64: '', required: true },
+  { id: 'photo_right', label: 'Prawy Bok', base64: '', required: true },
+  { id: 'photo_interior', label: 'Wnętrze', base64: '', required: true },
+  { id: 'photo_dashboard', label: 'Kokpit', base64: '', required: true },
+  { id: 'photo_vin_plate', label: 'Tabliczka VIN', base64: '', required: true },
+  { id: 'photo_odometer', label: 'Licznik', base64: '', required: true },
+  { id: 'photo_front_left_diag', label: 'Przekątna przednia lewa', base64: '', required: true },
+  { id: 'photo_front_right_diag', label: 'Przekątna przednia prawa', base64: '', required: true },
+  { id: 'photo_rear_left_diag', label: 'Przekątna tylna lewa', base64: '', required: true },
+  { id: 'photo_rear_right_diag', label: 'Przekątna tylna prawa', base64: '', required: true },
+  { id: 'photo_engine', label: 'Silnik', base64: '', required: true },
+  { id: 'photo_trunk', label: 'Bagażnik', base64: '', required: true },
+  { id: 'photo_roof', label: 'Dach', base64: '', required: true },
+  { id: 'photo_front_left_wheel', label: 'Koło przednie lewe', base64: '', required: true },
+  { id: 'photo_front_right_wheel', label: 'Koło przednie prawe', base64: '', required: true },
+  { id: 'photo_rear_left_wheel', label: 'Koło tylne lewe', base64: '', required: true },
+  { id: 'photo_rear_right_wheel', label: 'Koło tylne prawe', base64: '', required: true },
 
-  // Interior & Engine
-  { id: 'dashboard', label: '10. Kokpit / Deska', base64: '', required: true },
-  { id: 'odometer', label: '11. Licznik (Przebieg)', base64: '', required: true },
-  { id: 'front_seats', label: '12. Fotele przód', base64: '', required: true },
-  { id: 'rear_seats', label: '13. Kanapa tył', base64: '', required: true },
-  { id: 'trunk', label: '14. Bagażnik', base64: '', required: true },
-  { id: 'engine', label: '15. Komora silnika', base64: '', required: true },
-  { id: 'vin_plate', label: '16. Tabliczka VIN', base64: '', required: true },
-  { id: 'tire_sticker', label: '17. Naklejka ciśnienia', base64: '', required: false },
-
-  // Tires & Rims
-  { id: 'tire_fl', label: '18. Opona PL', base64: '', required: true },
-  { id: 'rim_fl', label: '19. Felga PL', base64: '', required: true },
-  { id: 'tire_fr', label: '20. Opona PP', base64: '', required: true },
-  { id: 'rim_fr', label: '21. Felga PP', base64: '', required: true },
-  { id: 'tire_rl', label: '22. Opona TL', base64: '', required: true },
-  { id: 'rim_rl', label: '23. Felga TL', base64: '', required: false },
-  { id: 'tire_rr', label: '24. Opona TP', base64: '', required: true },
-  { id: 'rim_rr', label: '25. Felga TP', base64: '', required: true },
-
-  // Documents
-  { id: 'doc_1', label: '26. Dokumenty 1', base64: '', required: true },
-  { id: 'doc_2', label: '27. Dokumenty 2', base64: '', required: true },
-
-  // Expandable Extra Slots (Phased in UI)
+  // Optional extra photos
   ...Array.from({ length: 15 }, (_, i) => ({
-    id: `extra_${i + 1}`,
-    label: `Dodatkowe ${i + 1}`,
+    id: `photo_optional_${i + 1}`,
+    label: `Zdjęcie dodatkowe ${i + 1}`,
     base64: '',
     required: false
   }))
@@ -573,7 +559,7 @@ export const useInspectionStore = create<InspectionState>()(
           role: "appraiser",
           bitrixId: "1", // Use Bitrix ID 1 for real data fetching fallback
         };
-        
+
         set((state) => ({
           auth: {
             ...state.auth,
@@ -584,7 +570,7 @@ export const useInspectionStore = create<InspectionState>()(
             currentUserName: "Mateusz Chłodek",
           },
         }));
-        
+
         // Persist to localStorage for survival if not handled by persist middleware
         // (Zustand persist handles the state, but mirroring for raw fetch if needed)
         localStorage.setItem("auth_token", mockToken);
@@ -749,6 +735,7 @@ export const useInspectionStore = create<InspectionState>()(
           } else {
             finalData = JSON.parse(JSON.stringify(initialData));
             finalData.vehicleData.basicInfo.userOwner = job.clientName;
+            finalData.vehicleData.basicInfo.inspectorName = state.auth.currentUserName || 'Mateusz Chłodek';
             finalData.vehicleData.vin = job.vin;
             finalData.vehicleData.registrationPlates = job.plates;
             finalData.vehicleData.make = job.make || "";
@@ -1035,7 +1022,8 @@ export const useInspectionStore = create<InspectionState>()(
             phone: d.client_phone || d.clientPhone || '',
             appointmentTime: d.appointment_time || (d.scheduledDate ? d.scheduledDate.split('T')[1]?.slice(0, 5) : '09:00'),
             deadline: date,
-            status: (d.STAGE_ID === 'WON' || d.STAGE_ID === 'FINAL' || d.status === 'completed' || d.status === 'scheduled') ? 'ready' : 'ready',
+            status: d.status || 'new',
+            stageId: d.stageId || d.STAGE_ID || '',
             make: d.vehicle_brand || d.brand || '',
             model: d.vehicle_model || d.model || '',
             city: d.inspection_place || d.location || '',
@@ -1062,10 +1050,9 @@ export const useInspectionStore = create<InspectionState>()(
     {
       name: 'inspection-storage',
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {
-          // Initialize grouped jobs if missing
           const jobs = persistedState.jobs || {};
           const scheduled = jobs.scheduled || [];
           const unscheduled = jobs.unscheduled || jobs.list || [];
@@ -1079,6 +1066,16 @@ export const useInspectionStore = create<InspectionState>()(
               totalInBitrix: scheduled.length + unscheduled.length,
               loading: false,
               error: null
+            }
+          };
+        }
+        if (version < 3) {
+          // Reset photos to new 19+15 structure (removes old 42-slot duplicates)
+          return {
+            ...persistedState,
+            data: {
+              ...(persistedState.data || {}),
+              photos: [...defaultPhotoSlots],
             }
           };
         }

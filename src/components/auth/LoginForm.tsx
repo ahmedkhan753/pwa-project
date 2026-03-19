@@ -16,16 +16,7 @@ export const LoginForm: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
-    const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
     const ENABLE_MOCK_LOGIN = process.env.NEXT_PUBLIC_ENABLE_MOCK_LOGIN === 'true';
-    
-    // Auto-fill in demo mode
-    React.useEffect(() => {
-        if (DEMO_MODE) {
-            setEmail("demo@zaufajrzeczoznawcy.pl");
-            setPassword("demo2024");
-        }
-    }, [DEMO_MODE]);
 
     const loginStore = useInspectionStore((state) => state.login);
     const mockLogin = useInspectionStore((state) => state.mockLogin);
@@ -144,24 +135,7 @@ export const LoginForm: React.FC = () => {
                             )}
                         </button>
 
-                        {DEMO_MODE && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setEmail("demo@zaufajrzeczoznawcy.pl");
-                                    setPassword("demo2024");
-                                    // Submit after a small delay to show filling
-                                    setTimeout(() => {
-                                        const form = document.querySelector('form');
-                                        form?.requestSubmit();
-                                        router.push('/dashboard');
-                                    }, 100);
-                                }}
-                                className="w-full py-3 bg-surface-raised border border-border rounded-xl text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 transition-all text-center"
-                            >
-                                Zaloguj jako Demo
-                            </button>
-                        )}
+
 
                         {ENABLE_MOCK_LOGIN && (
                             <button
