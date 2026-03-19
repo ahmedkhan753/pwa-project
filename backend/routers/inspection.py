@@ -321,7 +321,8 @@ async def save_step(
 
         # VIN debug logging for Step 1
         if step_number == 1 and isinstance(step_fields, dict):
-            logger.info(f"VIN received in step 1: {step_fields.get('vin')}")
+            vin_value = step_fields.get('vin', 'NOT_FOUND')
+            logger.info(f"🔍 VIN received: '{vin_value}' type={type(vin_value).__name__}")
             try:
                 import os
                 overrides_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mapping_overrides.json")

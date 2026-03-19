@@ -110,6 +110,17 @@ class FieldTransformer:
                 f"{warnings[:10]}{'...' if len(warnings) > 10 else ''}"
             )
 
+        # ── VIN Sanitization ──
+        # VIN field must always be a real string, never "0" or empty
+        VIN_FIELD = "UF_CRM_1766057539531"
+        if VIN_FIELD in bitrix_fields:
+            vin_val = bitrix_fields[VIN_FIELD]
+            if not vin_val or str(vin_val).strip() in ("0", "None", ""):
+                del bitrix_fields[VIN_FIELD]
+                logger.warning(f"VIN sanitized — removed invalid value: '{vin_val}'")
+            else:
+                bitrix_fields[VIN_FIELD] = str(vin_val).strip()
+
         return bitrix_fields
 
     def _flatten_payload(self, d: dict, parent_key: str = '', sep: str = '.') -> dict:

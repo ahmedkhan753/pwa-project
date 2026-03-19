@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export function SummaryStep() {
     const { data, jobs, updateStepData, setSignature } = useInspectionStore();
     const summary = data.finalSummary;
-    const allDamages = [...data.exteriorDamage, ...data.interiorDamage];
+    const allDamages = [...(data.exteriorDamage ?? []), ...(data.interiorDamage ?? [])];
     
     // Lock logic: if appraiser has signed, lock everything
     const isLocked = !!summary.signatureAppraiser;
@@ -42,10 +42,10 @@ export function SummaryStep() {
                                         </div>
                                     )}
                                     <div className="absolute inset-x-0 bottom-0 bg-black/60 py-1 text-center">
-                                        <span className="text-[8px] font-black text-white uppercase">{d.part || 'Element'}</span>
+                                        <span className="text-[8px] font-black text-white uppercase">{d?.part || 'Element'}</span>
                                     </div>
                                 </div>
-                                <p className="text-[8px] font-bold text-muted truncate leading-tight">{d.description}</p>
+                                <p className="text-[8px] font-bold text-muted truncate leading-tight">{d?.description ?? ''}</p>
                             </div>
                         ))}
                     </div>

@@ -3,12 +3,14 @@ Deals Router
 ============
 List and get CRM deal routes for the Calendar View
 and inspection resume features.
+Filters deals by the logged-in inspector's phone number.
 """
 
 import logging
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Query, Depends
-from pydantic import BaseModel
+
+from deps import get_current_user
 
 router = APIRouter(prefix="/deals", tags=["Deals"])
 logger = logging.getLogger("routers.deals")
@@ -31,13 +33,11 @@ def _inject_status(deal: dict) -> dict:
     deal["stageId"] = stage_id
     return deal
 
-class ScheduleRequest(BaseModel):
-    scheduled_datetime: str
-
 
 @router.get("")
 async def get_deals(
     request: Request,
+    current_user: dict = Depends(get_current_user),
     user_id: Optional[int] = Query(None, description="Bitrix24 user ID"),
     date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
@@ -45,54 +45,53 @@ async def get_deals(
 ):
     """
     GET /deals
-    Returns list of inspections for Calendar View.
-    Filters by user_id, date range, and status.
+    Returns list of inspections filtered by the current inspector's phone.
     """
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
 
     if not bitrix_ready:
         logger.warning("Bitrix not ready — returning empty deal list")
-        return []
+        return {"scheduled": [], "unscheduled": [], "total_in_bitrix": 0, "total_returned": 0}
+
+    inspector_phone = current_user.get("phone", "")
+    logger.info(f"Fetching deals for inspector phone: {inspector_phone}")
 
     try:
-        if user_id and date_from:
-            # get_appraiser_deals now returns {scheduled, unscheduled, total_in_bitrix, total_returned}
-            result = await gateway.get_appraiser_deals(
-                user_id=user_id,
-                date_from=date_from,
-                date_to=date_to,
-            )
-            # Inject status into every deal
-            if isinstance(result, dict):
-                result["scheduled"] = [_inject_status(d) for d in result.get("scheduled", [])]
-                result["unscheduled"] = [_inject_status(d) for d in result.get("unscheduled", [])]
-            return result
-        else:
-            # Build generic filters
-            filters = {}
-            if date_from:
-                filters[">=BEGINDATE"] = date_from
-            if date_to:
-                filters["<=BEGINDATE"] = date_to
-            if status:
-                filters["STAGE_ID"] = status
+        # Build Bitrix filter
+        filter_params = {
+            "STAGE_ID": ["NEW", "PREPARATION", "PREPAYMENT_INVOICE",
+                         "UC_0T9W8E", "EXECUTING", "WON", "LOSE"],
+        }
 
-            deals_list = await gateway.get_deal_list(filters)
+        # Filter by inspector phone if available
+        if inspector_phone:
+            filter_params["UF_CRM_1773961369947"] = inspector_phone
 
-            # Transform each deal using the field transformer
-            from services.field_transformer import FieldTransformer
-            disc = request.app.state.discovery
-            transformer = FieldTransformer(disc)
-            deals = [_inject_status(transformer.transform_from_bitrix(d)) for d in deals_list]
+        # Direct Bitrix API call with phone filter
+        deals_raw = await gateway.call("crm.deal.list", {
+            "filter": filter_params,
+            "select": ["ID", "TITLE", "STAGE_ID", "DATE_CREATE", "BEGINDATE",
+                       "UF_CRM_*", "ASSIGNED_BY_ID", "OPPORTUNITY"],
+            "order": {"DATE_CREATE": "DESC"}
+        })
 
-            # Return consistent dict structure
-            return {
-                "scheduled": deals,
-                "unscheduled": [],
-                "total_in_bitrix": len(deals),
-                "total_returned": len(deals)
-            }
+        # Transform each deal
+        result = []
+        for deal in deals_raw:
+            enriched = _inject_status(deal)
+            enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
+            result.append(enriched)
+
+        logger.info(f"Found {len(result)} deals for phone {inspector_phone}")
+
+        # Return consistent dict structure
+        return {
+            "scheduled": result,
+            "unscheduled": [],
+            "total_in_bitrix": len(result),
+            "total_returned": len(result),
+        }
 
     except Exception as e:
         logger.error(f"Error fetching deals: {e}")
@@ -132,29 +131,21 @@ async def get_deal(request: Request, deal_id: int):
 @router.patch("/{deal_id}/schedule")
 async def schedule_deal(
     deal_id: int,
-    schedule_data: ScheduleRequest,
-    request: Request
+    request: Request,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     PATCH /deals/{deal_id}/schedule
     Updates the planned inspection date and transitions deal stage.
     """
     gateway = request.app.state.gateway
-    
-    # ADD THIS DEBUG LOG
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Import here to avoid circular dependencies
-    from main import get_current_user
-    current_user = await get_current_user(request)
+
+    body = await request.json()
+    scheduled_datetime = body.get("scheduled_datetime")
 
     logger.info(f"Schedule called — deal_id: {deal_id}")
     logger.info(f"current_user: {current_user}")
-    logger.info(f"bitrix_user_id: {current_user.get('bitrix_user_id')}")
 
-    scheduled_datetime = schedule_data.scheduled_datetime
-    
     schedule_payload = {
         "id": deal_id,
         "fields": {

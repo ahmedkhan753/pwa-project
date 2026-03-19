@@ -16,16 +16,16 @@ export function ValidationStep() {
         if (!data.vehicleData.make) errors.push({ step: 1, label: "Brak marki pojazdu", category: "Pojazd" });
 
         // Step 2 & 3: Equipment (Check if all nulls are gone)
-        const equipmentNulls = Object.values(data.equipmentCompleteness).filter(v => v === null).length;
+        const equipmentNulls = Object.values(data.equipmentCompleteness ?? {}).filter(v => v === null).length;
         if (equipmentNulls > 0) errors.push({ step: 2, label: `Nieupełna kompletność (${equipmentNulls} pól)`, category: "Dokumenty" });
 
         // Step 5: Tires
         const wheels = ['frontLeft', 'frontRight', 'rearLeft', 'rearRight'] as const;
-        const missingTireData = wheels.some(w => !data.tires[w].brand || !data.tires[w].size);
+        const missingTireData = wheels.some(w => !data.tires?.[w]?.brand || !data.tires?.[w]?.size);
         if (missingTireData) errors.push({ step: 5, label: "Brak danych opon (marka/rozmiar)", category: "Opony" });
 
         // Step 6: Photos (Required only)
-        const requiredPhotosMissing = data.photos.filter(p => p.required && !p.base64).map(p => p.label);
+        const requiredPhotosMissing = (data.photos ?? []).filter(p => p?.required && !p?.base64).map(p => p?.label ?? '');
         if (requiredPhotosMissing.length > 0) {
             errors.push({ 
                 step: 6, 
@@ -36,7 +36,7 @@ export function ValidationStep() {
         }
 
         // Step 9: Mechanical
-        const mechanicalNulls = Object.values(data.mechanical).filter(v => v === null).length;
+        const mechanicalNulls = Object.values(data.mechanical ?? {}).filter(v => v === null).length;
         if (mechanicalNulls > 5) errors.push({ step: 9, label: "Brak weryfikacji mechanicznej", category: "Mechanika" });
 
         return errors;
@@ -77,7 +77,7 @@ export function ValidationStep() {
                         <div className="flex-1 min-w-0">
                             <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-0.5">{err.category}</p>
                             <h4 className="font-black text-sm text-foreground truncate">{err.label}</h4>
-                            {err.details && <p className="text-[10px] text-muted truncate font-bold">{err.details}</p>}
+                            {err?.details && <p className="text-[10px] text-muted truncate font-bold">{err.details}</p>}
                         </div>
                         <ChevronRight size={18} className="text-muted/40 group-hover:text-accent" />
                     </button>
