@@ -19,3 +19,5 @@ Professional Progressive Web App (PWA) for vehicle appraisers. Synchronized with
 ## Troubleshooting
 - If `'next' is not recognized`, ensure you have run `npm install` successfully.
 - If `docker-compose` fails, ensure the `docker-compose.yml` file is present in the root.
+
+- Developed By Ahmed 
