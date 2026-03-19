@@ -8,6 +8,10 @@ and builds a zero-hardcoded field registry.
 Authentication: Phone + PIN for inspectors, password for admin.
 """
 
+import warnings
+warnings.filterwarnings("ignore", ".*error reading bcrypt version.*")
+warnings.filterwarnings("ignore", ".*trapped error reading bcrypt version.*")
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -81,7 +85,7 @@ def seed_test_inspectors():
                 inspector = Inspector(
                     name=data["name"],
                     phone=data["phone"],
-                    pin_hash=pwd_context.hash(data["pin"]),
+                    pin_hash=pwd_context.hash(str(data["pin"])),
                     email=data["email"],
                     is_active=True,
                 )

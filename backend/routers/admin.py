@@ -1,9 +1,9 @@
 """
-Admin Router
-=============
-CRUD operations for managing inspectors.
-All endpoints require admin authentication.
+Admin Router — CRUD operations for managing inspectors (admin auth required).
 """
+
+import warnings
+warnings.filterwarnings("ignore", ".*error reading bcrypt version.*")
 
 import logging
 from fastapi import APIRouter, HTTPException, Depends
@@ -49,7 +49,7 @@ async def create_inspector(
     inspector = Inspector(
         name=request.name,
         phone=request.phone,
-        pin_hash=pwd_context.hash(request.pin),
+        pin_hash=pwd_context.hash(str(request.pin)),
         email=request.email,
     )
     db.add(inspector)
@@ -91,7 +91,7 @@ async def reset_pin(
     if not inspector:
         raise HTTPException(status_code=404, detail="Inspector not found")
 
-    inspector.pin_hash = pwd_context.hash(request.pin)
+    inspector.pin_hash = pwd_context.hash(str(request.pin))
     db.commit()
 
     logger.info(f"✅ PIN reset for inspector: {inspector.name}")

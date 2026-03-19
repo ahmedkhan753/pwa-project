@@ -1,9 +1,9 @@
 """
-Auth Router
-===========
-Phone + PIN authentication for inspectors.
-Admin password login for the admin panel.
+Auth Router — Phone + PIN authentication for inspectors, admin password login.
 """
+
+import warnings
+warnings.filterwarnings("ignore", ".*error reading bcrypt version.*")
 
 import os
 import logging
@@ -46,10 +46,7 @@ def create_token(data: dict) -> str:
 
 @router.post("/auth/login")
 async def login(request: PhoneLoginRequest, db: Session = Depends(get_db)):
-    """
-    Inspector login via phone number + 4-digit PIN.
-    Returns JWT access_token + inspector profile.
-    """
+    """Inspector login via phone number + 4-digit PIN."""
     logger.info(f"Login attempt for phone: {request.phone}")
 
     inspector = db.query(Inspector).filter(
@@ -61,7 +58,7 @@ async def login(request: PhoneLoginRequest, db: Session = Depends(get_db)):
         logger.warning(f"Login failed — phone not found: {request.phone}")
         raise HTTPException(status_code=401, detail="Nieprawidłowy numer telefonu lub PIN")
 
-    if not pwd_context.verify(request.pin, inspector.pin_hash):
+    if not pwd_context.verify(str(request.pin), inspector.pin_hash):
         logger.warning(f"Login failed — wrong PIN for phone: {request.phone}")
         raise HTTPException(status_code=401, detail="Nieprawidłowy numer telefonu lub PIN")
 
@@ -88,10 +85,7 @@ async def login(request: PhoneLoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/auth/admin/login")
 async def admin_login(request: AdminLoginRequest):
-    """
-    Admin login via a shared password.
-    Returns JWT with role=admin.
-    """
+    """Admin login via a shared password."""
     admin_password = os.getenv("ADMIN_PASSWORD", "Admin2025!")
 
     if request.password != admin_password:
