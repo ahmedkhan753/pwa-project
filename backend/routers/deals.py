@@ -40,6 +40,10 @@ async def get_phone_to_bitrix_id(gateway) -> dict:
     Fetches the Bitrix24 list field UF_CRM_1773970466449 to build
     a mapping of phone numbers → Bitrix list item IDs.
     Cached for 5 minutes.
+    
+    Bitrix returns enumeration items as:
+      {"ID": "968", "VALUE": "790469341"}
+    where VALUE = phone number, ID = internal list value for filtering.
     """
     global _inspector_list_cache, _cache_timestamp
 
@@ -53,18 +57,18 @@ async def get_phone_to_bitrix_id(gateway) -> dict:
         # Log raw field data to see exact structure
         logger.info(f"Raw inspector field data: {field_data}")
 
-        # Bitrix list items are under "ITEMS" key
-        items = field_data.get("ITEMS", [])
+        # Bitrix returns lowercase 'items' for enumeration fields
+        items = field_data.get("items", field_data.get("ITEMS", []))
 
         mapping = {}
         for item in items:
-            # NAME = phone number, ID = internal value
-            name = str(item.get("VALUE", "")).strip()
+            # VALUE = phone number string, ID = internal Bitrix list value
+            value = str(item.get("VALUE", "")).strip()
             item_id = str(item.get("ID", "")).strip()
 
-            if name and item_id:
-                # Extract digits (phone number)
-                phones = re.findall(r'\d{7,15}', name)
+            if value and item_id:
+                # Extract digits (phone number) from the VALUE
+                phones = re.findall(r'\d{7,15}', value)
                 if phones:
                     mapping[phones[0]] = item_id
                     logger.info(f"Mapped phone {phones[0]} → Bitrix ID {item_id}")
