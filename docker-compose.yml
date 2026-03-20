@@ -1,4 +1,19 @@
 services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pwa_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
   backend:
     build:
       context: ./backend
@@ -10,22 +25,42 @@ services:
       BITRIX_STORAGE_ID: ${BITRIX_STORAGE_ID:-1}
       SECRET_KEY: ${SECRET_KEY:-supersecretkey123}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin2025!}
-      DATABASE_URL: ${DATABASE_URL:-sqlite:///./inspectors.db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/pwa_db}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-"Auto Inspection"}
+      ENABLE_MOCK_LOGIN: ${ENABLE_MOCK_LOGIN:-false}
     volumes:
       - backend_data:/app/data
+    depends_on:
+      - db
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:8000}
+        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-false}
+        NEXT_PUBLIC_ENABLE_MOCK_LOGIN: ${NEXT_PUBLIC_ENABLE_MOCK_LOGIN:-false}
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:8000}
+      NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-false}
+      NEXT_PUBLIC_ENABLE_MOCK_LOGIN: ${NEXT_PUBLIC_ENABLE_MOCK_LOGIN:-false}
     depends_on:
       - backend
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
 volumes:
   backend_data:
+  postgres_data:
