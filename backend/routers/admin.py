@@ -120,8 +120,19 @@ async def get_inspector_orders(
         return []
 
     try:
+        # Convert phone → Bitrix list ID using the dynamic mapping
+        from routers.deals import get_phone_to_bitrix_id
+        phone_map = await get_phone_to_bitrix_id(gateway)
+        bitrix_id = phone_map.get(phone)
+
+        if not bitrix_id:
+            logger.warning(f"No Bitrix ID found for phone {phone}")
+            return []
+
+        logger.info(f"Admin: fetching orders for phone {phone} → Bitrix ID {bitrix_id}")
+
         deals = await gateway.call("crm.deal.list", {
-            "filter": {"UF_CRM_1773961369947": phone},
+            "filter": {"UF_CRM_1773970466449": bitrix_id},
             "select": ["ID", "TITLE", "STAGE_ID", "DATE_CREATE",
                        "UF_CRM_1766057964319", "UF_CRM_1766058185504",
                        "UF_CRM_1772108256983"],
@@ -131,6 +142,7 @@ async def get_inspector_orders(
         return [
             {
                 **deal,
+                "id": str(deal.get("ID", "")),
                 "status": STAGE_MAP.get(deal.get("STAGE_ID", ""), "new"),
                 "clientName": deal.get("UF_CRM_1766057964319", ""),
                 "inspectionAddress": deal.get("UF_CRM_1766058185504", ""),

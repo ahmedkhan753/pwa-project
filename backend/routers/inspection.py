@@ -414,6 +414,7 @@ async def schedule_inspection(
         # Send email notification (non-blocking — never fails the schedule)
         try:
             from services.email_service import send_assignment_email
+            from routers.deals import get_phone_to_bitrix_id
             from database import SessionLocal
             from models.inspector import Inspector as InspectorModel
 
@@ -421,11 +422,25 @@ async def schedule_inspection(
             try:
                 # Fetch deal details for email
                 deal = await gateway.call("crm.deal.get", {"id": deal_id})
-                inspector_phone = deal.get("UF_CRM_1773961369947", "")
+                logger.info(f"Deal fields for email: {dict(list(deal.items())[:20])}")
+
+                # UF_CRM_1773970466449 stores a Bitrix LIST ID (968, 970, etc.)
+                # We need to reverse-lookup the phone number from it
+                list_id = str(deal.get("UF_CRM_1773970466449", "")).strip()
+                logger.info(f"Inspector list_id from deal: {list_id}")
+
+                inspector_phone = ""
+                if list_id:
+                    phone_map = await get_phone_to_bitrix_id(gateway)
+                    # Reverse: {'790469341': '968'} → {'968': '790469341'}
+                    id_to_phone = {v: k for k, v in phone_map.items()}
+                    inspector_phone = id_to_phone.get(list_id, "")
+                    logger.info(f"Resolved inspector phone: {inspector_phone} from list_id: {list_id}")
 
                 if inspector_phone:
                     inspector = db.query(InspectorModel).filter(
-                        InspectorModel.phone == inspector_phone
+                        InspectorModel.phone == inspector_phone,
+                        InspectorModel.is_active == True
                     ).first()
 
                     if inspector and inspector.email:
@@ -441,11 +456,11 @@ async def schedule_inspection(
                             vehicle_model=deal.get("UF_CRM_MODEL_FIELD", ""),
                             registration_plates=deal.get("UF_CRM_PLATES_FIELD", ""),
                         )
-                        logger.info(f"📧 Assignment email sent to {inspector.email}")
+                        logger.info(f"📧 Email sent to {inspector.email}")
                     else:
-                        logger.info(f"No email for inspector {inspector_phone} — skipping notification")
+                        logger.warning(f"Inspector {inspector_phone} has no email or not found in DB")
                 else:
-                    logger.info(f"No inspector phone on deal {deal_id} — skipping email")
+                    logger.warning(f"Could not resolve inspector phone from list_id: {list_id}")
             finally:
                 db.close()
         except Exception as email_err:
