@@ -12,3 +12,4 @@ aiofiles
 reportlab
 sqlalchemy
 aiosmtplib==3.0.1
+requests==2.31.0
