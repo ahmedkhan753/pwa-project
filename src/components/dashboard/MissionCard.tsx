@@ -8,15 +8,15 @@ import { cn, formatLocaleDate } from '@/lib/utils';
 
 // ── Status display config ──
 const STATUS_CONFIG: Record<string, { label: string; badge: string }> = {
-    new:           { label: 'Nowe',          badge: 'bg-blue-100 text-blue-700 border-blue-200' },
-    assigned:      { label: 'Przypisane',    badge: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-    scheduled:     { label: 'Zaplanowane',   badge: 'bg-orange-100 text-orange-700 border-orange-200' },
-    completed:     { label: 'Zakończone',    badge: 'bg-green-100 text-green-700 border-green-200' },
-    in_valuation:  { label: 'W wycenie',     badge: 'bg-purple-100 text-purple-700 border-purple-200' },
-    closed:        { label: 'Zamknięte',     badge: 'bg-gray-100 text-gray-500 border-gray-200' },
-    lost:          { label: 'Utracone',      badge: 'bg-red-100 text-red-500 border-red-200' },
-    ready:         { label: 'Gotowe',        badge: 'bg-primary-light text-primary border-primary/20' },
-    in_progress:   { label: 'W toku',        badge: 'bg-warning-light text-warning border-warning/20' },
+    new: { label: 'Nowe', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+    assigned: { label: 'Przypisane', badge: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+    scheduled: { label: 'Zaplanowane', badge: 'bg-orange-100 text-orange-700 border-orange-200' },
+    completed: { label: 'Zakończone', badge: 'bg-green-100 text-green-700 border-green-200' },
+    in_valuation: { label: 'W wycenie', badge: 'bg-purple-100 text-purple-700 border-purple-200' },
+    closed: { label: 'Zamknięte', badge: 'bg-gray-100 text-gray-500 border-gray-200' },
+    lost: { label: 'Utracone', badge: 'bg-red-100 text-red-500 border-red-200' },
+    ready: { label: 'Gotowe', badge: 'bg-primary-light text-primary border-primary/20' },
+    in_progress: { label: 'W toku', badge: 'bg-warning-light text-warning border-warning/20' },
 };
 
 const FINISHED_STATUSES = ['completed', 'in_valuation', 'closed', 'lost'];
@@ -92,10 +92,37 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         }
     };
 
-    const handleViewReport = (e: React.MouseEvent) => {
+    const handleViewReport = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        // For now, show an alert; replace with actual report viewing logic
-        alert(`Podgląd raportu dla zlecenia #${job.id} — funkcja w przygotowaniu.`);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                alert("Brak autoryzacji. Zaloguj się ponownie.");
+                return;
+            }
+
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const response = await fetch(
+                `${apiUrl}/inspection/${job.id}/report`,
+                {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        } catch (error) {
+            console.error('Report error:', error);
+            alert('Nie można otworzyć raportu. Spróbuj ponownie.');
+        }
     };
 
     const onConfirmSchedule = async (e: React.MouseEvent) => {
@@ -104,7 +131,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             setError("Wybierz datę i godzinę");
             return;
         }
-        
+
         try {
             setIsSubmitting(true);
             setError(null);
@@ -113,15 +140,15 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             console.log(`[Schedule] Attempting to schedule deal ${job.id} for ${fullIso}`);
             const res: any = await Promise.race([
                 scheduleJob(job.id, fullIso),
-                new Promise((_, reject) => 
+                new Promise((_, reject) =>
                     setTimeout(() => reject(new Error('Przekroczono czas oczekiwania (timeout 5s)')), 5000)
                 )
             ]);
-            
+
             if (res.success) {
                 setIsScheduledSuccessfully(true);
                 await new Promise(resolve => setTimeout(resolve, 800));
-                
+
                 setIsScheduling(false);
                 setIsSubmitting(false);
 
@@ -139,12 +166,12 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     };
 
     return (
-        <div 
+        <div
             onClick={!isScheduling && !isFinished ? handleStart : undefined}
             className={cn(
                 "group relative bg-surface-glass backdrop-blur-xl border-2 rounded-[2.5rem] p-6 shadow-xl dark:shadow-2xl transition-all duration-500",
-                isFinished 
-                    ? "border-border/50 opacity-80" 
+                isFinished
+                    ? "border-border/50 opacity-80"
                     : !isScheduling && "hover:border-primary/30 active:scale-[0.98] cursor-pointer",
                 job.hasConflict ? "border-danger/50 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]" : !isFinished && "border-border"
             )}
@@ -180,8 +207,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
                 <div className={cn(
                     "flex items-center gap-1.5 font-mono text-[10px] px-3 py-1.5 rounded-xl border transition-colors",
-                    job.hasConflict 
-                        ? "bg-danger-light text-danger border-danger/30" 
+                    job.hasConflict
+                        ? "bg-danger-light text-danger border-danger/30"
                         : "text-muted bg-surface-raised border-border/50"
                 )}>
                     <Clock className="w-3 h-3" />
@@ -209,12 +236,12 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         <Clock className="w-4 h-4 text-primary" />
                         <h4 className="text-[10px] font-black text-primary uppercase tracking-widest">Zaplanuj Oględziny</h4>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                             <label className="text-[9px] font-black text-muted uppercase tracking-widest ml-1">Data</label>
-                            <input 
-                                type="date" 
+                            <input
+                                type="date"
                                 value={selectedDate}
                                 onChange={e => setSelectedDate(e.target.value)}
                                 className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-xs font-bold focus:border-primary outline-none"
@@ -222,8 +249,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         </div>
                         <div className="space-y-1">
                             <label className="text-[9px] font-black text-muted uppercase tracking-widest ml-1">Godzina</label>
-                            <input 
-                                type="time" 
+                            <input
+                                type="time"
                                 value={selectedTime}
                                 onChange={e => setSelectedTime(e.target.value)}
                                 className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-xs font-bold focus:border-primary outline-none"
@@ -253,8 +280,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                     >
                         {isSubmitting ? 'Zapisywanie...' : (isScheduledSuccessfully ? 'Zaplanowano ✓' : 'Zatwierdź i Rozpocznij')}
                     </button>
-                    
-                    <button 
+
+                    <button
                         onClick={(e) => { e.stopPropagation(); setIsScheduling(false); }}
                         className="w-full text-[10px] font-black text-muted uppercase hover:text-foreground"
                     >

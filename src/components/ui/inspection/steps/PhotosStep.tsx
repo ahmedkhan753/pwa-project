@@ -6,17 +6,40 @@ import { cn } from "@/lib/utils";
 
 export function PhotosStep() {
     const { data, setPhotoSlot, clearPhotoSlot } = useInspectionStore();
-    const photos = data.photos;
+    const photoSlots = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
-    // Main 19 required items
-    const mainPhotos = photos.slice(0, 19);
-    // Extra 15 optional items
-    const extraPhotos = photos.slice(19);
-    
-    const required = mainPhotos.filter((p) => p.required);
-    const filledCount = photos.filter((p) => p.base64).length;
+    const requiredSlots = photoSlots.slice(0, 35);
+    const optionalSlots = photoSlots.slice(35);
+
+    const required = requiredSlots.filter((p) => p.required);
+    const filledCount = photoSlots.filter((p) => p.base64).length;
     const requiredFilledCount = required.filter((p) => p.base64).length;
+
+    const updatePhotoSlot = (slotId: string, base64: string) => {
+        setPhotoSlot(slotId, base64);
+    };
+
+    const handleVideoCapture = (e: React.ChangeEvent<HTMLInputElement>, slotId: string) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const url = URL.createObjectURL(file);
+        const videoEl = document.createElement('video');
+        videoEl.src = url;
+        videoEl.onloadedmetadata = () => {
+            if (videoEl.duration > 6) {
+                alert('Film nie może być dłuższy niż 6 sekund!');
+                URL.revokeObjectURL(url);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                updatePhotoSlot(slotId, ev.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+        };
+    };
 
     return (
         <div className="space-y-4 animate-fade-in pb-10">
@@ -39,27 +62,48 @@ export function PhotosStep() {
             <div className="bg-surface rounded-2xl p-4 border border-border shadow-sm">
                 <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] font-black text-muted uppercase tracking-widest">Postęp całkowity</span>
-                    <span className="text-xs font-black text-primary">{Math.round((filledCount / photos.length) * 100)}%</span>
+                    <span className="text-xs font-black text-primary">{Math.round((filledCount / photoSlots.length) * 100)}%</span>
                 </div>
                 <div className="w-full bg-surface-raised h-2.5 rounded-full overflow-hidden border border-border/50">
                     <div
                         className="h-full bg-gradient-to-r from-primary to-success rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${(filledCount / photos.length) * 100}%` }}
+                        style={{ width: `${(filledCount / photoSlots.length) * 100}%` }}
                     />
                 </div>
             </div>
 
-            {/* Main 27 Photo Grid */}
+            {/* Photo Grid — first 35 slots */}
             <div className="grid grid-cols-2 xs:grid-cols-3 gap-3">
-                {mainPhotos.map((slot) => (
-                    <PhotoUploadSlot
-                        key={slot.id}
-                        label={slot.label}
-                        base64={slot.base64}
-                        required={slot.required}
-                        onCapture={(b64) => setPhotoSlot(slot.id, b64)}
-                        onClear={() => clearPhotoSlot(slot.id)}
-                    />
+                {requiredSlots.map((slot) => (
+                    slot.isVideo ? (
+                        <div key={slot.id} className="flex flex-col gap-2">
+                            <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
+                            <input
+                                type="file"
+                                accept="video/*"
+                                capture="environment"
+                                onChange={(e) => handleVideoCapture(e, slot.id)}
+                                className="w-full border-2 rounded-xl p-2"
+                            />
+                            {slot.base64 && (
+                                <video
+                                    src={slot.base64}
+                                    controls
+                                    className="w-full rounded-xl mt-1"
+                                    style={{ maxHeight: '200px' }}
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        <PhotoUploadSlot
+                            key={slot.id}
+                            label={slot.label}
+                            base64={slot.base64}
+                            required={slot.required}
+                            onCapture={(b64) => setPhotoSlot(slot.id, b64)}
+                            onClear={() => clearPhotoSlot(slot.id)}
+                        />
+                    )
                 ))}
             </div>
 
@@ -69,8 +113,8 @@ export function PhotosStep() {
                     onClick={() => setShowExtra(!showExtra)}
                     className={cn(
                         "w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all",
-                        showExtra 
-                            ? "bg-surface border-primary text-primary shadow-lg shadow-primary/5" 
+                        showExtra
+                            ? "bg-surface border-primary text-primary shadow-lg shadow-primary/5"
                             : "bg-surface-raised/50 border-dashed border-border text-muted hover:border-border-hover"
                     )}
                 >
@@ -91,7 +135,7 @@ export function PhotosStep() {
 
                 {showExtra && (
                     <div className="grid grid-cols-2 xs:grid-cols-3 gap-3 mt-4 animate-slide-down">
-                        {extraPhotos.map((slot) => (
+                        {optionalSlots.map((slot) => (
                             <PhotoUploadSlot
                                 key={slot.id}
                                 label={slot.label}

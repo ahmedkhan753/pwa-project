@@ -191,6 +191,7 @@ export interface PhotoSlot {
   label: string;
   base64: string;
   required: boolean;
+  isVideo?: boolean;
 }
 
 // ─── Step 7 & 8: Damage ───────────────────────────────────
@@ -377,34 +378,47 @@ const emptyWheel: WheelData = {
 };
 
 const defaultPhotoSlots: PhotoSlot[] = [
-  // Required photos (exact order per client spec)
-  { id: 'photo_front', label: 'Przód', base64: '', required: true },
-  { id: 'photo_rear', label: 'Tył', base64: '', required: true },
-  { id: 'photo_left', label: 'Lewy Bok', base64: '', required: true },
-  { id: 'photo_right', label: 'Prawy Bok', base64: '', required: true },
-  { id: 'photo_interior', label: 'Wnętrze', base64: '', required: true },
-  { id: 'photo_dashboard', label: 'Kokpit', base64: '', required: true },
-  { id: 'photo_vin_plate', label: 'Tabliczka VIN', base64: '', required: true },
-  { id: 'photo_odometer', label: 'Licznik', base64: '', required: true },
-  { id: 'photo_front_left_diag', label: 'Przekątna przednia lewa', base64: '', required: true },
-  { id: 'photo_front_right_diag', label: 'Przekątna przednia prawa', base64: '', required: true },
-  { id: 'photo_rear_left_diag', label: 'Przekątna tylna lewa', base64: '', required: true },
-  { id: 'photo_rear_right_diag', label: 'Przekątna tylna prawa', base64: '', required: true },
-  { id: 'photo_engine', label: 'Silnik', base64: '', required: true },
-  { id: 'photo_trunk', label: 'Bagażnik', base64: '', required: true },
-  { id: 'photo_roof', label: 'Dach', base64: '', required: true },
-  { id: 'photo_front_left_wheel', label: 'Koło przednie lewe', base64: '', required: true },
-  { id: 'photo_front_right_wheel', label: 'Koło przednie prawe', base64: '', required: true },
-  { id: 'photo_rear_left_wheel', label: 'Koło tylne lewe', base64: '', required: true },
-  { id: 'photo_rear_right_wheel', label: 'Koło tylne prawe', base64: '', required: true },
-
-  // Optional extra photos
+  { id: 'photo_diag_front_left',     label: '1. Przekątna przednia lewa',                  base64: '', required: true },
+  { id: 'photo_front',               label: '2. Przód pojazdu',                            base64: '', required: true },
+  { id: 'photo_front_under',         label: '3. Podwozie przednie',                        base64: '', required: true },
+  { id: 'photo_diag_front_right',    label: '4. Przekątna przednia prawa',                 base64: '', required: true },
+  { id: 'photo_right_front',         label: '5. Prawa strona przód',                       base64: '', required: true },
+  { id: 'photo_right_rear',          label: '6. Prawa strona tył',                         base64: '', required: true },
+  { id: 'photo_diag_rear_right',     label: '7. Przekątna tylna prawa',                    base64: '', required: true },
+  { id: 'photo_rear',                label: '8. Tył pojazdu',                              base64: '', required: true },
+  { id: 'photo_rear_under',          label: '9. Podwozie tylne',                           base64: '', required: true },
+  { id: 'photo_trunk_open',          label: '10. Otwarty bagażnik',                        base64: '', required: true },
+  { id: 'photo_spare_tire',          label: '11. Koło zapasowe',                           base64: '', required: true },
+  { id: 'photo_diag_rear_left',      label: '12. Przekątna tylna lewa',                    base64: '', required: true },
+  { id: 'photo_left_rear',           label: '13. Lewa strona tył',                         base64: '', required: true },
+  { id: 'photo_left_front',          label: '14. Lewa strona przód',                       base64: '', required: true },
+  { id: 'photo_door_left_front_open',label: '15. Otwarte lewe przednie drzwi',             base64: '', required: true },
+  { id: 'photo_left_side_door',      label: '16. Lewe drzwi boczne',                       base64: '', required: true },
+  { id: 'photo_door_left_rear_open', label: '17. Otwarte lewe tylne drzwi',                base64: '', required: false },
+  { id: 'photo_dashboard_rear',      label: '18. Deska rozdzielcza z tylnego siedzenia',   base64: '', required: true },
+  { id: 'photo_cockpit_center',      label: '19. Centralny kokpit',                        base64: '', required: true },
+  { id: 'photo_center_tunnel',       label: '20. Tunel centralny',                         base64: '', required: true },
+  { id: 'photo_rear_vent',           label: '21. Tylny nawiew centralny',                  base64: '', required: true },
+  { id: 'photo_steering_wheel',      label: '22. Kierownica na wprost',                    base64: '', required: true },
+  { id: 'photo_multimedia',          label: '23. Multimedia / kamera parkowania',           base64: '', required: true },
+  { id: 'photo_odometer',            label: '24. Licznik z przebiegiem',                   base64: '', required: true },
+  { id: 'photo_navigation',          label: '25. Nawigacja',                               base64: '', required: false },
+  { id: 'photo_service_display',     label: '26. Serwis (wyświetlacz)',                    base64: '', required: false },
+  { id: 'photo_hood_open',           label: '27. Otwarty przód (maska)',                   base64: '', required: true },
+  { id: 'photo_vin',                 label: '28. Numer VIN',                               base64: '', required: true },
+  { id: 'photo_nameplate',           label: '29. Tabliczka znamionowa',                    base64: '', required: true },
+  { id: 'video_engine',              label: '30. Film z pracującym silnikiem (max 6 sek)', base64: '', required: true, isVideo: true },
+  { id: 'photo_registration_doc',    label: '31. Dowód rejestracyjny + kluczyki',          base64: '', required: true },
+  { id: 'photo_id_card_back',        label: '32. Druga strona dowodu osobistego',          base64: '', required: true },
+  { id: 'photo_owner_manual',        label: '33. Instrukcja obsługi',                      base64: '', required: true },
+  { id: 'photo_service_book',        label: '34. Książka serwisowa',                       base64: '', required: true },
+  { id: 'photo_other_docs',          label: '35. Inne dokumenty',                          base64: '', required: false },
   ...Array.from({ length: 15 }, (_, i) => ({
     id: `photo_optional_${i + 1}`,
     label: `Zdjęcie dodatkowe ${i + 1}`,
     base64: '',
-    required: false
-  }))
+    required: false,
+  })),
 ];
 
 // ─── Initial Data ─────────────────────────────────────────

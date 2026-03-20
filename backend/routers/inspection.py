@@ -7,7 +7,9 @@ Submit full inspections and save individual wizard steps.
 import logging
 import json
 from typing import Dict, Any
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi.responses import StreamingResponse
+import io
 
 from models.inspection import (
     InspectionPayload,
@@ -16,9 +18,49 @@ from models.inspection import (
     StepSaveResult,
 )
 from services.field_transformer import FieldTransformer
+from deps import get_current_user
 
 router = APIRouter(prefix="/inspection", tags=["Inspection"])
 logger = logging.getLogger("routers.inspection")
+
+
+@router.get("/{deal_id}/report")
+async def get_inspection_report(
+    deal_id: int,
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    """Generate and stream PDF report for a completed inspection"""
+    gateway = request.app.state.gateway
+    try:
+        logger.info(f"Generating report for deal {deal_id}")
+        deal = await gateway.call("crm.deal.get", {"id": deal_id})
+
+        deal_info = {
+            "title": deal.get("TITLE", f"Zlecenie #{deal_id}"),
+            "company_name": deal.get("UF_CRM_1766057964319", ""),
+            "client_name": deal.get("UF_CRM_1766057941327", ""),
+            "inspection_place": deal.get("UF_CRM_1766058185504", ""),
+            "inspection_date": deal.get("UF_CRM_1772108256983", ""),
+            "inspector_name": current_user.get("name", ""),
+        }
+
+        from services.pdf_generator import generate_inspection_pdf
+        pdf_bytes = generate_inspection_pdf(deal_info, {}, {})
+
+        logger.info(f"\u2705 Report generated for deal {deal_id} ({len(pdf_bytes)} bytes)")
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename=inspection_report_{deal_id}.pdf",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Report generation failed for deal {deal_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 # ─── Paint Panel Flattening (Step 4) ──────────────────────────
 PAINT_PANEL_MAP = {

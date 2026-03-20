@@ -7,10 +7,10 @@ import { Copy, CircleDot, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TIRE_BRANDS = [
-  "Bridgestone", "Continental", "Dunlop", "Falken",
-  "Firestone", "Goodyear", "Hankook", "Kleber", 
-  "Kumho", "Michelin", "Nexen", "Nokian", "Pirelli",
-  "Uniroyal", "Vredestein", "Yokohama", "Inne"
+    "Bridgestone", "Continental", "Dunlop", "Falken",
+    "Firestone", "Goodyear", "Hankook", "Kleber",
+    "Kumho", "Michelin", "Nexen", "Nokian", "Pirelli",
+    "Uniroyal", "Vredestein", "Yokohama", "Inne"
 ];
 
 const WHEELS: { key: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight'; label: string; position: string }[] = [
@@ -99,7 +99,7 @@ export function TiresStep() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
-                                    <SmartDropdown 
+                                    <SmartDropdown
                                         label="Marka Opony"
                                         value={w.brand}
                                         options={TIRE_BRANDS}
@@ -120,7 +120,7 @@ export function TiresStep() {
                                         className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
                                     />
                                 </div>
-                                
+
                                 <div className="col-span-1">
                                     <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
                                         DOT (Rok/Tydzień)
@@ -136,39 +136,12 @@ export function TiresStep() {
                                     />
                                 </div>
 
-                                <TireSpecLock 
+                                <TireSpecLock
                                     label="Rozmiar (Format Lock)"
                                     value={w.size}
                                     onChange={(val) => handleTireChange(wheel.key, 'size', val)}
                                 />
 
-                                <div className="col-span-1">
-                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
-                                        Nośność (Load Index)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={w.loadIndex || ''}
-                                        onChange={(e) => handleTireChange(wheel.key, 'loadIndex', e.target.value.replace(/\D/g, ''))}
-                                        placeholder="np. 98"
-                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
-                                    />
-                                </div>
-
-                                <div className="col-span-1">
-                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
-                                        Indeks Prędkości
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={w.speedIndex || ''}
-                                        maxLength={1}
-                                        onChange={(e) => handleTireChange(wheel.key, 'speedIndex', e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
-                                        placeholder="np. T"
-                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
-                                    />
-                                </div>
                             </div>
 
                             {/* Tire Type */}
