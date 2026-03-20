@@ -3,9 +3,12 @@ Deals Router
 ============
 List and get CRM deal routes for the Calendar View
 and inspection resume features.
-Filters deals by the logged-in inspector's phone number.
+Filters deals by the logged-in inspector's phone number
+using dynamic Bitrix24 list field mapping.
 """
 
+import re
+import time
 import logging
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Query, Depends
@@ -25,6 +28,62 @@ STAGE_STATUS_MAP = {
     "WON":                  "closed",
     "LOSE":                 "lost",
 }
+
+# ── Dynamic inspector phone → Bitrix list ID cache ──
+_inspector_list_cache: dict = {}
+_cache_timestamp: float = 0
+CACHE_TTL = 300  # 5 minutes
+
+
+async def get_phone_to_bitrix_id(gateway) -> dict:
+    """
+    Fetches the Bitrix24 list field UF_CRM_1773970466449 to build
+    a mapping of phone numbers → Bitrix list item IDs.
+    Cached for 5 minutes.
+    """
+    global _inspector_list_cache, _cache_timestamp
+
+    if _inspector_list_cache and (time.time() - _cache_timestamp) < CACHE_TTL:
+        return _inspector_list_cache
+
+    try:
+        fields = await gateway.call("crm.deal.fields", {})
+        field_data = fields.get("UF_CRM_1773970466449", {})
+
+        # Log raw field data to see exact structure
+        logger.info(f"Raw inspector field data: {field_data}")
+
+        # Bitrix list items are under "ITEMS" key
+        items = field_data.get("ITEMS", [])
+
+        mapping = {}
+        for item in items:
+            # NAME = phone number, ID = internal value
+            name = str(item.get("VALUE", "")).strip()
+            item_id = str(item.get("ID", "")).strip()
+
+            if name and item_id:
+                # Extract digits (phone number)
+                phones = re.findall(r'\d{7,15}', name)
+                if phones:
+                    mapping[phones[0]] = item_id
+                    logger.info(f"Mapped phone {phones[0]} → Bitrix ID {item_id}")
+
+        if mapping:
+            _inspector_list_cache = mapping
+            _cache_timestamp = time.time()
+            logger.info(f"✅ Inspector map: {mapping}")
+        else:
+            # Fallback — log everything to debug
+            logger.warning(f"Empty mapping! Raw items: {items}")
+            logger.warning(f"Full field data keys: {list(field_data.keys())}")
+
+        return mapping
+
+    except Exception as e:
+        logger.error(f"Failed to fetch inspector list: {e}")
+        return _inspector_list_cache
+
 
 def _inject_status(deal: dict) -> dict:
     """Add status and stageId fields to a deal dict based on STAGE_ID."""
@@ -46,6 +105,7 @@ async def get_deals(
     """
     GET /deals
     Returns list of inspections filtered by the current inspector's phone.
+    Uses dynamic Bitrix list field mapping to resolve phone → list item ID.
     """
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
@@ -64,11 +124,20 @@ async def get_deals(
                          "UC_0T9W8E", "EXECUTING", "WON", "LOSE"],
         }
 
-        # Filter by inspector phone if available
+        # Resolve phone → Bitrix list item ID for filtering
         if inspector_phone:
-            filter_params["UF_CRM_1773961369947"] = inspector_phone
+            phone_map = await get_phone_to_bitrix_id(gateway)
+            bitrix_id = phone_map.get(inspector_phone)
 
-        # Direct Bitrix API call with phone filter
+            if bitrix_id:
+                filter_params["UF_CRM_1773970466449"] = bitrix_id
+                logger.info(f"Filtering by Bitrix list ID: {bitrix_id} (phone: {inspector_phone})")
+            else:
+                # Fallback: try raw phone filter on UF_CRM_1773961369947
+                filter_params["UF_CRM_1773961369947"] = inspector_phone
+                logger.warning(f"No Bitrix list ID found for phone {inspector_phone} — using raw phone filter")
+
+        # Direct Bitrix API call with filter
         deals_raw = await gateway.call("crm.deal.list", {
             "filter": filter_params,
             "select": ["ID", "TITLE", "STAGE_ID", "DATE_CREATE", "BEGINDATE",
