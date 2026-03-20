@@ -398,77 +398,88 @@ async def schedule_inspection(
 ):
     """
     POST /inspection/{deal_id}/schedule
-    Updates the planned inspection date, transitions deal stage, and sends email.
+    Updates the planned inspection date and transitions deal stage.
+    Email is sent in the background — response returns immediately.
     """
     gateway = request.app.state.gateway
     body = await request.json()
     scheduled_date = body.get("scheduled_date")
-    
+
     if not scheduled_date:
         raise HTTPException(status_code=400, detail="Missing scheduled_date")
 
     try:
+        # Step 1: Update Bitrix deal (the only blocking call)
         result = await gateway.schedule_inspection(deal_id, scheduled_date)
         logger.info(f"✅ Deal {deal_id} scheduled for {scheduled_date}")
 
-        # Send email notification (non-blocking — never fails the schedule)
-        try:
-            from services.email_service import send_assignment_email
-            from routers.deals import get_phone_to_bitrix_id
-            from database import SessionLocal
-            from models.inspector import Inspector as InspectorModel
-
-            db = SessionLocal()
-            try:
-                # Fetch deal details for email
-                deal = await gateway.call("crm.deal.get", {"id": deal_id})
-                logger.info(f"Deal fields for email: {dict(list(deal.items())[:20])}")
-
-                # UF_CRM_1773970466449 stores a Bitrix LIST ID (968, 970, etc.)
-                # We need to reverse-lookup the phone number from it
-                list_id = str(deal.get("UF_CRM_1773970466449", "")).strip()
-                logger.info(f"Inspector list_id from deal: {list_id}")
-
-                inspector_phone = ""
-                if list_id:
-                    phone_map = await get_phone_to_bitrix_id(gateway)
-                    # Reverse: {'790469341': '968'} → {'968': '790469341'}
-                    id_to_phone = {v: k for k, v in phone_map.items()}
-                    inspector_phone = id_to_phone.get(list_id, "")
-                    logger.info(f"Resolved inspector phone: {inspector_phone} from list_id: {list_id}")
-
-                if inspector_phone:
-                    inspector = db.query(InspectorModel).filter(
-                        InspectorModel.phone == inspector_phone,
-                        InspectorModel.is_active == True
-                    ).first()
-
-                    if inspector and inspector.email:
-                        await send_assignment_email(
-                            inspector_name=inspector.name,
-                            inspector_email=inspector.email,
-                            order_title=deal.get("TITLE", f"Zlecenie #{deal_id}"),
-                            order_id=str(deal_id),
-                            client_name=deal.get("UF_CRM_1766057964319", ""),
-                            inspection_address=deal.get("UF_CRM_1766058185504", ""),
-                            inspection_date=scheduled_date,
-                            vehicle_make=deal.get("UF_CRM_MAKE_FIELD", ""),
-                            vehicle_model=deal.get("UF_CRM_MODEL_FIELD", ""),
-                            registration_plates=deal.get("UF_CRM_PLATES_FIELD", ""),
-                        )
-                        logger.info(f"📧 Email sent to {inspector.email}")
-                    else:
-                        logger.warning(f"Inspector {inspector_phone} has no email or not found in DB")
-                else:
-                    logger.warning(f"Could not resolve inspector phone from list_id: {list_id}")
-            finally:
-                db.close()
-        except Exception as email_err:
-            # Never fail the schedule if email fails
-            logger.warning(f"Email notification skipped: {email_err}")
+        # Step 2: Fire email in background — don't block response
+        import asyncio
+        asyncio.create_task(
+            _send_schedule_email_background(gateway, deal_id, scheduled_date)
+        )
 
         return result
     except Exception as e:
         logger.error(f"Scheduling failed: {e}")
         raise HTTPException(status_code=502, detail=str(e))
 
+
+async def _send_schedule_email_background(gateway, deal_id: int, scheduled_date: str):
+    """Background task: resolve inspector from Bitrix list ID and send email."""
+    try:
+        from services.email_service import send_assignment_email
+        from routers.deals import get_phone_to_bitrix_id
+        from database import SessionLocal
+        from models.inspector import Inspector as InspectorModel
+
+        # Fetch deal details
+        deal = await gateway.call("crm.deal.get", {"id": deal_id})
+        logger.info(f"[BG Email] Deal {deal_id} fields: {dict(list(deal.items())[:15])}")
+
+        # Reverse-map list ID → phone
+        list_id = str(deal.get("UF_CRM_1773970466449", "")).strip()
+        logger.info(f"[BG Email] Inspector list_id: {list_id}")
+
+        if not list_id:
+            logger.warning(f"[BG Email] No inspector list_id on deal {deal_id}")
+            return
+
+        phone_map = await get_phone_to_bitrix_id(gateway)
+        id_to_phone = {v: k for k, v in phone_map.items()}
+        inspector_phone = id_to_phone.get(list_id, "")
+        logger.info(f"[BG Email] Resolved phone: {inspector_phone} from list_id: {list_id}")
+
+        if not inspector_phone:
+            logger.warning(f"[BG Email] Could not resolve phone from list_id: {list_id}")
+            return
+
+        db = SessionLocal()
+        try:
+            inspector = db.query(InspectorModel).filter(
+                InspectorModel.phone == inspector_phone,
+                InspectorModel.is_active == True
+            ).first()
+
+            if not inspector or not inspector.email:
+                logger.warning(f"[BG Email] Inspector {inspector_phone} has no email or not found")
+                return
+
+            await send_assignment_email(
+                inspector_name=inspector.name,
+                inspector_email=inspector.email,
+                order_title=deal.get("TITLE", f"Zlecenie #{deal_id}"),
+                order_id=str(deal_id),
+                client_name=deal.get("UF_CRM_1766057964319", ""),
+                inspection_address=deal.get("UF_CRM_1766058185504", ""),
+                inspection_date=scheduled_date,
+                vehicle_make=deal.get("UF_CRM_MAKE_FIELD", ""),
+                vehicle_model=deal.get("UF_CRM_MODEL_FIELD", ""),
+                registration_plates=deal.get("UF_CRM_PLATES_FIELD", ""),
+            )
+            logger.info(f"📧 Background email sent to {inspector.email} for deal {deal_id}")
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"[BG Email] Failed for deal {deal_id}: {e}")
