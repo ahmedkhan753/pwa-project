@@ -1,29 +1,40 @@
 """
 PDF Generator — Protokół zwrotu pojazdu
-Generates a vehicle inspection report matching the Zaufaj Rzeczoznawcy template.
+========================================
+Generates a vehicle return protocol matching the Zaufaj Rzeczoznawcy client template.
 Uses DejaVu Sans font for full Polish character support (ł, ś, ż, ą, ę, ó, ń, ć, ź).
+
+4-page layout:
+  Page 1: Title, order number, Dane Oględzin, Dane Pojazdu, Wyposażenie (start)
+  Page 2: Wyposażenie (continued) — auto page break handled by reportlab
+  Page 3: Nadwozie, Wnętrze, Opony, Signatures
+  Page 4: Dokumentacja Zdjęciowa (only if photos exist)
 """
+
 import io
 import os
+import re
 import base64
 import logging
+import requests as http_requests
 from datetime import datetime
+from typing import Optional
 
-from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm, mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-    Image, PageBreak
-)
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    PageBreak, Image
+)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger("services.pdf_generator")
 
-# ─── Register DejaVu Sans for Polish characters ──────────────
+# ─── Font Registration ───────────────────────────────────────
 FONT_PATHS = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -41,454 +52,693 @@ def _register_fonts():
         _fonts_registered = True
         logger.info("✓ DejaVu Sans fonts registered for Polish character support")
     except Exception as e:
-        logger.warning(f"Could not register DejaVu fonts: {e}. Falling back to Helvetica.")
+        logger.warning(f"DejaVu fonts not found ({e}). Using Helvetica fallback.")
 
-# ─── Styles ───────────────────────────────────────────────────
-def _get_styles():
+def _fn():
+    """Return (regular, bold) font names."""
     _register_fonts()
-    fn = 'DejaVu' if _fonts_registered else 'Helvetica'
-    fnb = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
+    if _fonts_registered:
+        return 'DejaVu', 'DejaVu-Bold'
+    return 'Helvetica', 'Helvetica-Bold'
 
-    return {
-        'title': ParagraphStyle('MainTitle', fontName=fnb, fontSize=16, alignment=TA_LEFT, spaceAfter=2*mm),
-        'subtitle': ParagraphStyle('SubTitle', fontName=fn, fontSize=9, alignment=TA_LEFT, spaceAfter=4*mm, textColor=colors.HexColor('#444444')),
-        'section': ParagraphStyle('SectionHeader', fontName=fnb, fontSize=10, spaceBefore=4*mm, spaceAfter=2*mm),
-        'small': ParagraphStyle('SmallText', fontName=fn, fontSize=7, alignment=TA_LEFT),
-        'siglabel': ParagraphStyle('SigLabel', fontName=fn, fontSize=8, alignment=TA_CENTER, spaceBefore=2*mm),
-        'footer': ParagraphStyle('Footer', fontName=fn, fontSize=6, textColor=colors.grey, alignment=TA_CENTER),
-        'fn': fn,
-        'fnb': fnb,
-    }
 
-# ─── Helpers ──────────────────────────────────────────────────
+# ─── Color Palette ────────────────────────────────────────────
+BLACK      = colors.black
+WHITE      = colors.white
+LIGHT_GREY = colors.HexColor("#F5F5F5")
+MID_GREY   = colors.HexColor("#CCCCCC")
+HEADER_BG  = colors.HexColor("#1A1A1A")
+
 PAGE_W, PAGE_H = A4
 MARGIN = 1.5 * cm
 CONTENT_W = PAGE_W - 2 * MARGIN
 
-LABEL_BG = colors.HexColor('#F0F0F0')
-HEADER_BG = colors.HexColor('#E8E8E8')
-GRID_COLOR = colors.HexColor('#BBBBBB')
 
-def _ts(fn, fnb):
-    """Base table style."""
-    return [
-        ('GRID', (0, 0), (-1, -1), 0.5, GRID_COLOR),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('FONTNAME', (0, 0), (-1, -1), fn),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-    ]
+# ─── Style Helpers ────────────────────────────────────────────
+def _style(name, **kw):
+    fn, fnb = _fn()
+    d = dict(fontName=fn, fontSize=8, leading=10, textColor=BLACK)
+    d.update(kw)
+    return ParagraphStyle(name, **d)
 
-def _kv(rows, fn, fnb, cw=None):
-    """2-column label/value table."""
-    if cw is None:
-        cw = [CONTENT_W * 0.45, CONTENT_W * 0.55]
-    style = _ts(fn, fnb) + [
-        ('BACKGROUND', (0, 0), (0, -1), LABEL_BG),
-        ('FONTNAME', (0, 0), (0, -1), fnb),
-        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-    ]
-    t = Table(rows, colWidths=cw)
-    t.setStyle(TableStyle(style))
+
+def p(t, s=None):
+    """Wrap text in a Paragraph."""
+    fn, fnb = _fn()
+    if s is None:
+        s = _style("_cn")
+    return Paragraph(str(t) if t is not None else "", s)
+
+
+def pb(t):
+    """Bold paragraph."""
+    fn, fnb = _fn()
+    return p(t, _style("_cb", fontName=fnb))
+
+
+def pc(t, bold=False):
+    """Centered paragraph."""
+    fn, fnb = _fn()
+    return p(t, _style("_xc", fontName=fnb if bold else fn, alignment=TA_CENTER))
+
+
+def sp(h=0.25):
+    return Spacer(1, h * cm)
+
+
+# ─── Data Extraction Helpers ─────────────────────────────────
+def val(d, *keys, default=""):
+    """Extract first non-empty value from dict using multiple key attempts."""
+    for k in keys:
+        v = d.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return default
+
+
+def fmt_date(raw):
+    """Format a date string to DD-MM-YYYY."""
+    if not raw:
+        return ""
+    for f in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(str(raw)[:19], f).strftime("%d-%m-%Y")
+        except Exception:
+            pass
+    return str(raw)[:10]
+
+
+# ─── Base Table Style ─────────────────────────────────────────
+def _grid_ts():
+    fn, fnb = _fn()
+    return TableStyle([
+        ("GRID",          (0, 0), (-1, -1), 0.5, MID_GREY),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+        ("TOPPADDING",    (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ("FONTNAME",      (0, 0), (-1, -1), fn),
+        ("FONTSIZE",      (0, 0), (-1, -1), 7),
+    ])
+
+
+def section_header(title, w):
+    """Black background section header with white text."""
+    fn, fnb = _fn()
+    t = Table(
+        [[p(title, _style("_sh", fontName=fnb, fontSize=10, leading=13, textColor=WHITE))]],
+        colWidths=[w],
+    )
+    t.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), HEADER_BG),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ("TOPPADDING",    (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
     return t
 
-def _s(val, default=''):
-    if val is None: return default
-    if isinstance(val, bool): return 'Tak' if val else 'Nie'
-    s = str(val).strip()
-    return s if s else default
 
-def _t(val):
-    if val in ('yes', 'tak', 'Tak', True, 'true'): return 'Tak'
-    if val in ('no', 'nie', 'Nie', False, 'false'): return 'Nie'
-    if val in ('na', 'n/a', 'N/D', 'nd', 'ND'): return 'N/D'
-    return _s(val, '')
+# ─── Image Loader ─────────────────────────────────────────────
+def load_image(src, max_w, max_h):
+    """Load image from URL, base64 data URI, bytes, or file path."""
+    try:
+        if isinstance(src, str) and src.startswith("http"):
+            data = http_requests.get(src, timeout=15).content
+        elif isinstance(src, str) and src.startswith("data:"):
+            data = base64.b64decode(src.split(",", 1)[1])
+        elif isinstance(src, (bytes, bytearray)):
+            data = src
+        else:
+            with open(str(src), "rb") as f:
+                data = f.read()
+        buf = io.BytesIO(data)
+        img = Image(buf)
+        ratio = min(max_w / img.imageWidth, max_h / img.imageHeight)
+        img.drawWidth = img.imageWidth * ratio
+        img.drawHeight = img.imageHeight * ratio
+        return img
+    except Exception as e:
+        logger.debug(f"Image load failed: {e}")
+        return None
 
 
-# ─── Main Generator ──────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# SECTION BUILDERS
+# ═══════════════════════════════════════════════════════════════
+
+def build_dane_ogledzen(d, w):
+    """DANE OGLĘDZIN — 2×2 grid: company, location, user, date."""
+    fn, fnb = _fn()
+    h = w / 2
+    rows = [
+        [pb("Nazwa firmy"),    p(val(d, "company_name", "nazwa_firmy")),
+         pb("Miejsce oględzin"), p(val(d, "inspection_location", "location", "inspection_place"))],
+        [pb("Użytkownik"),     p(val(d, "inspector_name", "appraiser_name", "client_name")),
+         pb("Data oględzin"),   p(fmt_date(val(d, "inspection_date", "data_ogledzen")))],
+    ]
+    t = Table(rows, colWidths=[h * 0.28, h * 0.22, h * 0.28, h * 0.22])
+    ts = _grid_ts()
+    ts.add("BACKGROUND", (0, 0), (0, -1), LIGHT_GREY)
+    ts.add("BACKGROUND", (2, 0), (2, -1), LIGHT_GREY)
+    ts.add("FONTNAME", (0, 0), (0, -1), fnb)
+    ts.add("FONTNAME", (2, 0), (2, -1), fnb)
+    t.setStyle(ts)
+    return t
+
+
+def build_dane_pojazdu(d, w):
+    """DANE POJAZDU — 4-column vehicle data grid matching client template."""
+    fn, fnb = _fn()
+    h = w / 2
+    lw, vw = h * 0.40, h * 0.60
+
+    V = lambda *k: val(d, *k)
+
+    def r(l1, v1, l2, v2):
+        return [pb(l1), p(v1), pb(l2), p(v2)]
+
+    make_model = V("make_model")
+    if not make_model:
+        make_model = f"{V('make', 'vehicle_brand')} {V('model', 'vehicle_model')}".strip()
+
+    rows = [
+        r("Numer rejestracyjny",    V("plates", "registration_plates", "registrationNumber"),
+          "Marka, model",           make_model or V("TITLE")),
+        r("Rok produkcji",         V("year", "rok_produkcji"),
+          "VIN",                   V("vin", "VIN")),
+        r("Przebieg (km)",         V("mileage", "przebieg"),
+          "Data 1 rej.",           fmt_date(V("first_registration", "firstRegistration"))),
+        r("Kolor",                 V("color", "kolor"),
+          "Rodzaj paliwa/silnika", V("fuel_type", "fuelType", "rodzaj_paliwa")),
+        r("Skrzynia biegów",      V("gearbox", "skrzynia_biegow", "transmission"),
+          "Rodzaj lakieru",        V("paint_type", "rodzaj_lakieru")),
+        r("Ilość miejsc siedz.",   V("seats", "ilosc_miejsc", "seatsCount"),
+          "Napęd",                 V("drive", "naped", "driveType")),
+        r("Masa własna (kg)",      V("kerb_weight", "masa_wlasna", "ownWeight"),
+          "Liczba drzwi",          V("doors", "liczba_drzwi")),
+        r("Rodzaj nadwozia",       V("body_type", "rodzaj_nadwozia"),
+          "Moc (kW)",             V("power_kw", "moc", "enginePower")),
+        r("Towarzystwo Ubezpieczeniowe", V("insurance_company"),
+          "Pojemność",             V("engine_capacity", "pojemnosc", "engineCapacity")),
+        r("Numer polisy",          V("policy_number"),
+          "Ubezpieczenie OC -\nważne do", V("oc_valid_until")),
+        r("Data ważności badania\ntechnicznego", V("technical_inspection_date"),
+          "Dowód rejestracyjny",   V("registration_doc", "registrationCertificate")),
+        r("Klasa",                 V("vehicle_class", "klasa"),
+          "Data ostatniego przeglądu\nolejowego", V("last_oil_service")),
+        r("Stan poziomu płynu\nukładu chłodniczego", V("coolant_level", "coolantLevel"),
+          "Stan zbiornika paliwa", V("fuel_level")),
+        r("Stan poziomu płynu\nhamulcowego", V("brake_fluid"),
+          "Stan poziomu oleju",    V("oil_level", "engineOilLevel")),
+        r("Karoseria",             V("bodywork_condition", "karoseria"),
+          "Stan poziomu płynu\nukładu wspomagania", V("power_steering_fluid")),
+        r("Stan paliwa",           V("fuel_status", "stan_paliwa"), "", ""),
+    ]
+    t = Table(rows, colWidths=[lw, vw, lw, vw])
+    ts = _grid_ts()
+    ts.add("BACKGROUND", (0, 0), (0, -1), LIGHT_GREY)
+    ts.add("BACKGROUND", (2, 0), (2, -1), LIGHT_GREY)
+    ts.add("FONTNAME", (0, 0), (0, -1), fnb)
+    ts.add("FONTNAME", (2, 0), (2, -1), fnb)
+    t.setStyle(ts)
+    return t
+
+
+def build_wyposazenie(eq, w):
+    """WYPOSAŻENIE — checklist table with TAK/X/NIE/X columns."""
+    fn, fnb = _fn()
+    col_w = [w * 0.50, w * 0.12, w * 0.076, w * 0.12, w * 0.076]
+
+    ITEMS = [
+        ("Dowód rejestracyjny",                    "dowod_rejestracyjny"),
+        ("Karta pojazdu",                          "karta_pojazdu"),
+        ("Tablice rejestracyjne",                  "tablice_rejestracyjne"),
+        ("Kluczyki",                               "kluczyki"),
+        ("Kluczyki (ilość)",                       "kluczyki_ilosc"),
+        ("Dodatkowy komplet kół",                  "dodatkowy_komplet_kol"),
+        ("Gaśnica",                                "gasnica"),
+        ("Klimatyzacja sprawna",                   "klimatyzacja_sprawna"),
+        ("Klucz do kół",                           "klucz_do_kol"),
+        ("Książka serwisowa",                      "ksiazka_serwisowa"),
+        ("Nawigacja satelitarna (karta) sprawna",  "nawigacja_satelitarna"),
+        ("Podnośnik",                              "podnosnik"),
+        ("Przewód ładowania baterii trakcyjnej",   "przewod_ladowania_baterii"),
+        ("Stacja ładowania baterii trakcyjnej",    "stacja_ladowania_baterii"),
+        ("Trójkąt ostrzegawczy",                   "trojkat_ostrzegawczy"),
+        ("Wskaźnik naładowania baterii trakcyjnej", "wskaznik_naladowania_baterii"),
+        ("Zestaw naprawczy koła",                  "zestaw_naprawczy_kola"),
+    ]
+
+    rows = [[p(""), pc("TAK", True), pc(""), pc("NIE", True), pc("")]]
+
+    for label, key in ITEMS:
+        raw = str(eq.get(key, "")).strip().upper()
+
+        if label == "Kluczyki (ilość)":
+            # Show count number in the middle column, not X
+            rows.append([p(label), p(""), pc(eq.get(key, "")), p(""), p("")])
+        elif raw == "ELEKTRONICZNA":
+            # Special case: "Książka serwisowa" shows ELEKTRONICZNA
+            rows.append([p(label), p(""), pc("ELEKTRO-\nNICZNA"), p(""), p("")])
+        elif raw in ("TAK", "YES", "TRUE", "1"):
+            rows.append([p(label), pc("TAK"), pc("X"), pc("NIE"), p("")])
+        elif raw in ("NIE", "NO", "FALSE", "0"):
+            rows.append([p(label), pc("TAK"), p(""), pc("NIE"), pc("X")])
+        else:
+            rows.append([p(label), pc("TAK"), p(""), pc("NIE"), p("")])
+
+    t = Table(rows, colWidths=col_w)
+    ts = _grid_ts()
+    ts.add("BACKGROUND", (0, 0), (-1, 0), LIGHT_GREY)
+    ts.add("ALIGN", (1, 0), (-1, -1), "CENTER")
+    t.setStyle(ts)
+    return t
+
+
+def build_nadwozie(damages, w):
+    """NADWOZIE — exterior damage table with 4 damage type columns."""
+    fn, fnb = _fn()
+    col_w = [w * 0.38, w * 0.155, w * 0.155, w * 0.155, w * 0.155]
+    header = [
+        p(""), pc("Rysa/Odprysk", True), pc("Wniec./Odksz.", True),
+        pc("Pękn./Rozerw.", True), pc("Rozmiar", True),
+    ]
+    rows = [header]
+    notes = []
+
+    for dmg in (damages or []):
+        dtype = str(dmg.get("damage_type", dmg.get("type", ""))).lower()
+        size  = str(dmg.get("size", ""))
+        note  = dmg.get("notes", dmg.get("description", ""))
+        loc   = dmg.get("location", dmg.get("panel", dmg.get("element", dmg.get("part", ""))))
+
+        rows.append([
+            p(loc),
+            pc("X") if any(x in dtype for x in ("rysa", "odprysk", "scratch")) else pc(""),
+            pc("X") if any(x in dtype for x in ("wgn", "wgniecenie", "odkszt", "odkształcenie", "dent")) else pc(""),
+            pc("X") if any(x in dtype for x in ("pękni", "pęknięcie", "rozerwanie", "crack")) else pc(""),
+            pc(size),
+        ])
+        if note:
+            notes.append(note)
+
+    if len(rows) == 1:
+        rows.append([p("Brak uszkodzeń"), p(""), p(""), p(""), p("")])
+
+    t = Table(rows, colWidths=col_w)
+    ts = _grid_ts()
+    ts.add("BACKGROUND", (0, 0), (-1, 0), LIGHT_GREY)
+    ts.add("ALIGN", (1, 0), (-1, -1), "CENTER")
+    t.setStyle(ts)
+
+    result = [t]
+    if notes:
+        fn_r, _ = _fn()
+        result.append(p("*" + ", ".join(notes),
+                        _style("_fn", fontName=fn_r, fontSize=6, leading=8)))
+    return result
+
+
+def build_wnetrze(damages, w):
+    """WNĘTRZE — interior damage table. Special row for 'Pranie / czyszczenie'."""
+    fn, fnb = _fn()
+    col_w = [w * 0.38, w * 0.155, w * 0.155, w * 0.155, w * 0.155]
+    header = [
+        p(""), pc("Rysa/Odprysk", True), pc("Wniec./Odksz.", True),
+        pc("Pękn./Rozerw.", True), p(""),
+    ]
+    rows = [header]
+
+    for dmg in (damages or []):
+        loc   = str(dmg.get("location", dmg.get("element", dmg.get("part", ""))))
+        dtype = str(dmg.get("damage_type", dmg.get("type", ""))).lower()
+        size  = str(dmg.get("size", ""))
+
+        if "pranie" in loc.lower() or "czyszcz" in loc.lower():
+            rows.append([p("Pranie / czyszczenie"), p(""), p(""), p(""), pc("TAK")])
+        else:
+            rows.append([
+                p(loc),
+                pc("X") if any(x in dtype for x in ("rysa", "odprysk", "scratch")) else pc(""),
+                pc("X") if any(x in dtype for x in ("wgn", "odkszt", "dent")) else pc(""),
+                pc("X") if any(x in dtype for x in ("pękni", "rozerwanie", "crack")) else pc(""),
+                pc(size),
+            ])
+
+    if len(rows) == 1:
+        rows.append([p("Brak uszkodzeń"), p(""), p(""), p(""), p("")])
+
+    t = Table(rows, colWidths=col_w)
+    ts = _grid_ts()
+    ts.add("BACKGROUND", (0, 0), (-1, 0), LIGHT_GREY)
+    ts.add("ALIGN", (1, 0), (-1, -1), "CENTER")
+    t.setStyle(ts)
+    return t
+
+
+def build_opony(tires, w):
+    """OPONY — tire table with 4 positions, size split into sub-columns."""
+    fn, fnb = _fn()
+    # Columns: Position | Producent | Typ | 4 size subcols | Profil | Rodzaj opon
+    col_w = [w * 0.18, w * 0.11, w * 0.09, w * 0.09, w * 0.06, w * 0.06, w * 0.06, w * 0.12, w * 0.13]
+    header = [
+        p(""), pc("Producent", True), pc("Typ", True),
+        pc("Oznaczenie\nopon", True), pc("", True), pc("", True), pc("", True),
+        pc("Profil", True), pc("Rodzaj\nopon", True),
+    ]
+
+    POSITIONS = [
+        ("Opona Prawa Przód", "front_right", "frontRight", "przod_prawy"),
+        ("Opona Prawa Tył",   "rear_right",  "rearRight",  "tyl_prawy"),
+        ("Opona Lewa Tył",    "rear_left",   "rearLeft",   "tyl_lewy"),
+        ("Opona Lewa Przód",  "front_left",  "frontLeft",  "przod_lewy"),
+    ]
+
+    rows = [header]
+    for label, *keys in POSITIONS:
+        td = None
+        for k in keys:
+            td = tires.get(k)
+            if td and isinstance(td, dict):
+                break
+        if not td or not isinstance(td, dict):
+            td = {}
+
+        size_str = val(td, "size", "oznaczenie", "rozmiar", default="")
+        # Split "225/55 17 96 V" into parts
+        parts = re.split(r'[\s/]+', size_str) if size_str else []
+
+        rows.append([
+            p(label),
+            pc(val(td, "brand", "producent", "marka")),
+            pc(val(td, "type", "typ")),
+            pc(parts[0] if len(parts) > 0 else ""),
+            pc(parts[1] if len(parts) > 1 else ""),
+            pc(parts[2] if len(parts) > 2 else ""),
+            pc(parts[3] if len(parts) > 3 else ""),
+            pc(val(td, "profile", "profil", "treadDepth")),
+            pc(val(td, "tire_type", "rodzaj_opon", "season")),
+        ])
+
+    t = Table(rows, colWidths=col_w)
+    ts = _grid_ts()
+    ts.add("BACKGROUND", (0, 0), (-1, 0), LIGHT_GREY)
+    ts.add("ALIGN", (0, 0), (-1, -1), "CENTER")
+    t.setStyle(ts)
+    return t
+
+
+def build_signatures(d, w):
+    """3 signature boxes side-by-side with labels and signature images."""
+    fn, fnb = _fn()
+    sw = (w - 1.0 * cm) / 3
+
+    labels = [
+        "Potwierdzam zwrot pojazdu\nw stanie opisanym powyżej.\n\nPodpis Rzeczoznawcy/\nEksperta mobilnego\nZaufaj Rzeczoznawcy",
+        "Potwierdzam przyjęcie pojazdu\nw stanie opisanym powyżej.\n\nPodpis strony przyjmującej\nna plac",
+        "Potwierdzam zwrot pojazdu\nw stanie opisanym powyżej.\n\nPodpis dysponenta pojazdu\nw chwili oględzin",
+    ]
+
+    # Try multiple key patterns for signatures
+    sig_keys = [
+        ("signature_appraiser", "signatureAppraiser", "podpis_rzeczoznawcy"),
+        ("signature_client", "signatureClient", "podpis_przyjmujacego"),
+        ("signature_owner", "signatureYard", "signatureOwner", "podpis_dysponenta"),
+    ]
+
+    cells = []
+    for i in range(3):
+        sig_data = None
+        for k in sig_keys[i]:
+            sig_data = d.get(k)
+            if sig_data:
+                break
+
+        # Check in finalSummary sub-dict too
+        if not sig_data:
+            summary = d.get("finalSummary", {})
+            for k in sig_keys[i]:
+                sig_data = summary.get(k)
+                if sig_data:
+                    break
+
+        sig_img = load_image(sig_data, sw - 0.8 * cm, 2.0 * cm) if sig_data else None
+
+        label_style = _style(f"_sl{i}", fontSize=6, leading=8, alignment=TA_CENTER)
+        cell_content = [p(labels[i], label_style), sp(0.15)]
+        cell_content.append(sig_img if sig_img else sp(2.0))
+        cells.append(cell_content)
+
+    t = Table([cells], colWidths=[sw, sw, sw])
+    t.setStyle(TableStyle([
+        ("BOX",           (0, 0), (-1, -1), 0.5, MID_GREY),
+        ("INNERGRID",     (0, 0), (-1, -1), 0.5, MID_GREY),
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+        ("TOPPADDING",    (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return t
+
+
+def build_photos(photos, w):
+    """DOKUMENTACJA ZDJĘCIOWA — 3-column photo grid."""
+    if not photos:
+        return []
+
+    cw = (w - 0.6 * cm) / 3
+    ch = cw * 0.72
+    rows = []
+    row = []
+
+    for photo in photos:
+        img = load_image(photo, cw - 0.4 * cm, ch - 0.4 * cm)
+        row.append(img if img else p(""))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+
+    if row:
+        while len(row) < 3:
+            row.append(p(""))
+        rows.append(row)
+
+    if not rows:
+        return []
+
+    t = Table(rows, colWidths=[cw, cw, cw], rowHeights=[ch] * len(rows))
+    t.setStyle(TableStyle([
+        ("GRID",          (0, 0), (-1, -1), 0.5, MID_GREY),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 3),
+        ("TOPPADDING",    (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return [t]
+
+
+# ═══════════════════════════════════════════════════════════════
+# MAIN GENERATOR — matches old signature for backwards compat
+# ═══════════════════════════════════════════════════════════════
+
 def generate_inspection_pdf(deal_info: dict, inspection_data: dict, logo_path: str = None) -> bytes:
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-        rightMargin=MARGIN, leftMargin=MARGIN,
-        topMargin=MARGIN, bottomMargin=MARGIN)
+    """
+    Generate the Protokół zwrotu pojazdu PDF.
 
-    S = _get_styles()
-    fn, fnb = S['fn'], S['fnb']
+    Accepts the SAME arguments as the old generator for backwards compatibility:
+      - deal_info: dict with title, order_number, company_name, etc.
+      - inspection_data: dict with vehicleData, equipment, damages, etc.
+
+    Also supports flat dict format where all keys are at top level.
+    """
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=MARGIN, rightMargin=MARGIN,
+        topMargin=MARGIN, bottomMargin=MARGIN,
+        title="Protokół zwrotu pojazdu",
+    )
+
+    fn, fnb = _fn()
+    w = CONTENT_W
+
+    # ── Merge deal_info into inspection_data for unified access ──
+    # Support both old camelCase keys AND new snake_case keys
+    d = {}
+    d.update(inspection_data)
+    d.update(deal_info)
+
+    # Extract nested data (old format has camelCase sub-dicts)
+    vehicle = inspection_data.get("vehicleData", {})
+    basic = vehicle.get("basicInfo", {})
+    eq_comp = inspection_data.get("equipmentCompleteness", {})
+    full_eq = inspection_data.get("fullEquipment", {})
+    mech = inspection_data.get("mechanical", {})
+    summary = inspection_data.get("finalSummary", {})
+
+    # Build flat dict with all possible keys for maximum compatibility
+    flat = {}
+    flat.update(d)
+
+    # Map old camelCase vehicle fields to snake_case
+    if vehicle:
+        flat.setdefault("vin", vehicle.get("vin", ""))
+        flat.setdefault("make", vehicle.get("make", ""))
+        flat.setdefault("model", vehicle.get("model", ""))
+        flat.setdefault("year", vehicle.get("year", ""))
+        flat.setdefault("mileage", vehicle.get("mileage", ""))
+        flat.setdefault("color", vehicle.get("color", ""))
+        flat.setdefault("fuel_type", vehicle.get("fuelType", ""))
+        flat.setdefault("seats", vehicle.get("seatsCount", ""))
+        flat.setdefault("drive", vehicle.get("driveType", ""))
+        flat.setdefault("kerb_weight", vehicle.get("ownWeight", ""))
+        flat.setdefault("engine_capacity", vehicle.get("engineCapacity", ""))
+        flat.setdefault("power_kw", vehicle.get("enginePower", ""))
+        flat.setdefault("first_registration", vehicle.get("firstRegistration", ""))
+        flat.setdefault("registration_doc", vehicle.get("registrationCertificate", ""))
+        flat.setdefault("plates", vehicle.get("registrationNumber", ""))
+        flat.setdefault("gearbox", vehicle.get("gearboxType", ""))
+    if basic:
+        flat.setdefault("company_name", basic.get("companyName", ""))
+        flat.setdefault("inspection_location", basic.get("inspectionPlace", ""))
+        flat.setdefault("inspector_name", basic.get("userOwner", ""))
+        flat.setdefault("inspection_date", basic.get("inspectionDate", ""))
+        flat.setdefault("client_name", basic.get("clientName", ""))
+    if mech:
+        flat.setdefault("coolant_level", mech.get("coolantLevel", ""))
+        flat.setdefault("oil_level", mech.get("engineOilLevel", ""))
+        flat.setdefault("brake_fluid", mech.get("brakeFluidLevel", ""))
+    if summary:
+        flat.setdefault("signature_appraiser", summary.get("signatureAppraiser", ""))
+        flat.setdefault("signature_client", summary.get("signatureClient", ""))
+        flat.setdefault("signature_owner", summary.get("signatureYard", ""))
+
+    # Order number
+    order_number = val(flat, "order_number", "nr_zlecenia", "deal_number", "title", default="ZR/2025/XXXXX")
+
+    # Equipment — try new flat keys first, then old nested format
+    equipment = inspection_data.get("equipment", {}) or {}
+    if not equipment and eq_comp:
+        # Map old equipmentCompleteness to new format
+        equipment = {
+            "dowod_rejestracyjny": "TAK",
+            "karta_pojazdu": "",
+            "tablice_rejestracyjne": "TAK",
+            "kluczyki": "TAK" if eq_comp.get("keysCount") else "",
+            "kluczyki_ilosc": str(eq_comp.get("keysCount", "")),
+            "gasnica": "TAK" if eq_comp.get("fireExtinguisher") else "NIE",
+            "trojkat_ostrzegawczy": "TAK" if eq_comp.get("triangular") else "NIE",
+            "klucz_do_kol": "TAK" if eq_comp.get("jackAndTools") else "NIE",
+            "podnosnik": "TAK" if eq_comp.get("jackAndTools") else "NIE",
+            "zestaw_naprawczy_kola": "TAK" if eq_comp.get("repairKit") else "NIE",
+            "ksiazka_serwisowa": "TAK" if eq_comp.get("serviceBookPresented") else "NIE",
+            "nawigacja_satelitarna": "TAK" if full_eq.get("navigation") else "NIE",
+            "klimatyzacja_sprawna": "TAK" if full_eq.get("airConditioning") else "NIE",
+            "dodatkowy_komplet_kol": "NIE",
+        }
+
+    # Damages
+    ext_damages = inspection_data.get("exterior_damages", []) or inspection_data.get("exteriorDamage", []) or []
+    int_damages = inspection_data.get("interior_damages", []) or inspection_data.get("interiorDamage", []) or []
+
+    # Tires
+    tires = inspection_data.get("tires", {}) or {}
+
+    # Photos
+    photos = inspection_data.get("photos", []) or []
+
+    # Location and date for bottom of page 3
+    insp_date = fmt_date(val(flat, "inspection_date", "data_ogledzen"))
+    insp_location = val(flat, "inspection_location", "location", "inspection_place")
+
+    # Title styles
+    title_style = _style("_title", fontName=fnb, fontSize=16, leading=20, alignment=TA_CENTER)
+    order_style = _style("_order", fontName=fnb, fontSize=11, leading=14, alignment=TA_CENTER)
+    photo_style = _style("_photo", fontName=fnb, fontSize=12, leading=15, alignment=TA_CENTER)
+    small_style = _style("_small", fontSize=7, leading=9)
+    gdpr_style  = _style("_gdpr",  fontSize=6, leading=8)
+
+    # ═══ PAGE 1 ═══════════════════════════════════════════════
     story = []
+    story.append(Paragraph("Protokół zwrotu pojazdu", title_style))
+    story.append(sp(0.5))
+    story.append(Paragraph(f"NR ZLECENIA : {order_number}", order_style))
+    story.append(sp(0.5))
 
-    # Extract sub-sections
-    vehicle = inspection_data.get('vehicleData', {})
-    basic = vehicle.get('basicInfo', {})
-    eq_comp = inspection_data.get('equipmentCompleteness', {})
-    full_eq = inspection_data.get('fullEquipment', {})
-    paint = inspection_data.get('paintMeasurement', {})
-    tires = inspection_data.get('tires', {})
-    ext_dmg = inspection_data.get('exteriorDamage', [])
-    int_dmg = inspection_data.get('interiorDamage', [])
-    mech = inspection_data.get('mechanical', {})
-    notes = inspection_data.get('notesValuation', {})
-    summary = inspection_data.get('finalSummary', {})
+    story.append(section_header("DANE OGLĘDZIN", w))
+    story.append(sp(0.1))
+    story.append(build_dane_ogledzen(flat, w))
+    story.append(sp(0.4))
 
-    # ─── HEADER with Logo ────────────────────────────────────
-    # Find logo: passed path > backend/assets/logo.png > None
-    if not logo_path:
-        default_logo = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
-        if os.path.exists(default_logo):
-            logo_path = default_logo
+    story.append(section_header("DANE POJAZDU", w))
+    story.append(sp(0.1))
+    story.append(build_dane_pojazdu(flat, w))
+    story.append(sp(0.4))
 
-    title_para = Paragraph("Protokół zwrotu pojazdu", S['title'])
-    if logo_path and os.path.exists(logo_path):
-        try:
-            logo_img = Image(logo_path, width=4*cm, height=1.5*cm)
-            logo_img.hAlign = 'RIGHT'
-            header_data = [[title_para, logo_img]]
-            header_table = Table(header_data, colWidths=[CONTENT_W * 0.60, CONTENT_W * 0.40])
-            header_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-            ]))
-            story.append(header_table)
-        except Exception:
-            story.append(title_para)
-    else:
-        story.append(title_para)
+    story.append(section_header("WYPOSAŻENIE", w))
+    story.append(sp(0.1))
+    story.append(build_wyposazenie(equipment, w))
 
-    deal_title = deal_info.get('title', '')
-    order_num = deal_info.get('order_number', deal_title)
-    story.append(Paragraph(f"<u>Nr zlecenia:</u> {_s(order_num)}", S['subtitle']))
-    story.append(Spacer(1, 2*mm))
-
-    # ─── DANE OGLĘDZIN ────────────────────────────────────────
-    story.append(Paragraph("DANE OGLĘDZIN", S['section']))
-    company = _s(basic.get('companyName') or deal_info.get('company_name'))
-    location = _s(basic.get('inspectionPlace') or deal_info.get('inspection_place'))
-    owner = _s(basic.get('userOwner') or deal_info.get('client_name'))
-    insp_date = _s(basic.get('inspectionDate') or deal_info.get('inspection_date'))
-
-    cw4 = [CONTENT_W*0.22, CONTENT_W*0.28, CONTENT_W*0.22, CONTENT_W*0.28]
-    info_rows = [
-        ['FIRMA', company, 'MIEJSCE OGLĘDZIN', location],
-        ['UŻYTKOWNIK / WŁAŚCICIEL', owner, 'DATA OGLĘDZIN', insp_date],
-    ]
-    it = Table(info_rows, colWidths=cw4)
-    it.setStyle(TableStyle(_ts(fn, fnb) + [
-        ('BACKGROUND', (0,0), (0,-1), LABEL_BG), ('BACKGROUND', (2,0), (2,-1), LABEL_BG),
-        ('FONTNAME', (0,0), (0,-1), fnb), ('FONTNAME', (2,0), (2,-1), fnb),
-        ('ALIGN', (0,0), (0,-1), 'CENTER'), ('ALIGN', (2,0), (2,-1), 'CENTER'),
-    ]))
-    story.append(it)
-    story.append(Spacer(1, 3*mm))
-
-    # ─── DANE POJAZDU ─────────────────────────────────────────
-    story.append(Paragraph("DANE POJAZDU", S['section']))
-    vr = [
-        ['DOWÓD REJESTRACYJNY', _s(vehicle.get('registrationCertificate'))],
-        ['ROK PRODUKCJI', _s(vehicle.get('year'))],
-        ['MARKA, MODEL', f"{_s(vehicle.get('make'))}, {_s(vehicle.get('model'))}"],
-        ['VIN', _s(vehicle.get('vin'))],
-        ['DATA 1 REJ.', _s(vehicle.get('firstRegistration'))],
-        ['RODZAJ PALIWA', _s(vehicle.get('fuelType'))],
-        ['MASA WŁASNA', _s(vehicle.get('ownWeight'))],
-        ['ŁADOWNOŚĆ', _s(vehicle.get('loadCapacity'))],
-        ['POJEMNOŚĆ cm3', _s(vehicle.get('engineCapacity'))],
-        ['MOC KW', _s(vehicle.get('enginePower'))],
-        ['ILOŚĆ MIEJSC SIEDZĄCYCH', _s(vehicle.get('seatsCount'))],
-        ['NR POLISY', ''],
-        ['TOWARZYSTWO UBEZPIECZ.', ''],
-        ['PRZEBIEG DO WYPEŁ.', _s(vehicle.get('mileage'))],
-        ['STAN ZBIORNIKA', ''],
-        ['NAPĘD', _s(vehicle.get('driveType'))],
-        ['KOLOR', _s(vehicle.get('color'))],
-        ['RODZAJ KOLORU', ''],
-        ['STAN POZIOMU OLEJU', _t(mech.get('engineOilLevel'))],
-        ['STAN POZIOMU PŁYNU HAMULCOWEGO', _t(mech.get('coolantLevel'))],
-        ['STAN PŁYNU UKŁADU WSPOMAGANIA', ''],
-        ['STAN POZIOMU PŁYNU UKŁADU CHŁODZENIA', _t(mech.get('coolantLevel'))],
-    ]
-    story.append(_kv(vr, fn, fnb))
-    story.append(Spacer(1, 3*mm))
-
-    # ─── WYPOSAŻENIE ──────────────────────────────────────────
+    # ═══ PAGE 3 (auto page break from Page 1/2) ══════════════
     story.append(PageBreak())
-    story.append(Paragraph("WYPOSAŻENIE", S['section']))
+    story.append(Paragraph("Protokół zwrotu pojazdu", title_style))
+    story.append(sp(0.4))
 
-    equip_items = [
-        ('KLUCZYKI', _t(eq_comp.get('keysCount', ''))),
-        ('KLUCZYKI ILOŚĆ', _s(eq_comp.get('keysCount', ''))),
-        ('NAWIGACJA SATELITARNA', _t(full_eq.get('navigation'))),
-        ('KLIMATYZACJA SPRAWNA', _t(full_eq.get('airConditioning'))),
-        ('KSIĄŻKA SERWISOWA', _t(eq_comp.get('serviceBookPresented'))),
-        ('INSTRUKCJA OBSŁUGI', _t(eq_comp.get('ownerManual'))),
-        ('GAŚNICA', _t(eq_comp.get('fireExtinguisher'))),
-        ('TRÓJKĄT OSTRZEGAWCZY', _t(eq_comp.get('triangular'))),
-        ('KOŁO ZAPASOWE', _t(eq_comp.get('spareWheel'))),
-        ('ZESTAW NAPRAWCZY', _t(eq_comp.get('repairKit'))),
-        ('DODATKOWY KOMPLET KÓŁ', 'Nie'),
-        ('KLUCZ DO KÓŁ', _t(eq_comp.get('jackAndTools'))),
-        ('PODNOŚNIK', _t(eq_comp.get('jackAndTools'))),
-        ('APTECZKA', _t(eq_comp.get('firstAidKit'))),
-        ('ANTENA', 'Nie'),
-        ('ABS', _t(full_eq.get('abs'))),
-        ('AIRBAG BOCZNY PRZÓD', _t(full_eq.get('airbagSide'))),
-        ('AIRBAG BOCZNY TYŁ', _t(full_eq.get('airbagCurtain'))),
-        ('AIRBAG NÓG', 'Nie'),
-        ('AIRBAG PASAŻERA', _t(full_eq.get('airbagPassenger'))),
-        ('ALARM', 'Nie'),
-        ('ASR', _t(full_eq.get('esp'))),
-        ('AKTYWNY SYSTEM PARKOWANIA', _t(full_eq.get('parkingSensors'))),
-        ('ASYSTENT JAZDY NOCNEJ', 'Nie'),
-        ('ASYSTENT MARTWEGO PUNKTU', 'Nie'),
-        ('ASYSTENT POJAZDU', 'Nie'),
-        ('ASYSTENT ZMIANY PASA RUCHU', 'Nie'),
-        ('CZUJNIK CIŚNIENIA W OPONACH', 'Nie'),
-        ('CZUJNIK DESZCZU', _t(full_eq.get('rainSensors'))),
-        ('CZUJNIK PARKOWANIA PRZÓD+TYŁ', _t(full_eq.get('parkingSensors'))),
-        ('CZUJNIK PARKOWANIA TYŁ', _t(full_eq.get('rearCamera'))),
-        ('CZUJNIK ZMIERZCHU', _t(full_eq.get('lightSensors'))),
-        ('DACH OTWIERANY EL.', _t(full_eq.get('sunroof'))),
-        ('DACH OTWIERANY Z BATERIĄ SŁONECZNĄ', 'Nie'),
-        ('DACH PANORAMICZNY', _t(full_eq.get('panoramicRoof'))),
-        ('DOSTĘP KOMFORTOWY', _t(full_eq.get('keylessEntry'))),
-        ('DRZWI DOMYKANE ELEKTRYCZNE', 'Nie'),
-        ('ESP', _t(full_eq.get('esp'))),
-        ('FELGI ALUMINIOWE', _t(full_eq.get('alloyWheels'))),
-        ('FELGI STRUKTURALNE', 'Nie'),
-        ('FOTELE PRZEDNIE UST. ELEKTRYCZNIE', 'Nie'),
-        ('FOTELE PRZEDNIE Z MASAŻEM', 'Nie'),
-        ('FOTELE TYLNE REGULOWANE', 'Nie'),
-        ('GNIAZDO 230V W BAGAŻNIKU', 'Nie'),
-        ('HAK', _t(full_eq.get('towBar'))),
-        ('HAMULCE CERAMICZNE', 'Nie'),
-        ('HEAD UP DISPLAY', 'Nie'),
-        ('INSTALACJA GAZOWA', 'Nie'),
-        ('KAMERA PARKOWANIA', _t(full_eq.get('rearCamera'))),
-        ('KAMERA 360', 'Nie'),
-        ('KIEROWNICA SKÓRZANA', 'Nie'),
-        ('KIEROWNICA WIELOFUNKCYJNA', 'Nie'),
-        ('KIEROWNICA Z FUNKCJĄ ZMIANY BIEGÓW', 'Nie'),
-        ('KLIMATYZACJA MANUALNA', _t(full_eq.get('airConditioning'))),
-        ('KLIMATYZACJA AUTOMATYCZNA', _t(full_eq.get('automaticAC'))),
-        ('KOLUMNA KIEROWNICY REGUL. ELEK.', 'Nie'),
-        ('KOMPUTER POKŁADOWY', _t(full_eq.get('onboardComputer'))),
-        ('KURTYNY POWIETRZNE', _t(full_eq.get('airbagCurtain'))),
-        ('LAKIER METALIK', 'Nie'),
-        ('LUSTERKA OGRZEWANE', _t(full_eq.get('heatedMirrors'))),
-        ('LUSTERKA ZEW. PRZYCIEMNIAJĄCE SIĘ', 'Nie'),
-        ('LUSTERKA REG. ELEKTRYCZNIE', _t(full_eq.get('electricMirrors'))),
-        ('LUSTERKA SKŁADANE ELEKTR.', 'Nie'),
-        ('NAWIGACJA', _t(full_eq.get('navigation'))),
-        ('OGRZEWANIE PRZEDNICH FOTELI', _t(full_eq.get('heatedSeats'))),
-        ('OGRZEWANIE TYLNYCH SIEDZEŃ', 'Nie'),
-        ('PODGRZEWANA KIEROWNICA', 'Nie'),
-        ('PODŁOKIETNIK PRZÓD', 'Nie'),
-        ('PODŁOKIETNIK TYŁ', 'Nie'),
-        ('RADIOODBIORNIK', 'Nie'),
-        ('RADIOODBIORNIK USB', _t(full_eq.get('usb'))),
-        ('RADIOODBIORNIK SD', 'Nie'),
-        ('REFLEKTORY KSENONOWE', _t(full_eq.get('xenonLights'))),
-        ('REFLEKTORY LED', _t(full_eq.get('ledLights'))),
-        ('REFLEKTORY FULL LED', 'Nie'),
-        ('REFLEKTORY LASEROWE', 'Nie'),
-        ('REFLEKTORY SKRĘTNE', 'Nie'),
-        ('REFLEKTORY Z DOŚWIETLANIEM ZAKRĘTÓW', 'Nie'),
-        ('RELINGI DACHOWE', _t(full_eq.get('roofRails'))),
-        ('SIEDZENIA SPORTOWE', 'Nie'),
-        ('SIEDZENIA TYLNA Z MASAŻEM', 'Nie'),
-        ('SPRYSKIWACZE REFLEKTORÓW', 'Nie'),
-        ('SYSTEM ROZPOZNAW. ZNAKÓW', 'Nie'),
-        ('SZYBA PRZEDNIA OGRZEWANA', 'Nie'),
-        ('SZYBA PODN.EL.PRZÓD', _t(full_eq.get('electricWindows'))),
-        ('SZYBA.PODN.EL.TYL', 'Nie'),
-        ('ŚWIATŁA DO JAZDY DZIENNEJ', 'Nie'),
-        ('ŚWIATŁA DO JAZDY DZIENNEJ LED', _t(full_eq.get('ledLights'))),
-        ('ŚWIATŁA PRZECIWMGIELNE', _t(full_eq.get('fogLights'))),
-        ('TAPICERKA SKÓRZANA', 'Nie'),
-        ('TAPICERKA WELUROWA', 'Nie'),
-        ('TEMPOMAT', _t(full_eq.get('cruiseControl'))),
-        ('TEMPOMAT AKTYWNY', 'Nie'),
-        ('TRZECI RZĄD SIEDZEŃ', 'Nie'),
-        ('WIRTUALNY KOKPIT', 'Nie'),
-        ('SZYBY PRZYCIEMNIANE', _t(full_eq.get('tintedWindows'))),
-    ]
-    story.append(_kv(equip_items, fn, fnb))
-    story.append(Spacer(1, 3*mm))
+    story.append(section_header("NADWOZIE", w))
+    story.append(sp(0.1))
+    story.extend(build_nadwozie(ext_damages, w))
+    story.append(sp(0.3))
 
-    # ─── OPONY ────────────────────────────────────────────────
-    story.append(PageBreak())
-    story.append(Paragraph("OPONY", S['section']))
+    # Footnote
+    story.append(p("*Korozja, zabrudzenie, przepalenie", gdpr_style))
+    story.append(sp(0.2))
 
-    tire_header = ['POZYCJA', 'MARKA', 'ROZMIAR', 'DOT', 'BIEŻNIK (mm)', 'TYP']
-    tire_rows = [tire_header]
-    for pn, pk in [('Przód lewy','frontLeft'),('Przód prawy','frontRight'),
-                    ('Tył lewy','rearLeft'),('Tył prawy','rearRight')]:
-        td = tires.get(pk, {})
-        if isinstance(td, dict):
-            tire_rows.append([pn, _s(td.get('brand')), _s(td.get('size')),
-                              _s(td.get('dot')), _s(td.get('treadDepth')), _s(td.get('type'))])
-        else:
-            tire_rows.append([pn, '', '', '', '', ''])
+    story.append(section_header("WNĘTRZE", w))
+    story.append(sp(0.1))
+    story.append(build_wnetrze(int_damages, w))
+    story.append(sp(0.3))
 
-    tcw = [CONTENT_W*0.16, CONTENT_W*0.18, CONTENT_W*0.20, CONTENT_W*0.14, CONTENT_W*0.16, CONTENT_W*0.16]
-    tt = Table(tire_rows, colWidths=tcw)
-    tt.setStyle(TableStyle(_ts(fn, fnb) + [
-        ('BACKGROUND', (0,0), (-1,0), HEADER_BG),
-        ('FONTNAME', (0,0), (-1,0), fnb),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+    story.append(section_header("OPONY", w))
+    story.append(sp(0.1))
+    story.append(build_opony(tires, w))
+    story.append(sp(0.5))
+
+    # Location + Date row
+    loc_row = Table(
+        [[pb("Miejsce oględzin"), p(insp_location), pb("Data oględzin"), p(insp_date)]],
+        colWidths=[w * 0.22, w * 0.38, w * 0.22, w * 0.18],
+    )
+    loc_row.setStyle(TableStyle([
+        ("LEFTPADDING",  (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN",       (0, 0), (-1, -1), "BOTTOM"),
     ]))
-    story.append(tt)
-    story.append(Spacer(1, 3*mm))
+    story.append(loc_row)
+    story.append(sp(0.3))
 
-    # ─── POMIAR LAKIERU ───────────────────────────────────────
-    story.append(Paragraph("POMIAR LAKIERU (µm)", S['section']))
+    # GDPR line
+    story.append(p(
+        "Zapoznałem/am się z klauzulą informacyjną dotyczącą przetwarzania moich danych osobowych.",
+        gdpr_style,
+    ))
+    story.append(sp(0.3))
 
-    paint_items = [
-        ('Maska','hood'), ('Dach','roof'), ('Klapa bagażnika','trunk'),
-        ('Błotnik LP','leftFrontFender'), ('Błotnik PP','rightFrontFender'),
-        ('Błotnik LT','leftRearFender'), ('Błotnik PT','rightRearFender'),
-        ('Drzwi LP','leftFrontDoor'), ('Drzwi PP','rightFrontDoor'),
-        ('Drzwi LT','leftRearDoor'), ('Drzwi PT','rightRearDoor'),
-        ('Próg lewy','leftSill'), ('Próg prawy','rightSill'),
-        ('Słupek A lewy','leftAColumn'), ('Słupek A prawy','rightAColumn'),
-        ('Słupek B lewy','leftBColumn'), ('Słupek B prawy','rightBColumn'),
-        ('Słupek C lewy','leftCColumn'), ('Słupek C prawy','rightCColumn'),
-        ('Zderzak przód','frontBumper'), ('Zderzak tył','rearBumper'),
-    ]
-    p_header = ['ELEMENT', 'WARTOŚĆ (µm)', 'STATUS']
-    p_rows = [p_header]
-    smap = {'ok':'Fabryczny', 'repainted':'Lakierowany', 'putty':'Szpachlowany'}
-    for lbl, key in paint_items:
-        p = paint.get(key, {})
-        if isinstance(p, dict):
-            p_rows.append([lbl, _s(p.get('value')), smap.get(p.get('status',''), _s(p.get('status')))])
-        else:
-            p_rows.append([lbl, '', ''])
+    # Signatures
+    story.append(build_signatures(flat, w))
 
-    pcw = [CONTENT_W*0.40, CONTENT_W*0.30, CONTENT_W*0.30]
-    pt = Table(p_rows, colWidths=pcw)
-    pt.setStyle(TableStyle(_ts(fn, fnb) + [
-        ('BACKGROUND', (0,0), (-1,0), HEADER_BG),
-        ('FONTNAME', (0,0), (-1,0), fnb),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-    ]))
-    story.append(pt)
-    story.append(Spacer(1, 3*mm))
+    # ═══ PAGE 4 — PHOTOS (only if exist) ══════════════════════
+    if photos:
+        story.append(PageBreak())
+        story.append(Paragraph("DOKUMENTACJA ZDJĘCIOWA", photo_style))
+        story.append(sp(0.5))
+        story.extend(build_photos(photos, w))
 
-    # ─── KONTROLA MECHANICZNA ─────────────────────────────────
-    story.append(Paragraph("KONTROLA MECHANICZNA", S['section']))
-    mech_items = [
-        ('Stan silnika','engineCondition'), ('Poziom oleju silnikowego','engineOilLevel'),
-        ('Poziom płynu chłodzącego','coolantLevel'), ('Hałasy silnika','engineNoises'),
-        ('Dymienie silnika','engineSmoke'), ('Skrzynia biegów','transmission'),
-        ('Sprzęgło','clutch'), ('Wał napędowy','driveShaft'),
-        ('Zawieszenie przednie','frontSuspension'), ('Zawieszenie tylne','rearSuspension'),
-        ('Amortyzatory','shockAbsorbers'), ('Hamulce przednie','frontBrakes'),
-        ('Hamulce tylne','rearBrakes'), ('Hamulec ręczny','handbrake'),
-        ('Luz kierownicy','steeringPlay'), ('Pompa wspomagania','steeringPump'),
-        ('Układ wydechowy','exhaustSystem'), ('Klimatyzacja','airConditioning'),
-        ('Układ ogrzewania','heatingSystem'), ('Instalacja elektryczna','electricalSystem'),
-        ('Stan akumulatora','batteryCondition'), ('Oświetlenie','lightsAll'),
-        ('Wycieraczki','wipers'), ('Klakson','horn'),
-        ('Jazda testowa','testDriveConducted'),
-    ]
-    story.append(_kv([[l, _t(mech.get(k))] for l, k in mech_items], fn, fnb))
-    story.append(Spacer(1, 3*mm))
-
-    # ─── USZKODZENIA ──────────────────────────────────────────
-    story.append(PageBreak())
-    story.append(Paragraph("USZKODZENIA ZEWNĘTRZNE", S['section']))
-
-    def _dmg_table(damage_list):
-        if damage_list and isinstance(damage_list, list) and len(damage_list) > 0:
-            rows = [['ELEMENT', 'TYP', 'ROZMIAR', 'OPIS', 'DZIAŁANIE']]
-            for d in damage_list:
-                if isinstance(d, dict):
-                    rows.append([_s(d.get('part')), _s(d.get('type')), _s(d.get('size')),
-                                 _s(d.get('description')), _s(d.get('action'))])
-            dcw = [CONTENT_W*0.18, CONTENT_W*0.16, CONTENT_W*0.14, CONTENT_W*0.32, CONTENT_W*0.20]
-            dt = Table(rows, colWidths=dcw)
-            dt.setStyle(TableStyle(_ts(fn, fnb) + [
-                ('BACKGROUND', (0,0), (-1,0), HEADER_BG),
-                ('FONTNAME', (0,0), (-1,0), fnb),
-                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ]))
-            return dt
-        return Paragraph("Brak uszkodzeń.", S['small'])
-
-    story.append(_dmg_table(ext_dmg))
-    story.append(Spacer(1, 3*mm))
-    story.append(Paragraph("USZKODZENIA WEWNĘTRZNE", S['section']))
-    story.append(_dmg_table(int_dmg))
-    story.append(Spacer(1, 3*mm))
-
-    # ─── UWAGI I WYCENA ──────────────────────────────────────
-    story.append(Paragraph("UWAGI I WYCENA", S['section']))
-    nr = [
-        ['Dowód rejestracyjny okazany', _t(notes.get('registrationDocPresented'))],
-        ['Karta pojazdu okazana', _t(notes.get('vehicleCardPresented'))],
-        ['Faktura zakupu okazana', _t(notes.get('purchaseInvoicePresented'))],
-        ['Książka serwisowa okazana', _t(notes.get('serviceBookPresented'))],
-        ['Zabezpieczenie antykradzieżowe', _t(notes.get('antiTheftSecurityPresented'))],
-        ['Immobilizer sprawny', _t(notes.get('immobilizerWorking'))],
-        ['Jazda testowa możliwa', _t(notes.get('testDrivePossible'))],
-        ['Weryfikacja VIN', _s(notes.get('vinVerification'))],
-        ['Uwagi wyceny', _s(notes.get('valuationNotes'))],
-        ['Uwagi ogólne', _s(notes.get('generalComments'))],
-        ['Wartość szacunkowa', _s(notes.get('estimatedValue'))],
-        ['Porównanie rynkowe', _s(notes.get('marketComparison'))],
-    ]
-    story.append(_kv(nr, fn, fnb))
-    story.append(Spacer(1, 5*mm))
-
-    # ─── PODPISY ──────────────────────────────────────────────
-    story.append(Paragraph("PODPISY", S['section']))
-    story.append(Spacer(1, 3*mm))
-
-    sig_cells = []
-    for label, key in [('Podpis Rzeczoznawcy','signatureAppraiser'),
-                        ('Podpis Klienta','signatureClient'),
-                        ('Podpis Dysponenta','signatureYard')]:
-        sig_b64 = summary.get(key, '')
-        if sig_b64 and isinstance(sig_b64, str) and sig_b64.startswith('data:image'):
-            try:
-                img_data = base64.b64decode(sig_b64.split(',')[1])
-                img_buf = io.BytesIO(img_data)
-                sig_cells.append([Image(img_buf, width=5*cm, height=2*cm),
-                                  Paragraph(label, S['siglabel'])])
-            except Exception:
-                sig_cells.append([Paragraph("________________", S['siglabel']),
-                                  Paragraph(label, S['siglabel'])])
-        else:
-            sig_cells.append([Paragraph("________________", S['siglabel']),
-                              Paragraph(label, S['siglabel'])])
-
-    sig_data = [
-        [sig_cells[0][0], sig_cells[1][0], sig_cells[2][0]],
-        [sig_cells[0][1], sig_cells[1][1], sig_cells[2][1]],
-    ]
-    st = Table(sig_data, colWidths=[CONTENT_W/3]*3)
-    st.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-    ]))
-    story.append(st)
-
-    # VIN + absent rep
-    story.append(Spacer(1, 5*mm))
-    vc = summary.get('vinConfirmed', False)
-    story.append(Paragraph(f"VIN zweryfikowany: {'TAK ✓' if vc else 'NIE'}", S['small']))
-    if summary.get('isAbsentRep'):
-        story.append(Paragraph(f"Dysponent nieobecny. Komentarz: {_s(summary.get('absentRepComment'))}", S['small']))
-
-    # Footer
-    story.append(Spacer(1, 10*mm))
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    story.append(Paragraph(f"Raport wygenerowany: {now} | Zaufaj Rzeczoznawcy", S['footer']))
-
+    # Build
     doc.build(story)
-    return buffer.getvalue()
+    buf.seek(0)
+    return buf.read()
