@@ -11,3 +11,4 @@ python-dotenv
 aiofiles
 reportlab
 sqlalchemy
+aiosmtplib==3.0.1

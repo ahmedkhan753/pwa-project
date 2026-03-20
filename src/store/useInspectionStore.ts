@@ -989,9 +989,9 @@ export const useInspectionStore = create<InspectionState>()(
           const totalInBitrix = Array.isArray(res) ? res.length : (res.total_in_bitrix || 0);
 
           const transform = (d: any) => ({
-            id: String(d.id),
+            id: String(d.ID || d.id || ''),
             clientName: d.client_name || d.TITLE || d.title || (d.clientFirstName ? `${d.clientFirstName} ${d.clientLastName}` : 'Brak nazwy'),
-            vin: d.vin || '',
+            vin: d.vin || d.UF_CRM_1766057539531 || '',
             plates: d.registration_number || d.registrationNumber || '',
             phone: d.client_phone || d.clientPhone || '',
             appointmentTime: d.appointment_time || (d.scheduledDate ? d.scheduledDate.split('T')[1]?.slice(0, 5) : '09:00'),
@@ -1002,7 +1002,8 @@ export const useInspectionStore = create<InspectionState>()(
             model: d.vehicle_model || d.model || '',
             city: d.inspection_place || d.location || '',
             jobType: d.job_type || d.type || 'WYCENA',
-            scheduledDate: d.scheduled_date || d.scheduledDate
+            scheduledDate: d.scheduled_date || d.scheduledDate || d.UF_CRM_1772108256983 || '',
+            inspectorPhone: d.inspectorPhone || d.UF_CRM_1773961369947 || '',
           });
 
           set((s) => ({

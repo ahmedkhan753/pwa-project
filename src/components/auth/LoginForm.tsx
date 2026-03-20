@@ -177,7 +177,13 @@ export const LoginForm: React.FC = () => {
                 </div>
 
                 {/* Footer Info */}
-                <div className="text-center mt-8 text-muted/60 text-xs font-medium tracking-widest uppercase">
+                <div className="text-center mt-8 space-y-3">
+                    <a
+                        href="/admin"
+                        className="text-xs text-muted/40 hover:text-muted/70 transition-colors font-medium"
+                    >
+                        Admin Panel
+                    </a>
                 </div>
             </div>
         </div>

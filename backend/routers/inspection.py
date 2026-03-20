@@ -398,7 +398,7 @@ async def schedule_inspection(
 ):
     """
     POST /inspection/{deal_id}/schedule
-    Updates the planned inspection date and transitions deal stage.
+    Updates the planned inspection date, transitions deal stage, and sends email.
     """
     gateway = request.app.state.gateway
     body = await request.json()
@@ -409,7 +409,51 @@ async def schedule_inspection(
 
     try:
         result = await gateway.schedule_inspection(deal_id, scheduled_date)
+        logger.info(f"✅ Deal {deal_id} scheduled for {scheduled_date}")
+
+        # Send email notification (non-blocking — never fails the schedule)
+        try:
+            from services.email_service import send_assignment_email
+            from database import SessionLocal
+            from models.inspector import Inspector as InspectorModel
+
+            db = SessionLocal()
+            try:
+                # Fetch deal details for email
+                deal = await gateway.call("crm.deal.get", {"id": deal_id})
+                inspector_phone = deal.get("UF_CRM_1773961369947", "")
+
+                if inspector_phone:
+                    inspector = db.query(InspectorModel).filter(
+                        InspectorModel.phone == inspector_phone
+                    ).first()
+
+                    if inspector and inspector.email:
+                        await send_assignment_email(
+                            inspector_name=inspector.name,
+                            inspector_email=inspector.email,
+                            order_title=deal.get("TITLE", f"Zlecenie #{deal_id}"),
+                            order_id=str(deal_id),
+                            client_name=deal.get("UF_CRM_1766057964319", ""),
+                            inspection_address=deal.get("UF_CRM_1766058185504", ""),
+                            inspection_date=scheduled_date,
+                            vehicle_make=deal.get("UF_CRM_MAKE_FIELD", ""),
+                            vehicle_model=deal.get("UF_CRM_MODEL_FIELD", ""),
+                            registration_plates=deal.get("UF_CRM_PLATES_FIELD", ""),
+                        )
+                        logger.info(f"📧 Assignment email sent to {inspector.email}")
+                    else:
+                        logger.info(f"No email for inspector {inspector_phone} — skipping notification")
+                else:
+                    logger.info(f"No inspector phone on deal {deal_id} — skipping email")
+            finally:
+                db.close()
+        except Exception as email_err:
+            # Never fail the schedule if email fails
+            logger.warning(f"Email notification skipped: {email_err}")
+
         return result
     except Exception as e:
         logger.error(f"Scheduling failed: {e}")
         raise HTTPException(status_code=502, detail=str(e))
+
