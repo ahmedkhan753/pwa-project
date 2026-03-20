@@ -95,7 +95,22 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const handleViewReport = async (e: React.MouseEvent) => {
         e.stopPropagation();
         try {
-            const token = localStorage.getItem("token");
+            // Try Zustand persisted storage first (same as api.ts getAuthToken)
+            let token: string | null = null;
+            try {
+                const storage = localStorage.getItem('inspection-storage');
+                if (storage) {
+                    const parsed = JSON.parse(storage);
+                    token = parsed.state?.auth?.token || null;
+                }
+            } catch (_) {}
+
+            // Fallback to other possible keys
+            if (!token) token = localStorage.getItem("token");
+            if (!token) token = localStorage.getItem("access_token");
+            if (!token) token = localStorage.getItem("auth_token");
+            if (!token) token = sessionStorage.getItem("token");
+
             if (!token) {
                 alert("Brak autoryzacji. Zaloguj się ponownie.");
                 return;
@@ -107,10 +122,16 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 {
                     method: 'GET',
                     headers: {
-                        Authorization: `Bearer ${token}`
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
                     }
                 }
             );
+
+            if (response.status === 401) {
+                alert("Brak autoryzacji. Zaloguj się ponownie.");
+                return;
+            }
 
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -123,6 +144,11 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             console.error('Report error:', error);
             alert('Nie można otworzyć raportu. Spróbuj ponownie.');
         }
+    };
+
+    const handleReviewInspection = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        router.push(`/inspection/${job.id}/review`);
     };
 
     const onConfirmSchedule = async (e: React.MouseEvent) => {
@@ -302,7 +328,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
 
             {/* ── Action Bar — status-dependent ── */}
             {isFinished ? (
-                /* Completed / Closed / Lost: show report button, no start/schedule */
+                /* Completed / Closed / Lost: show report + review buttons */
                 <div className="space-y-3">
                     <div className="flex items-center justify-center gap-2 py-3 bg-green-50 dark:bg-green-950/30 rounded-2xl border border-green-200 dark:border-green-800">
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -310,7 +336,21 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                             Oględziny zakończone
                         </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={handleViewReport}
+                            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
+                        >
+                            📄 Podgląd raportu PDF
+                        </button>
+                        <button
+                            onClick={handleReviewInspection}
+                            className="w-full flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-bold text-sm border-2 border-gray-200 dark:border-gray-700 transition-all active:scale-[0.98]"
+                        >
+                            🔍 Przejrzyj oględziny
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                         <button
                             onClick={handleCall}
                             className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
@@ -324,13 +364,6 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                         >
                             <Navigation className="w-5 h-5 text-primary" />
                             <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
-                        </button>
-                        <button
-                            onClick={handleViewReport}
-                            className="flex flex-col items-center justify-center gap-1.5 bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-900/40 py-4 rounded-3xl transition-all border border-green-200 dark:border-green-800"
-                        >
-                            <Eye className="w-5 h-5 text-green-600" />
-                            <span className="text-[9px] font-black uppercase text-green-700 dark:text-green-400 tracking-widest">Raport</span>
                         </button>
                     </div>
                 </div>

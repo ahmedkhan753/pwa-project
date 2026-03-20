@@ -168,17 +168,19 @@ export function TiresStep() {
                                 </div>
                             </div>
 
-                            {/* Deferred Tread Depth */}
+                            {/* Tread Depth */}
                             <div className="mt-6 pt-6 border-t border-border">
-                                <div className="bg-surface-raised/30 rounded-2xl p-4 border border-dashed border-border flex items-center justify-between opacity-60">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center">
-                                            <Info size={14} className="text-muted/40" />
-                                        </div>
-                                        <span className="text-xs font-black text-muted uppercase tracking-tight">Głębokość bieżnika</span>
-                                    </div>
-                                    <span className="text-[8px] font-black bg-surface-raised px-2 py-1 rounded-md text-muted/50 uppercase">Coming in Phase 2</span>
-                                </div>
+                                <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
+                                    Głębokość bieżnika (mm)
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={w.treadDepth ?? ''}
+                                    onChange={(e) => handleTireChange(wheel.key, 'treadDepth', e.target.value)}
+                                    placeholder="np. 5,4"
+                                    className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                />
                             </div>
                         </div>
                     );
