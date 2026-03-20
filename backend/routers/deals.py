@@ -12,8 +12,11 @@ import time
 import logging
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Query, Depends
+from sqlalchemy.orm import Session
 
 from deps import get_current_user
+from database import get_db
+from models.inspector import Inspector, InspectorNotification
 
 router = APIRouter(prefix="/deals", tags=["Deals"])
 logger = logging.getLogger("routers.deals")
@@ -101,6 +104,7 @@ def _inject_status(deal: dict) -> dict:
 async def get_deals(
     request: Request,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
     user_id: Optional[int] = Query(None, description="Bitrix24 user ID"),
     date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
@@ -110,6 +114,7 @@ async def get_deals(
     GET /deals
     Returns list of inspections filtered by the current inspector's phone.
     Uses dynamic Bitrix list field mapping to resolve phone → list item ID.
+    Also sends email notification for newly assigned (unnotified) deals.
     """
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
@@ -158,6 +163,39 @@ async def get_deals(
 
         logger.info(f"Found {len(result)} deals for phone {inspector_phone}")
 
+        # ── Auto-notify for new unnotified deals ──
+        if inspector_phone and result:
+            import asyncio
+            for deal in result:
+                stage = deal.get("stageId", deal.get("STAGE_ID", ""))
+                deal_id = str(deal.get("ID", ""))
+
+                # Only notify for NEW or PREPARATION (assigned but not yet scheduled)
+                if stage in ("NEW", "PREPARATION") and deal_id:
+                    existing = db.query(InspectorNotification).filter(
+                        InspectorNotification.deal_id == deal_id,
+                        InspectorNotification.phone == inspector_phone,
+                    ).first()
+
+                    if not existing:
+                        # Mark as notified FIRST to prevent race-condition duplicates
+                        notif = InspectorNotification(
+                            deal_id=deal_id,
+                            phone=inspector_phone,
+                        )
+                        db.add(notif)
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+                            continue  # Unique constraint caught — another request already inserted
+
+                        # Fire email in background
+                        asyncio.create_task(
+                            _notify_inspector_new_order(deal, inspector_phone, db)
+                        )
+                        logger.info(f"📩 Queued notification email for deal {deal_id} → {inspector_phone}")
+
         # Return consistent dict structure
         return {
             "scheduled": result,
@@ -169,6 +207,38 @@ async def get_deals(
     except Exception as e:
         logger.error(f"Error fetching deals: {e}")
         raise HTTPException(status_code=502, detail=str(e))
+
+
+async def _notify_inspector_new_order(deal: dict, inspector_phone: str, db):
+    """Background task: send email for newly assigned deal."""
+    try:
+        from services.email_service import send_assignment_email
+
+        inspector = db.query(Inspector).filter(
+            Inspector.phone == inspector_phone,
+            Inspector.is_active == True,
+        ).first()
+
+        if not inspector or not inspector.email:
+            logger.warning(f"[Notify] No email for {inspector_phone}")
+            return
+
+        await send_assignment_email(
+            inspector_name=inspector.name,
+            inspector_email=inspector.email,
+            order_title=deal.get("TITLE", ""),
+            order_id=str(deal.get("ID", "")),
+            client_name=deal.get("UF_CRM_1766057964319", ""),
+            inspection_address=deal.get("UF_CRM_1766058185504", ""),
+            inspection_date=deal.get("UF_CRM_1772108256983", "Nie ustalono"),
+            vehicle_make="",
+            vehicle_model="",
+            registration_plates="",
+        )
+        logger.info(f"📧 New order email sent to {inspector.email} for deal {deal.get('ID')}")
+
+    except Exception as e:
+        logger.error(f"[Notify] Email failed for deal {deal.get('ID')}: {e}")
 
 
 @router.get("/{deal_id}")

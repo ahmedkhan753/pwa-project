@@ -200,6 +200,49 @@ async def submit_inspection(request: Request):
             # Use inspection data from the request body
             inspection_data = body
 
+            # Extract photo URLs from deal result — Bitrix file fields
+            # return download URLs when fetched via crm.deal.get
+            photo_urls = []
+            for key, value in deal_result.items():
+                if key.startswith("UF_CRM_") and isinstance(value, dict):
+                    # File field: {"id": 123, "url": "https://..."}
+                    url = value.get("url") or value.get("downloadUrl") or value.get("showUrl")
+                    if url and isinstance(url, str):
+                        # Make absolute URL if relative
+                        if url.startswith("/"):
+                            base = gateway.webhook_url.split("/rest/")[0]
+                            url = f"{base}{url}"
+                        photo_urls.append(url)
+                elif key.startswith("UF_CRM_") and isinstance(value, list):
+                    # Multi-file field
+                    for item in value:
+                        if isinstance(item, dict):
+                            url = item.get("url") or item.get("downloadUrl") or item.get("showUrl")
+                            if url and isinstance(url, str):
+                                if url.startswith("/"):
+                                    base = gateway.webhook_url.split("/rest/")[0]
+                                    url = f"{base}{url}"
+                                photo_urls.append(url)
+
+            # Also include any photos from the request body (base64 or URL)
+            body_photos = body.get("photos", {})
+            if isinstance(body_photos, dict):
+                for k, v in body_photos.items():
+                    if v and isinstance(v, str) and (v.startswith("data:image") or v.startswith("http")):
+                        photo_urls.append(v)
+            elif isinstance(body_photos, list):
+                for item in body_photos:
+                    if isinstance(item, str) and (item.startswith("data:image") or item.startswith("http")):
+                        photo_urls.append(item)
+                    elif isinstance(item, dict):
+                        url = item.get("base64") or item.get("url") or item.get("src")
+                        if url:
+                            photo_urls.append(url)
+
+            if photo_urls:
+                inspection_data["photos"] = photo_urls
+                logger.info(f"📷 {len(photo_urls)} photos found for PDF generation")
+
             # Generate PDF bytes
             pdf_bytes = generate_inspection_pdf(deal_info, inspection_data)
             logger.info(f"📄 PDF generated for deal {deal_id} — {len(pdf_bytes)} bytes")
