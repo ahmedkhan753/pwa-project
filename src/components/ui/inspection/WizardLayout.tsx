@@ -192,8 +192,13 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                             if (isSubmitting) return;
 
                             try {
+                                // 1. Stop ALL background sync immediately
+                                useInspectionStore.getState().setIsSubmitting(true);
                                 setIsSubmitting(true);
                                 setSubmitError(null);
+
+                                // 2. Wait 100ms for in-flight syncs
+                                await new Promise(resolve => setTimeout(resolve, 100));
 
                                 // Get deal ID safely
                                 const dealId = currentOrder?.vehicleData?.basicInfo?.companyName ? (useInspectionStore.getState().jobs.currentJobId) : null;
@@ -259,6 +264,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                                 return;
 
                             } catch (error: any) {
+                                // Reset flag on error
+                                useInspectionStore.getState().setIsSubmitting(false);
                                 console.error("Submit error:", error);
                                 setSubmitError(error.message);
                                 alert(`Błąd wysyłania: ${error.message}`);

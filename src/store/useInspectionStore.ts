@@ -321,6 +321,7 @@ interface InspectionState {
   };
   // Drafts (to prevent data loss when switching jobs)
   drafts: Record<string, StepData>;
+  isSubmitting: boolean;
 
   // Actions
   setStep: (step: number) => void;
@@ -368,6 +369,7 @@ interface InspectionState {
   clearInspection: () => void;
   fetchDealsForCalendar: (date: string) => Promise<void>;
   fetchFullDeal: (dealId: string) => Promise<void>;
+  setIsSubmitting: (val: boolean) => void;
 }
 
 // ─── Default Paint Zone ───────────────────────────────────
@@ -540,6 +542,7 @@ export const useInspectionStore = create<InspectionState>()(
         expanded: false,
       },
       drafts: {},
+      isSubmitting: false,
 
       setStep: (step: number) =>
         set((state) => ({
@@ -591,6 +594,7 @@ export const useInspectionStore = create<InspectionState>()(
           currentStep: 1,
           maxVisitedStep: 1,
           data: initialData,
+          isSubmitting: false,
         })),
 
       fetchMe: async () => {
@@ -880,13 +884,15 @@ export const useInspectionStore = create<InspectionState>()(
         data: initialData,
         currentStep: 1,
         maxVisitedStep: 1,
-        jobs: { ...state.jobs, currentJobId: null }
+        jobs: { ...state.jobs, currentJobId: null },
+        isSubmitting: false,
       })),
 
       reset: () => set({
         currentStep: 1,
         maxVisitedStep: 1,
         data: initialData,
+        isSubmitting: false,
         jobs: {
           scheduled: [],
           unscheduled: [],
@@ -901,6 +907,10 @@ export const useInspectionStore = create<InspectionState>()(
 
       syncStepWithBitrix: async (stepNumber: number) => {
         const state = useInspectionStore.getState();
+        if (state.isSubmitting) {
+          console.log('[Bitrix Sync] Skipping — submission in progress');
+          return;
+        }
         const dealId = state.jobs.currentJobId;
         if (!dealId || dealId.startsWith('mock-')) return;
 
@@ -1042,6 +1052,8 @@ export const useInspectionStore = create<InspectionState>()(
           }));
         }
       },
+
+      setIsSubmitting: (val: boolean) => set({ isSubmitting: val }),
     }),
     {
       name: 'inspection-storage',

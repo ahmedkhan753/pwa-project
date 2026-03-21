@@ -53,6 +53,14 @@ class SubmissionQueue {
 
         const checkAndRetry = async () => {
             const state = useInspectionStore.getState();
+            
+            // Critical check: if a new submission is starting, stop the queue
+            if (state.isSubmitting) {
+                this.isProcessing = false;
+                console.log("Submission queue: Global submission flag set, stopping background queue.");
+                return;
+            }
+
             const status = state.data.finalSummary.submissionStatus;
 
             // Only retry if status is 'error' or 'pending'
