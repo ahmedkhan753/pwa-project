@@ -33,6 +33,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [syncError, setSyncError] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [isRedirecting, setIsRedirecting] = useState(false);
 
     // Bitrix Auto-Sync (Anti-Oops)
     useEffect(() => {
@@ -79,6 +80,13 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden transition-colors duration-300">
+            {isRedirecting && (
+                <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                    <RefreshCcw size={48} className="text-primary animate-spin mb-4" />
+                    <h2 className="text-xl font-bold mb-2">Przesyłanie zakończone</h2>
+                    <p className="text-muted text-sm">Przekierowanie do pulpitu...</p>
+                </div>
+            )}
             {/* ── Header ─────────────────────────────────────── */}
             <header className="sticky top-0 z-30 bg-surface dark:bg-background/80 backdrop-blur-lg text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
@@ -108,7 +116,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                         </div>
                         <div>
                             <h2 className="text-sm font-bold tracking-tight text-foreground leading-tight">
-                                {STEPS[currentStep - 1].label}
+                                {STEPS[currentStep - 1]?.label || 'Podsumowanie'}
                             </h2>
                             <p className="text-[10px] text-primary font-black uppercase tracking-widest">
                                 Krok {currentStep} / {totalSteps}
@@ -161,7 +169,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
             {/* ── Main Content ───────────────────────────────── */}
             <main className="flex-1 p-4 overflow-y-auto pb-28 animate-fade-in" key={currentStep}>
-                {children}
+                {!isRedirecting && children}
             </main>
 
             {/* ── Bottom Navigation ──────────────────────────── */}
@@ -249,9 +257,24 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                                 const result = await response.json();
                                 console.log("Submit success:", result);
 
-                                // Clear store and redirect
-                                clearInspection();
-                                router.push('/dashboard');
+                                // Clear store and redirect logic
+                                setIsRedirecting(true);
+                                console.log('Submit successful — redirecting to dashboard')
+
+                                // Clear store with full error protection
+                                try {
+                                    const store = useInspectionStore.getState() as any
+                                    if (store.clearInspection) store.clearInspection()
+                                    else if (store.reset) store.reset()
+                                    else if (store.resetInspection) store.resetInspection()
+                                } catch (e) {
+                                    console.warn('Store clear skipped:', e)
+                                }
+
+                                // Wait 500ms then force redirect — bypasses all router state issues
+                                setTimeout(() => {
+                                    window.location.replace('/dashboard')
+                                }, 500);
 
                             } catch (error: any) {
                                 console.error("Submit error:", error);
