@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useInspectionStore } from '@/store/useInspectionStore';
 import { WizardLayout } from '@/components/ui/inspection/WizardLayout';
 import { StepDispatcher } from '@/components/ui/inspection/StepDispatcher';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { SplashScreen } from '@/components/SplashScreen';
 import { Loader2 } from 'lucide-react';
@@ -41,9 +42,11 @@ export default function DashboardPage() {
     return (
         <>
             <SplashScreen />
-            <WizardLayout>
-                <StepDispatcher />
-            </WizardLayout>
+            <ErrorBoundary>
+                <WizardLayout>
+                    <StepDispatcher />
+                </WizardLayout>
+            </ErrorBoundary>
         </>
     );
 }
