@@ -6,6 +6,7 @@ import { Logo } from "@/components/ui/Logo";
 import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home, Cloud, CloudOff, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
@@ -24,7 +25,8 @@ const STEPS = [
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
-    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix, submitToBitrix } = useInspectionStore();
+    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix, clearInspection, data: currentOrder } = useInspectionStore();
+    const router = useRouter();
     const totalSteps = STEPS.length;
     const [showSaved, setShowSaved] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -183,17 +185,78 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     <button
                         onClick={async () => {
                             if (isSubmitting) return;
-                            setIsSubmitting(true);
-                            setSubmitError(null);
+
                             try {
-                                const result = await submitToBitrix();
-                                if (result.success) {
-                                    selectJob(null); // Navigate to dashboard
-                                } else {
-                                    setSubmitError(result.message);
+                                setIsSubmitting(true);
+                                setSubmitError(null);
+
+                                // Get deal ID safely
+                                const dealId = currentOrder?.vehicleData?.basicInfo?.companyName ? (useInspectionStore.getState().jobs.currentJobId) : null;
+                                const finalDealId = useInspectionStore.getState().jobs.currentJobId;
+                                
+                                if (!finalDealId) throw new Error("Brak ID zlecenia");
+
+                                // Get token safely
+                                const token = (() => {
+                                    try {
+                                        const stored = localStorage.getItem('inspection-storage');
+                                        if (stored) {
+                                            const parsed = JSON.parse(stored);
+                                            if (parsed?.state?.auth?.token) return parsed.state.auth.token;
+                                        }
+                                    } catch {}
+                                    return localStorage.getItem('token') || localStorage.getItem('access_token');
+                                })();
+
+                                if (!token) {
+                                    alert("Sesja wygasła. Zaloguj się ponownie.");
+                                    router.push('/login');
+                                    return;
                                 }
-                            } catch (err: any) {
-                                setSubmitError(err.message || 'Submission failed');
+
+                                // Build photos map safely
+                                const photoSlots = useInspectionStore.getState().data?.photos || [];
+                                const photoMap: Record<string, string> = {};
+                                photoSlots.forEach((slot: any) => {
+                                    if (slot?.base64 && slot.base64.startsWith('data:')) {
+                                        photoMap[slot.id] = slot.base64;
+                                    }
+                                });
+
+                                // Submit to backend
+                                const response = await fetch(
+                                    `${process.env.NEXT_PUBLIC_API_URL}/inspection/submit`,
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({
+                                            ...useInspectionStore.getState().data,
+                                            deal_id: finalDealId,
+                                            photos: photoMap,
+                                            job_id: finalDealId
+                                        })
+                                    }
+                                );
+
+                                if (!response.ok) {
+                                    const error = await response.json().catch(() => ({}));
+                                    throw new Error(error.detail || `HTTP ${response.status}`);
+                                }
+
+                                const result = await response.json();
+                                console.log("Submit success:", result);
+
+                                // Clear store and redirect
+                                clearInspection();
+                                router.push('/dashboard');
+
+                            } catch (error: any) {
+                                console.error("Submit error:", error);
+                                setSubmitError(error.message);
+                                alert(`Błąd wysyłania: ${error.message}`);
                             } finally {
                                 setIsSubmitting(false);
                             }

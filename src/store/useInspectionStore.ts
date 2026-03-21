@@ -365,6 +365,7 @@ interface InspectionState {
   // ── Bitrix Sync Actions (Phases 7 & 8) ──
   syncStepWithBitrix: (stepNumber: number) => Promise<void>;
   submitToBitrix: () => Promise<{ success: boolean; message: string }>;
+  clearInspection: () => void;
   fetchDealsForCalendar: (date: string) => Promise<void>;
   fetchFullDeal: (dealId: string) => Promise<void>;
 }
@@ -875,7 +876,13 @@ export const useInspectionStore = create<InspectionState>()(
           },
         })),
 
-      // ── Reset ──
+      clearInspection: () => set((state) => ({
+        data: initialData,
+        currentStep: 1,
+        maxVisitedStep: 1,
+        jobs: { ...state.jobs, currentJobId: null }
+      })),
+
       reset: () => set({
         currentStep: 1,
         maxVisitedStep: 1,

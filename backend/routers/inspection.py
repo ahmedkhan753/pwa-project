@@ -6,8 +6,9 @@ Submit full inspections and save individual wizard steps.
 
 import logging
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Request, HTTPException, Depends
+from pydantic import BaseModel, field_validator, ConfigDict
 from fastapi.responses import StreamingResponse
 import io
 
@@ -176,13 +177,29 @@ STEP_FIELD_MAP = {
 }
 
 
+class SubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    deal_id: int
+    job_id: Optional[int] = None
+    photos: Dict[str, Any] = {}
+
+    @field_validator('deal_id', 'job_id', mode='before')
+    @classmethod
+    def parse_ids(cls, v):
+        if v is None:
+            return v
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return v
+
 @router.post("/submit")
-async def submit_inspection(request: Request):
+async def submit_inspection(request: Request, data: SubmitRequest):
     """
     POST /inspection/submit
     Finalizes the inspection — sets Bitrix deal stage to "Inspection Completed".
     Individual step data has already been saved via PATCH /step/{n} calls.
-    Accepts any JSON body — extracts deal_id from it.
+    Accepts SubmitRequest JSON body (allows extra fields for full state).
     """
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
@@ -193,24 +210,11 @@ async def submit_inspection(request: Request):
             detail="Bitrix24 integration not ready — try again later",
         )
 
-    # Parse raw JSON — no strict Pydantic validation
-    try:
-        body = await request.json()
-    except Exception as e:
-        logger.error(f"Cannot parse JSON in submit endpoint: {e}")
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    # Use the validated data model and get full body from model_dump()
+    deal_id = data.deal_id
+    body = data.model_dump()
 
-    deal_id = body.get("deal_id") or body.get("job_id")
-    if not deal_id:
-        raise HTTPException(status_code=400, detail="deal_id is required")
-
-    # Coerce to int
-    try:
-        deal_id = int(deal_id)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail=f"Invalid deal_id: {deal_id}")
-
-    logger.info(f"🚀 Final submission for deal {deal_id}")
+    logger.info(f"🚀 Submit received — deal_id: {data.deal_id}, photos: {len(data.photos)}")
 
     warnings = []
 
