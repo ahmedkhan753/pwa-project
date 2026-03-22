@@ -190,31 +190,28 @@ async def get_deals(
 
             enriched = _inject_status(deal)
             enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
-            # crm.deal.list returns raw UF_CRM fields — check those first
-            enriched["inspection_place"] = (
-                deal.get("UF_CRM_1766058185504", "") or  # inspection_place
-                deal.get("UF_CRM_1766058195680", "") or  # planned_address (alt)
-                deal.get("planned_location", "") or
-                deal.get("planned_address", "") or
+            # Use UNIQUE keys to avoid clashing with raw deal fields
+            enriched["inspectionAddress"] = (
+                deal.get("UF_CRM_1766058185504", "") or
+                deal.get("UF_CRM_1766058195680", "") or
                 ""
             )
-            enriched["client_phone"] = (
-                deal.get("UF_CRM_1766058053224", "") or  # client_phone
-                deal.get("UF_CRM_1766058204785", "") or  # contact phone (alt)
-                deal.get("client_phone", "") or
+            enriched["contactPhone"] = (
+                deal.get("UF_CRM_1766058053224", "") or
+                deal.get("UF_CRM_1766058204785", "") or
                 ""
             )
-            enriched["client_name"] = (
-                deal.get("UF_CRM_1766057941327", "") or  # client_name
-                deal.get("UF_CRM_1766058195123", "") or  # contact person (alt)
-                deal.get("userOwner", "") or
+            enriched["contactPerson"] = (
+                deal.get("UF_CRM_1766057941327", "") or
+                deal.get("UF_CRM_1766058195123", "") or
                 ""
             )
             enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
             enriched["vehicle_model"] = deal.get("UF_CRM_1766057849818", "")
             enriched["registration_number"] = deal.get("UF_CRM_1766057515315", "")
+            enriched["scheduled_date"] = deal.get("UF_CRM_1772108256983", "")
 
-            logger.info(f"Deal {deal.get('ID')} → addr={enriched['inspection_place']!r} phone={enriched['client_phone']!r} contact={enriched['client_name']!r}")
+            logger.info(f"Deal {deal.get('ID')} enriched: addr={enriched['inspectionAddress']!r} phone={enriched['contactPhone']!r} contact={enriched['contactPerson']!r}")
 
             result.append(enriched)
 
@@ -293,23 +290,22 @@ async def get_deal(request: Request, deal_id: int):
         if "scheduled_date" not in deal:
             deal["scheduled_date"] = date_val
 
-        # Inject address/contact fields with same fallback logic as list endpoint
-        deal["inspection_place"] = (
+        # Inject address/contact with UNIQUE keys (same as list endpoint)
+        deal["inspectionAddress"] = (
             deal.get("planned_location", "") or
             deal.get("planned_address", "") or
+            deal.get("inspection_place", "") or
             deal.get("UF_CRM_1766058185504", "") or
-            deal.get("UF_CRM_1766058195680", "") or
             ""
         )
-        deal["client_phone"] = (
+        deal["contactPhone"] = (
             deal.get("client_phone", "") or
-            deal.get("UF_CRM_1766058204785", "") or
             deal.get("UF_CRM_1766058053224", "") or
             ""
         )
-        deal["client_name"] = (
+        deal["contactPerson"] = (
             deal.get("userOwner", "") or
-            deal.get("UF_CRM_1766058195123", "") or
+            deal.get("client_name", "") or
             deal.get("UF_CRM_1766057941327", "") or
             ""
         )
@@ -318,6 +314,44 @@ async def get_deal(request: Request, deal_id: int):
     except Exception as e:
         logger.error(f"Error fetching deal {deal_id}: {e}")
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/debug/{deal_id}")
+async def debug_deal(request: Request, deal_id: int):
+    """
+    GET /deals/debug/{deal_id}
+    Returns raw Bitrix deal fields for debugging — no auth required.
+    """
+    gateway = request.app.state.gateway
+    try:
+        raw = await gateway.call("crm.deal.get", {"ID": deal_id, "select": ["*", "UF_*"]})
+        # Extract the fields we care about
+        address_fields = {
+            "UF_CRM_1766058185504": raw.get("UF_CRM_1766058185504"),
+            "UF_CRM_1766058195680": raw.get("UF_CRM_1766058195680"),
+        }
+        contact_fields = {
+            "UF_CRM_1766058053224": raw.get("UF_CRM_1766058053224"),
+            "UF_CRM_1766058204785": raw.get("UF_CRM_1766058204785"),
+            "UF_CRM_1766057941327": raw.get("UF_CRM_1766057941327"),
+            "UF_CRM_1766058195123": raw.get("UF_CRM_1766058195123"),
+        }
+        vehicle_fields = {
+            "UF_CRM_1766057839684": raw.get("UF_CRM_1766057839684"),
+            "UF_CRM_1766057849818": raw.get("UF_CRM_1766057849818"),
+            "UF_CRM_1766057515315": raw.get("UF_CRM_1766057515315"),
+        }
+        return {
+            "deal_id": deal_id,
+            "title": raw.get("TITLE"),
+            "stage": raw.get("STAGE_ID"),
+            "address_fields": address_fields,
+            "contact_fields": contact_fields,
+            "vehicle_fields": vehicle_fields,
+            "all_UF_keys": [k for k in raw.keys() if k.startswith("UF_")],
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.patch("/{deal_id}/schedule")

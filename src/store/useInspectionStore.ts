@@ -1024,23 +1024,23 @@ export const useInspectionStore = create<InspectionState>()(
 
           const transform = (d: any) => ({
             id: String(d.ID || d.id || ''),
-            clientName: d.client_name || d.TITLE || d.title || (d.clientFirstName ? `${d.clientFirstName} ${d.clientLastName}` : 'Brak nazwy'),
+            clientName: d.TITLE || d.title || (d.clientFirstName ? `${d.clientFirstName} ${d.clientLastName}` : 'Brak nazwy'),
             vin: d.vin || d.UF_CRM_1766057539531 || '',
-            plates: d.registration_number || d.registrationNumber || '',
-            phone: d.client_phone || d.clientPhone || '',
+            plates: d.registration_number || d.registrationNumber || d.UF_CRM_1766057515315 || '',
+            phone: d.contactPhone || d.client_phone || d.clientPhone || d.UF_CRM_1766058053224 || '',
             appointmentTime: d.appointment_time || (d.scheduledDate ? d.scheduledDate.split('T')[1]?.slice(0, 5) : '09:00'),
             deadline: date,
             status: d.status || 'new',
             stageId: d.stageId || d.STAGE_ID || '',
-            make: d.vehicle_brand || d.brand || '',
-            model: d.vehicle_model || d.model || '',
-            city: d.inspection_place || d.location || '',
+            make: d.vehicle_brand || d.brand || d.UF_CRM_1766057839684 || '',
+            model: d.vehicle_model || d.model || d.UF_CRM_1766057849818 || '',
+            city: d.inspectionAddress || d.inspection_place || d.location || '',
             jobType: d.job_type || d.type || 'WYCENA',
             scheduledDate: d.scheduled_date || d.scheduledDate || d.UF_CRM_1772108256983 || '',
             inspectorPhone: d.inspectorPhone || d.UF_CRM_1773961369947 || '',
-            inspectionAddress: d.inspection_place || d.inspectionAddress || d.UF_CRM_1766058185504 || '',
-            contactPhone: d.client_phone || d.contactPhone || d.UF_CRM_1766058053224 || '',
-            contactPerson: d.client_name || d.contactPerson || d.UF_CRM_1766057941327 || '',
+            inspectionAddress: d.inspectionAddress || d.inspection_place || d.UF_CRM_1766058185504 || '',
+            contactPhone: d.contactPhone || d.client_phone || d.UF_CRM_1766058053224 || '',
+            contactPerson: d.contactPerson || d.client_name || d.UF_CRM_1766057941327 || '',
           });
 
           set((s) => ({
