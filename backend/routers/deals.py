@@ -159,12 +159,31 @@ async def get_deals(
         for deal in deals_raw:
             enriched = _inject_status(deal)
             enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
-            enriched["inspection_place"] = deal.get("UF_CRM_1766058185504", "")
-            enriched["client_phone"] = deal.get("UF_CRM_1766058053224", "")
-            enriched["client_name"] = deal.get("UF_CRM_1766057941327", "")
+            enriched["inspection_place"] = (
+                deal.get("UF_CRM_1766058185504", "") or  # Planowane miejsce oględzin
+                deal.get("UF_CRM_1766058195680", "") or  # Planowany adres oględzin
+                ""
+            )
+            enriched["client_phone"] = (
+                deal.get("UF_CRM_1766058204785", "") or  # Telefon osoby kontaktowej
+                deal.get("UF_CRM_1766058053224", "") or  # Alternative phone field
+                ""
+            )
+            enriched["client_name"] = (
+                deal.get("UF_CRM_1766058195123", "") or  # Osoba kontaktowa
+                deal.get("UF_CRM_1766057941327", "") or  # Client name fallback
+                ""
+            )
             enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
             enriched["vehicle_model"] = deal.get("UF_CRM_1766057849818", "")
             enriched["registration_number"] = deal.get("UF_CRM_1766057515315", "")
+
+            logger.info(f"Deal {deal.get('ID')} address fields: "
+                        f"miejsce={deal.get('UF_CRM_1766058185504')} "
+                        f"adres={deal.get('UF_CRM_1766058195680')} "
+                        f"phone={deal.get('UF_CRM_1766058204785')} "
+                        f"contact={deal.get('UF_CRM_1766058195123')}")
+
             result.append(enriched)
 
         logger.info(f"Found {len(result)} deals for phone {inspector_phone}")
