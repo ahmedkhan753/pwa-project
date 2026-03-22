@@ -147,10 +147,34 @@ async def get_deals(
                 logger.warning(f"No Bitrix list ID found for phone {inspector_phone} — using raw phone filter")
 
         # Direct Bitrix API call with filter
+        # NOTE: crm.deal.list does NOT support UF_CRM_* wildcard — must list fields explicitly
         deals_raw = await gateway.call("crm.deal.list", {
             "filter": filter_params,
-            "select": ["ID", "TITLE", "STAGE_ID", "DATE_CREATE", "BEGINDATE",
-                       "UF_CRM_*", "ASSIGNED_BY_ID", "OPPORTUNITY"],
+            "select": [
+                "ID", "TITLE", "STAGE_ID", "DATE_CREATE", "BEGINDATE",
+                "ASSIGNED_BY_ID", "OPPORTUNITY",
+                # Inspector
+                "UF_CRM_1773961369947",   # inspector_phone
+                "UF_CRM_1773970466449",   # inspector list field
+                "UF_CRM_1771579888",      # appraiser_mobile
+                # Address / Location
+                "UF_CRM_1766058185504",   # inspection_place
+                "UF_CRM_1766058195680",   # planned_address (alt)
+                # Contact / Client
+                "UF_CRM_1766058053224",   # client_phone
+                "UF_CRM_1766058204785",   # contact phone (alt)
+                "UF_CRM_1766057941327",   # client_name
+                "UF_CRM_1766058195123",   # contact person (alt)
+                "UF_CRM_1766057964319",   # company_name
+                # Vehicle
+                "UF_CRM_1766057839684",   # vehicle_brand
+                "UF_CRM_1766057849818",   # vehicle_model
+                "UF_CRM_1766057515315",   # registration_number
+                "UF_CRM_1766057539531",   # VIN
+                "UF_CRM_1766057572300",   # production_year
+                # Date
+                "UF_CRM_1772108256983",   # inspection_date / scheduled_date
+            ],
             "order": {"DATE_CREATE": "DESC"}
         })
 
