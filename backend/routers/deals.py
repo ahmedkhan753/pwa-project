@@ -157,25 +157,33 @@ async def get_deals(
         # Transform each deal
         result = []
         for deal in deals_raw:
+            # Debug: log raw UF fields from crm.deal.list
+            logger.info(f"Raw deal {deal.get('ID')} UF fields: "
+                        f"loc={deal.get('UF_CRM_1766058185504')!r} "
+                        f"phone={deal.get('UF_CRM_1766058053224')!r} "
+                        f"client={deal.get('UF_CRM_1766057941327')!r} "
+                        f"plates={deal.get('UF_CRM_1766057515315')!r}")
+
             enriched = _inject_status(deal)
             enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
+            # crm.deal.list returns raw UF_CRM fields — check those first
             enriched["inspection_place"] = (
+                deal.get("UF_CRM_1766058185504", "") or  # inspection_place
+                deal.get("UF_CRM_1766058195680", "") or  # planned_address (alt)
                 deal.get("planned_location", "") or
                 deal.get("planned_address", "") or
-                deal.get("UF_CRM_1766058185504", "") or
-                deal.get("UF_CRM_1766058195680", "") or
                 ""
             )
             enriched["client_phone"] = (
+                deal.get("UF_CRM_1766058053224", "") or  # client_phone
+                deal.get("UF_CRM_1766058204785", "") or  # contact phone (alt)
                 deal.get("client_phone", "") or
-                deal.get("UF_CRM_1766058204785", "") or
-                deal.get("UF_CRM_1766058053224", "") or
                 ""
             )
             enriched["client_name"] = (
+                deal.get("UF_CRM_1766057941327", "") or  # client_name
+                deal.get("UF_CRM_1766058195123", "") or  # contact person (alt)
                 deal.get("userOwner", "") or
-                deal.get("UF_CRM_1766058195123", "") or
-                deal.get("UF_CRM_1766057941327", "") or
                 ""
             )
             enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
