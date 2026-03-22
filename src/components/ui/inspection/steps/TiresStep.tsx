@@ -33,11 +33,6 @@ const formatTireSize = (value: string): string => {
     return `${digits.slice(0, 3)}/${digits.slice(3, 5)} R${digits.slice(5, 7)}`;
 };
 
-// ── Tread Depth Validation (X,X) ──
-const isTreadDepthValid = (value: string): boolean => {
-    return /^\d,\d$/.test(value);
-};
-
 export function TiresStep() {
     const { data, updateField, copyTiresToAxle } = useInspectionStore();
     const tires = data.tires;
@@ -55,11 +50,33 @@ export function TiresStep() {
     };
 
     const handleTreadDepthChange = (wheel: string, value: string) => {
-        const cleaned = value.replace(/[^\d,]/g, '');
-        if (cleaned.length > 3) return;
-        if ((cleaned.match(/,/g) || []).length > 1) return;
-        if (cleaned.startsWith(',')) return;
-        handleTireChange(wheel, 'treadDepth', cleaned);
+        if (value === '') { handleTireChange(wheel, 'treadDepth', ''); return; }
+        if (/^\d$/.test(value)) { handleTireChange(wheel, 'treadDepth', value); return; }
+        if (/^\d,$/.test(value)) { handleTireChange(wheel, 'treadDepth', value); return; }
+        if (/^\d,\d$/.test(value)) { handleTireChange(wheel, 'treadDepth', value); return; }
+        // Block everything else
+    };
+
+    const handleTreadDepthKeyDown = (
+        wheel: string,
+        e: React.KeyboardEvent<HTMLInputElement>,
+        currentValue: string
+    ) => {
+        // Allow navigation/control keys
+        if (['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+
+        // Only allow digits
+        if (!/^\d$/.test(e.key)) { e.preventDefault(); return; }
+
+        // If already complete X,X — block
+        if (/^\d,\d$/.test(currentValue)) { e.preventDefault(); return; }
+
+        // If empty — auto-insert comma after first digit
+        if (currentValue === '') {
+            e.preventDefault();
+            handleTireChange(wheel, 'treadDepth', `${e.key},`);
+            return;
+        }
     };
 
     return (
@@ -233,7 +250,7 @@ export function TiresStep() {
                                 </div>
                             </div>
 
-                            {/* Tread Depth — X,X format only */}
+                            {/* Tread Depth — FORCED X,X format */}
                             <div className="mt-6 pt-6 border-t border-border">
                                 <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
                                     Głębokość bieżnika (mm)
@@ -243,17 +260,11 @@ export function TiresStep() {
                                     inputMode="decimal"
                                     value={w.treadDepth ?? ''}
                                     onChange={(e) => handleTreadDepthChange(wheel.key, e.target.value)}
+                                    onKeyDown={(e) => handleTreadDepthKeyDown(wheel.key, e, w.treadDepth ?? '')}
                                     placeholder="5,4"
                                     maxLength={3}
-                                    className={`w-full py-3 px-4 rounded-xl border-2 bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm ${
-                                        w.treadDepth && !isTreadDepthValid(w.treadDepth)
-                                            ? 'border-red-400'
-                                            : 'border-border'
-                                    }`}
+                                    className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
                                 />
-                                {w.treadDepth && !isTreadDepthValid(w.treadDepth) && (
-                                    <p className="text-red-500 text-xs mt-1">Format: X,X (np. 5,4)</p>
-                                )}
                             </div>
                         </div>
                     );
