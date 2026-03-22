@@ -160,29 +160,29 @@ async def get_deals(
             enriched = _inject_status(deal)
             enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
             enriched["inspection_place"] = (
-                deal.get("UF_CRM_1766058185504", "") or  # Planowane miejsce oględzin
-                deal.get("UF_CRM_1766058195680", "") or  # Planowany adres oględzin
+                deal.get("planned_location", "") or
+                deal.get("planned_address", "") or
+                deal.get("UF_CRM_1766058185504", "") or
+                deal.get("UF_CRM_1766058195680", "") or
                 ""
             )
             enriched["client_phone"] = (
-                deal.get("UF_CRM_1766058204785", "") or  # Telefon osoby kontaktowej
-                deal.get("UF_CRM_1766058053224", "") or  # Alternative phone field
+                deal.get("client_phone", "") or
+                deal.get("UF_CRM_1766058204785", "") or
+                deal.get("UF_CRM_1766058053224", "") or
                 ""
             )
             enriched["client_name"] = (
-                deal.get("UF_CRM_1766058195123", "") or  # Osoba kontaktowa
-                deal.get("UF_CRM_1766057941327", "") or  # Client name fallback
+                deal.get("userOwner", "") or
+                deal.get("UF_CRM_1766058195123", "") or
+                deal.get("UF_CRM_1766057941327", "") or
                 ""
             )
             enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
             enriched["vehicle_model"] = deal.get("UF_CRM_1766057849818", "")
             enriched["registration_number"] = deal.get("UF_CRM_1766057515315", "")
 
-            logger.info(f"Deal {deal.get('ID')} address fields: "
-                        f"miejsce={deal.get('UF_CRM_1766058185504')} "
-                        f"adres={deal.get('UF_CRM_1766058195680')} "
-                        f"phone={deal.get('UF_CRM_1766058204785')} "
-                        f"contact={deal.get('UF_CRM_1766058195123')}")
+            logger.info(f"Deal {deal.get('ID')} → addr={enriched['inspection_place']!r} phone={enriched['client_phone']!r} contact={enriched['client_name']!r}")
 
             result.append(enriched)
 
@@ -260,7 +260,28 @@ async def get_deal(request: Request, deal_id: int):
             deal["inspection_date"] = date_val
         if "scheduled_date" not in deal:
             deal["scheduled_date"] = date_val
-        
+
+        # Inject address/contact fields with same fallback logic as list endpoint
+        deal["inspection_place"] = (
+            deal.get("planned_location", "") or
+            deal.get("planned_address", "") or
+            deal.get("UF_CRM_1766058185504", "") or
+            deal.get("UF_CRM_1766058195680", "") or
+            ""
+        )
+        deal["client_phone"] = (
+            deal.get("client_phone", "") or
+            deal.get("UF_CRM_1766058204785", "") or
+            deal.get("UF_CRM_1766058053224", "") or
+            ""
+        )
+        deal["client_name"] = (
+            deal.get("userOwner", "") or
+            deal.get("UF_CRM_1766058195123", "") or
+            deal.get("UF_CRM_1766057941327", "") or
+            ""
+        )
+
         return deal
     except Exception as e:
         logger.error(f"Error fetching deal {deal_id}: {e}")
