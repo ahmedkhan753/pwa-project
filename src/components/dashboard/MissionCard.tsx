@@ -316,13 +316,38 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-3 mb-6">
+                    {/* Inspection Address */}
                     <div className="flex items-start gap-3 text-muted text-xs bg-surface-raised p-3 rounded-2xl border border-border/50">
                         <MapPin className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                         <div>
-                            <p className="font-black text-foreground uppercase text-[10px] mb-0.5">Lokalizacja</p>
-                            <span className="font-medium">{job.city || 'Lokalizacja nieznana'}</span>
+                            <p className="font-black text-foreground uppercase text-[10px] mb-0.5">Miejsce oględzin</p>
+                            <span className="font-medium">{job.inspectionAddress || job.city || 'Lokalizacja nieznana'}</span>
                         </div>
                     </div>
+
+                    {/* Contact Phone */}
+                    {job.contactPhone && (
+                        <div className="flex items-center gap-3 text-muted text-xs bg-surface-raised p-3 rounded-2xl border border-border/50" onClick={e => e.stopPropagation()}>
+                            <Phone className="w-4 h-4 text-primary flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="font-black text-foreground uppercase text-[10px] mb-0.5">Kontakt</p>
+                                <a
+                                    href={`tel:${job.contactPhone}`}
+                                    className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    {job.contactPerson ? `${job.contactPerson} — ` : ''}{job.contactPhone}
+                                </a>
+                            </div>
+                            <a
+                                href={`tel:${job.contactPhone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-green-500 hover:bg-green-600 text-white p-2.5 rounded-xl transition-colors shadow-sm"
+                            >
+                                <Phone className="w-4 h-4" />
+                            </a>
+                        </div>
+                    )}
                 </div>
             )}
 

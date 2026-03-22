@@ -159,6 +159,12 @@ async def get_deals(
         for deal in deals_raw:
             enriched = _inject_status(deal)
             enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
+            enriched["inspection_place"] = deal.get("UF_CRM_1766058185504", "")
+            enriched["client_phone"] = deal.get("UF_CRM_1766058053224", "")
+            enriched["client_name"] = deal.get("UF_CRM_1766057941327", "")
+            enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
+            enriched["vehicle_model"] = deal.get("UF_CRM_1766057849818", "")
+            enriched["registration_number"] = deal.get("UF_CRM_1766057515315", "")
             result.append(enriched)
 
         logger.info(f"Found {len(result)} deals for phone {inspector_phone}")

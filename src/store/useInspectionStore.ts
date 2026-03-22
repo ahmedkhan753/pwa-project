@@ -28,6 +28,10 @@ export interface InspectionJob {
   jobType?: 'WYCENA' | 'CFM' | 'UNKNOWN';
   scheduledDate?: string; // UF_CRM_1772108256983
   hasConflict?: boolean;
+  inspectionAddress?: string;
+  contactPhone?: string;
+  contactPerson?: string;
+  inspectorPhone?: string;
 }
 
 // ─── Toggle Type ───────────────────────────────────────────
@@ -1034,6 +1038,9 @@ export const useInspectionStore = create<InspectionState>()(
             jobType: d.job_type || d.type || 'WYCENA',
             scheduledDate: d.scheduled_date || d.scheduledDate || d.UF_CRM_1772108256983 || '',
             inspectorPhone: d.inspectorPhone || d.UF_CRM_1773961369947 || '',
+            inspectionAddress: d.inspection_place || d.inspectionAddress || d.UF_CRM_1766058185504 || '',
+            contactPhone: d.client_phone || d.contactPhone || d.UF_CRM_1766058053224 || '',
+            contactPerson: d.client_name || d.contactPerson || d.UF_CRM_1766057941327 || '',
           });
 
           set((s) => ({
