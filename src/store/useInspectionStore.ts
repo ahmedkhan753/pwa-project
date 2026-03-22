@@ -397,25 +397,24 @@ const defaultPhotoSlots: PhotoSlot[] = [
   { id: 'photo_left_front',          label: '14. Lewa strona przód',                       base64: '', required: true },
   { id: 'photo_door_left_front_open',label: '15. Otwarte lewe przednie drzwi',             base64: '', required: true },
   { id: 'photo_left_side_door',      label: '16. Lewe drzwi boczne',                       base64: '', required: true },
-  { id: 'photo_door_left_rear_open', label: '17. Otwarte lewe tylne drzwi',                base64: '', required: false },
-  { id: 'photo_dashboard_rear',      label: '18. Deska rozdzielcza z tylnego siedzenia',   base64: '', required: true },
-  { id: 'photo_cockpit_center',      label: '19. Centralny kokpit',                        base64: '', required: true },
-  { id: 'photo_center_tunnel',       label: '20. Tunel centralny',                         base64: '', required: true },
-  { id: 'photo_rear_vent',           label: '21. Tylny nawiew centralny',                  base64: '', required: true },
-  { id: 'photo_steering_wheel',      label: '22. Kierownica na wprost',                    base64: '', required: true },
-  { id: 'photo_multimedia',          label: '23. Multimedia / kamera parkowania',           base64: '', required: true },
-  { id: 'photo_odometer',            label: '24. Licznik z przebiegiem',                   base64: '', required: true },
-  { id: 'photo_navigation',          label: '25. Nawigacja',                               base64: '', required: false },
-  { id: 'photo_service_display',     label: '26. Serwis (wyświetlacz)',                    base64: '', required: false },
-  { id: 'photo_hood_open',           label: '27. Otwarty przód (maska)',                   base64: '', required: true },
-  { id: 'photo_vin',                 label: '28. Numer VIN',                               base64: '', required: true },
-  { id: 'photo_nameplate',           label: '29. Tabliczka znamionowa',                    base64: '', required: true },
-  { id: 'video_engine',              label: '30. Film z pracującym silnikiem (max 6 sek)', base64: '', required: true, isVideo: true },
-  { id: 'photo_registration_doc',    label: '31. Dowód rejestracyjny + kluczyki',          base64: '', required: true },
-  { id: 'photo_id_card_back',        label: '32. Druga strona dowodu osobistego',          base64: '', required: true },
-  { id: 'photo_owner_manual',        label: '33. Instrukcja obsługi',                      base64: '', required: true },
-  { id: 'photo_service_book',        label: '34. Książka serwisowa',                       base64: '', required: true },
-  { id: 'photo_other_docs',          label: '35. Inne dokumenty',                          base64: '', required: false },
+  { id: 'photo_dashboard_rear',      label: '17. Deska rozdzielcza z tylnego siedzenia',   base64: '', required: true },
+  { id: 'photo_cockpit_center',      label: '18. Centralny kokpit',                        base64: '', required: true },
+  { id: 'photo_center_tunnel',       label: '19. Tunel centralny',                         base64: '', required: true },
+  { id: 'photo_rear_vent',           label: '20. Tylny nawiew centralny',                  base64: '', required: true },
+  { id: 'photo_steering_wheel',      label: '21. Kierownica na wprost',                    base64: '', required: true },
+  { id: 'photo_multimedia',          label: '22. Multimedia / kamera parkowania',           base64: '', required: true },
+  { id: 'photo_odometer',            label: '23. Licznik z przebiegiem',                   base64: '', required: true },
+  { id: 'photo_navigation',          label: '24. Nawigacja',                               base64: '', required: false },
+  { id: 'photo_service_display',     label: '25. Serwis (wyświetlacz)',                    base64: '', required: false },
+  { id: 'photo_hood_open',           label: '26. Otwarty przód (maska)',                   base64: '', required: true },
+  { id: 'photo_vin',                 label: '27. Numer VIN',                               base64: '', required: true },
+  { id: 'photo_nameplate',           label: '28. Tabliczka znamionowa',                    base64: '', required: true },
+  { id: 'video_engine',              label: '29. Film z pracującym silnikiem (max 6 sek)', base64: '', required: true, isVideo: true },
+  { id: 'photo_registration_doc',    label: '30. Dowód rejestracyjny + kluczyki',          base64: '', required: true },
+  { id: 'photo_id_card_back',        label: '31. Druga strona dowodu osobistego',          base64: '', required: true },
+  { id: 'photo_owner_manual',        label: '32. Instrukcja obsługi',                      base64: '', required: true },
+  { id: 'photo_service_book',        label: '33. Książka serwisowa',                       base64: '', required: true },
+  { id: 'photo_other_docs',          label: '34. Inne dokumenty',                          base64: '', required: false },
   ...Array.from({ length: 15 }, (_, i) => ({
     id: `photo_optional_${i + 1}`,
     label: `Zdjęcie dodatkowe ${i + 1}`,
@@ -855,17 +854,17 @@ export const useInspectionStore = create<InspectionState>()(
       copyTiresToAxle: (source, target) =>
         set((state) => {
           const src = state.data.tires[source];
-          // We only copy Brand, Size, and Type (exclude treadDepth and DOT)
-          const { brand, size, type } = src;
+          // Copy brand, model, size, type, loadIndex, speedIndex (exclude treadDepth — unique per wheel)
+          const { brand, model, size, type, loadIndex, speedIndex } = src;
           const newTires = { ...state.data.tires };
 
           if (target === 'front' || target === 'all') {
-            newTires.frontLeft = { ...newTires.frontLeft, brand, size, type };
-            newTires.frontRight = { ...newTires.frontRight, brand, size, type };
+            newTires.frontLeft = { ...newTires.frontLeft, brand, model, size, type, loadIndex, speedIndex };
+            newTires.frontRight = { ...newTires.frontRight, brand, model, size, type, loadIndex, speedIndex };
           }
           if (target === 'rear' || target === 'all') {
-            newTires.rearLeft = { ...newTires.rearLeft, brand, size, type };
-            newTires.rearRight = { ...newTires.rearRight, brand, size, type };
+            newTires.rearLeft = { ...newTires.rearLeft, brand, model, size, type, loadIndex, speedIndex };
+            newTires.rearRight = { ...newTires.rearRight, brand, model, size, type, loadIndex, speedIndex };
           }
 
           return { data: { ...state.data, tires: newTires } };

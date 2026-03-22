@@ -1,7 +1,6 @@
 "use client";
 
 import { useInspectionStore } from "@/store/useInspectionStore";
-import { TireSpecLock } from "../TireSpecLock";
 import { SmartDropdown } from "../SmartDropdown";
 import { Copy, CircleDot, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +25,19 @@ const TIRE_TYPES = [
     { val: 'all-season', label: 'Wielosezonowe', icon: '🔄' },
 ];
 
+// ── Tire Size Auto-Formatter (205/55 R16) ──
+const formatTireSize = (value: string): string => {
+    const digits = value.replace(/[^\d]/g, '');
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 3)}/${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}/${digits.slice(3, 5)} R${digits.slice(5, 7)}`;
+};
+
+// ── Tread Depth Validation (X,X) ──
+const isTreadDepthValid = (value: string): boolean => {
+    return /^\d,\d$/.test(value);
+};
+
 export function TiresStep() {
     const { data, updateField, copyTiresToAxle } = useInspectionStore();
     const tires = data.tires;
@@ -35,6 +47,19 @@ export function TiresStep() {
         if (typeof wheelData === 'object' && wheelData !== null && 'brand' in wheelData) {
             updateField('tires', wheel, { ...wheelData, [field]: value });
         }
+    };
+
+    const handleSizeChange = (wheel: string, value: string) => {
+        const formatted = formatTireSize(value);
+        handleTireChange(wheel, 'size', formatted);
+    };
+
+    const handleTreadDepthChange = (wheel: string, value: string) => {
+        const cleaned = value.replace(/[^\d,]/g, '');
+        if (cleaned.length > 3) return;
+        if ((cleaned.match(/,/g) || []).length > 1) return;
+        if (cleaned.startsWith(',')) return;
+        handleTireChange(wheel, 'treadDepth', cleaned);
     };
 
     return (
@@ -78,7 +103,7 @@ export function TiresStep() {
             <div className="bg-warning-light p-4 rounded-2xl flex items-start gap-3 border border-warning/10 -mt-2">
                 <Info size={16} className="text-warning flex-shrink-0 mt-0.5" />
                 <p className="text-[10px] text-warning font-bold leading-tight">
-                    Kopiowanie przenosi Markę, Rozmiar (Format Lock) oraz DOT. Głębokość bieżnika i zdjęcia są unikalne dla koła.
+                    Kopiowanie przenosi Markę, Model, Rozmiar, Typ, Nośność i Indeks Prędkości. Głębokość bieżnika jest unikalna dla każdego koła.
                 </p>
             </div>
 
@@ -121,6 +146,22 @@ export function TiresStep() {
                                     />
                                 </div>
 
+                                {/* Size — auto-formats to 205/55 R16 */}
+                                <div className="col-span-1">
+                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
+                                        Rozmiar
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={w.size}
+                                        onChange={(e) => handleSizeChange(wheel.key, e.target.value)}
+                                        placeholder="205/55 R16"
+                                        maxLength={10}
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                    />
+                                </div>
+
+                                {/* DOT */}
                                 <div className="col-span-1">
                                     <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
                                         DOT (Rok/Tydzień)
@@ -136,12 +177,36 @@ export function TiresStep() {
                                     />
                                 </div>
 
-                                <TireSpecLock
-                                    label="Rozmiar (Format Lock)"
-                                    value={w.size}
-                                    onChange={(val) => handleTireChange(wheel.key, 'size', val)}
-                                />
+                                {/* Load Index */}
+                                <div className="col-span-1">
+                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
+                                        Nośność (LI)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={3}
+                                        value={w.loadIndex}
+                                        onChange={(e) => handleTireChange(wheel.key, 'loadIndex', e.target.value)}
+                                        placeholder="91"
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                    />
+                                </div>
 
+                                {/* Speed Index */}
+                                <div className="col-span-1">
+                                    <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
+                                        Indeks Prędkości (SI)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        maxLength={2}
+                                        value={w.speedIndex}
+                                        onChange={(e) => handleTireChange(wheel.key, 'speedIndex', e.target.value.toUpperCase())}
+                                        placeholder="V"
+                                        className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                    />
+                                </div>
                             </div>
 
                             {/* Tire Type */}
@@ -168,7 +233,7 @@ export function TiresStep() {
                                 </div>
                             </div>
 
-                            {/* Tread Depth */}
+                            {/* Tread Depth — X,X format only */}
                             <div className="mt-6 pt-6 border-t border-border">
                                 <label className="text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block px-1">
                                     Głębokość bieżnika (mm)
@@ -177,10 +242,18 @@ export function TiresStep() {
                                     type="text"
                                     inputMode="decimal"
                                     value={w.treadDepth ?? ''}
-                                    onChange={(e) => handleTireChange(wheel.key, 'treadDepth', e.target.value)}
-                                    placeholder="np. 5,4"
-                                    className="w-full py-3 px-4 rounded-xl border-2 border-border bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm"
+                                    onChange={(e) => handleTreadDepthChange(wheel.key, e.target.value)}
+                                    placeholder="5,4"
+                                    maxLength={3}
+                                    className={`w-full py-3 px-4 rounded-xl border-2 bg-background text-foreground text-sm font-bold placeholder:text-muted/30 focus:border-primary transition-all shadow-sm ${
+                                        w.treadDepth && !isTreadDepthValid(w.treadDepth)
+                                            ? 'border-red-400'
+                                            : 'border-border'
+                                    }`}
                                 />
+                                {w.treadDepth && !isTreadDepthValid(w.treadDepth) && (
+                                    <p className="text-red-500 text-xs mt-1">Format: X,X (np. 5,4)</p>
+                                )}
                             </div>
                         </div>
                     );

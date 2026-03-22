@@ -9,8 +9,8 @@ export function PhotosStep() {
     const photoSlots = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
-    const requiredSlots = photoSlots.slice(0, 35);
-    const optionalSlots = photoSlots.slice(35);
+    const requiredSlots = photoSlots.slice(0, 34);
+    const optionalSlots = photoSlots.slice(34);
 
     const required = requiredSlots.filter((p) => p.required);
     const filledCount = photoSlots.filter((p) => p.base64).length;
@@ -72,7 +72,7 @@ export function PhotosStep() {
                 </div>
             </div>
 
-            {/* Photo Grid — first 35 slots */}
+            {/* Photo Grid — first 34 slots */}
             <div className="grid grid-cols-2 xs:grid-cols-3 gap-3">
                 {requiredSlots.map((slot) => (
                     slot.isVideo ? (
