@@ -169,38 +169,9 @@ async def get_deals(
 
         logger.info(f"Found {len(result)} deals for phone {inspector_phone}")
 
-        # ── Auto-notify for new unnotified deals ──
-        if inspector_phone and result:
-            import asyncio
-            for deal in result:
-                stage = deal.get("stageId", deal.get("STAGE_ID", ""))
-                deal_id = str(deal.get("ID", ""))
-
-                # Only notify for NEW or PREPARATION (assigned but not yet scheduled)
-                if stage in ("NEW", "PREPARATION") and deal_id:
-                    existing = db.query(InspectorNotification).filter(
-                        InspectorNotification.deal_id == deal_id,
-                        InspectorNotification.phone == inspector_phone,
-                    ).first()
-
-                    if not existing:
-                        # Mark as notified FIRST to prevent race-condition duplicates
-                        notif = InspectorNotification(
-                            deal_id=deal_id,
-                            phone=inspector_phone,
-                        )
-                        db.add(notif)
-                        try:
-                            db.commit()
-                        except Exception:
-                            db.rollback()
-                            continue  # Unique constraint caught — another request already inserted
-
-                        # Fire email in background
-                        asyncio.create_task(
-                            _notify_inspector_new_order(deal, inspector_phone, db)
-                        )
-                        logger.info(f"📩 Queued notification email for deal {deal_id} → {inspector_phone}")
+        # ── Auto-notify disabled — webhook handles notifications now ──
+        # Keeping duplicate-prevention records for the webhook to use.
+        # See /webhook/bitrix endpoint in routers/webhook.py
 
         # Return consistent dict structure
         return {
