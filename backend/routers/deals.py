@@ -148,6 +148,7 @@ async def get_deals(
 
         # Direct Bitrix API call with filter
         # NOTE: crm.deal.list does NOT support UF_CRM_* wildcard — must list fields explicitly
+        # Field IDs verified from Bitrix24 HTML inspection on 2026-03-23
         deals_raw = await gateway.call("crm.deal.list", {
             "filter": filter_params,
             "select": [
@@ -158,14 +159,18 @@ async def get_deals(
                 "UF_CRM_1773970466449",   # inspector list field
                 "UF_CRM_1771579888",      # appraiser_mobile
                 # Address / Location
-                "UF_CRM_1766058185504",   # inspection_place
-                "UF_CRM_1766058195680",   # planned_address (alt)
-                # Contact / Client
-                "UF_CRM_1766058053224",   # client_phone
-                "UF_CRM_1766058204785",   # contact phone (alt)
-                "UF_CRM_1766057941327",   # client_name
-                "UF_CRM_1766058195123",   # contact person (alt)
-                "UF_CRM_1766057964319",   # company_name
+                "UF_CRM_1766058185504",   # Planned inspection site
+                "UF_CRM_1766058194337",   # Planned viewing address
+                # Contact
+                "UF_CRM_1766058247125",   # Contact person's telephone number
+                "UF_CRM_1766058259960",   # Contact person
+                # Client / Payer
+                "UF_CRM_1766058053224",   # Phone (client)
+                "UF_CRM_1766057941327",   # Name (client first name)
+                "UF_CRM_1766057951060",   # Last name
+                "UF_CRM_1766057964319",   # Company name
+                "UF_CRM_1766058009838",   # Town
+                "UF_CRM_1766058028123",   # Street No./Apartment
                 # Vehicle
                 "UF_CRM_1766057839684",   # vehicle_brand
                 "UF_CRM_1766057849818",   # vehicle_model
@@ -183,27 +188,31 @@ async def get_deals(
         for deal in deals_raw:
             # Debug: log raw UF fields from crm.deal.list
             logger.info(f"Raw deal {deal.get('ID')} UF fields: "
-                        f"loc={deal.get('UF_CRM_1766058185504')!r} "
+                        f"site={deal.get('UF_CRM_1766058185504')!r} "
+                        f"addr={deal.get('UF_CRM_1766058194337')!r} "
+                        f"cphone={deal.get('UF_CRM_1766058247125')!r} "
+                        f"cperson={deal.get('UF_CRM_1766058259960')!r} "
                         f"phone={deal.get('UF_CRM_1766058053224')!r} "
-                        f"client={deal.get('UF_CRM_1766057941327')!r} "
                         f"plates={deal.get('UF_CRM_1766057515315')!r}")
 
             enriched = _inject_status(deal)
             enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
-            # Use UNIQUE keys to avoid clashing with raw deal fields
+            # Address: Planned inspection site → Planned viewing address fallback
             enriched["inspectionAddress"] = (
-                deal.get("UF_CRM_1766058185504", "") or
-                deal.get("UF_CRM_1766058195680", "") or
+                deal.get("UF_CRM_1766058185504", "") or  # Planned inspection site
+                deal.get("UF_CRM_1766058194337", "") or  # Planned viewing address
                 ""
             )
+            # Contact phone: Contact person's phone → Client phone fallback
             enriched["contactPhone"] = (
-                deal.get("UF_CRM_1766058053224", "") or
-                deal.get("UF_CRM_1766058204785", "") or
+                deal.get("UF_CRM_1766058247125", "") or  # Contact person's telephone
+                deal.get("UF_CRM_1766058053224", "") or  # Client phone
                 ""
             )
+            # Contact person name
             enriched["contactPerson"] = (
-                deal.get("UF_CRM_1766057941327", "") or
-                deal.get("UF_CRM_1766058195123", "") or
+                deal.get("UF_CRM_1766058259960", "") or  # Contact person
+                deal.get("UF_CRM_1766057941327", "") or  # Client first name
                 ""
             )
             enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
@@ -325,21 +334,24 @@ async def debug_deal(request: Request, deal_id: int):
     gateway = request.app.state.gateway
     try:
         raw = await gateway.call("crm.deal.get", {"ID": deal_id, "select": ["*", "UF_*"]})
-        # Extract the fields we care about
+        # Extract the fields we care about — verified from Bitrix HTML
         address_fields = {
-            "UF_CRM_1766058185504": raw.get("UF_CRM_1766058185504"),
-            "UF_CRM_1766058195680": raw.get("UF_CRM_1766058195680"),
+            "UF_CRM_1766058185504 (Planned inspection site)": raw.get("UF_CRM_1766058185504"),
+            "UF_CRM_1766058194337 (Planned viewing address)": raw.get("UF_CRM_1766058194337"),
+            "UF_CRM_1766058009838 (Town)": raw.get("UF_CRM_1766058009838"),
+            "UF_CRM_1766058028123 (Street)": raw.get("UF_CRM_1766058028123"),
         }
         contact_fields = {
-            "UF_CRM_1766058053224": raw.get("UF_CRM_1766058053224"),
-            "UF_CRM_1766058204785": raw.get("UF_CRM_1766058204785"),
-            "UF_CRM_1766057941327": raw.get("UF_CRM_1766057941327"),
-            "UF_CRM_1766058195123": raw.get("UF_CRM_1766058195123"),
+            "UF_CRM_1766058247125 (Contact person phone)": raw.get("UF_CRM_1766058247125"),
+            "UF_CRM_1766058259960 (Contact person name)": raw.get("UF_CRM_1766058259960"),
+            "UF_CRM_1766058053224 (Client phone)": raw.get("UF_CRM_1766058053224"),
+            "UF_CRM_1766057941327 (Client first name)": raw.get("UF_CRM_1766057941327"),
+            "UF_CRM_1766057951060 (Client last name)": raw.get("UF_CRM_1766057951060"),
         }
         vehicle_fields = {
-            "UF_CRM_1766057839684": raw.get("UF_CRM_1766057839684"),
-            "UF_CRM_1766057849818": raw.get("UF_CRM_1766057849818"),
-            "UF_CRM_1766057515315": raw.get("UF_CRM_1766057515315"),
+            "UF_CRM_1766057839684 (Brand)": raw.get("UF_CRM_1766057839684"),
+            "UF_CRM_1766057849818 (Model)": raw.get("UF_CRM_1766057849818"),
+            "UF_CRM_1766057515315 (Plates)": raw.get("UF_CRM_1766057515315"),
         }
         return {
             "deal_id": deal_id,
@@ -348,7 +360,7 @@ async def debug_deal(request: Request, deal_id: int):
             "address_fields": address_fields,
             "contact_fields": contact_fields,
             "vehicle_fields": vehicle_fields,
-            "all_UF_keys": [k for k in raw.keys() if k.startswith("UF_")],
+            "all_UF_keys": sorted([k for k in raw.keys() if k.startswith("UF_")]),
         }
     except Exception as e:
         return {"error": str(e)}
