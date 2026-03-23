@@ -10,13 +10,12 @@ interface DamageBlockProps {
     index: number;
     parts: string[];
     types: string[];
-    dealId: string | null;
     onUpdate: (data: Partial<DamageEntry>) => void;
     onRemove: () => void;
     onAddPhoto: (base64: string) => void;
 }
 
-export function DamageBlock({ entry, index, parts, types, dealId, onUpdate, onRemove, onAddPhoto }: DamageBlockProps) {
+export function DamageBlock({ entry, index, parts, types, onUpdate, onRemove, onAddPhoto }: DamageBlockProps) {
     const [expanded, setExpanded] = useState(true);
 
     return (
@@ -144,10 +143,8 @@ export function DamageBlock({ entry, index, parts, types, dealId, onUpdate, onRe
                             {entry.photos.map((photo, i) => (
                                 <PhotoUploadSlot
                                     key={i}
-                                    id={`${entry.id}_photo_${i}`}
                                     label={`Zdjęcie ${i + 1}`}
                                     base64={photo}
-                                    dealId={dealId}
                                     required={false}
                                     onCapture={(b64) => {
                                         const newPhotos = [...entry.photos];
@@ -161,10 +158,8 @@ export function DamageBlock({ entry, index, parts, types, dealId, onUpdate, onRe
                                 />
                             ))}
                             <PhotoUploadSlot
-                                id={`${entry.id}_photo_new`}
                                 label="Dodaj"
                                 base64=""
-                                dealId={dealId}
                                 required={false}
                                 onCapture={onAddPhoto}
                                 onClear={() => { }}

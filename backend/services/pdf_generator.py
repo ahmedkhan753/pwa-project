@@ -161,43 +161,26 @@ def section_header(title, w):
 
 # ─── Image Loader ─────────────────────────────────────────────
 def load_image(src, max_w, max_h):
-    """Load image from URL, base64 data URI, bytes, or file path with retries."""
-    import time
-    for attempt in range(3):
-        try:
-            if isinstance(src, str) and src.startswith("http"):
-                # Ensure we have a timeout and potentially headers if needed
-                resp = http_requests.get(src, timeout=10)
-                resp.raise_for_status()
-                data = resp.content
-            elif isinstance(src, str) and src.startswith("data:"):
-                # data:image/webp;base64,...
-                header, encoded = src.split(",", 1)
-                data = base64.b64decode(encoded)
-            elif isinstance(src, (bytes, bytearray)):
-                data = src
-            else:
-                with open(str(src), "rb") as f:
-                    data = f.read()
-            
-            buf = io.BytesIO(data)
-            from PIL import Image as PILImage
-            # Verify it's a valid image using PIL before passing to reportlab
-            with PILImage.open(buf) as pil_img:
-                pil_img.verify()
-            
-            buf.seek(0)
-            img = Image(buf)
-            ratio = min(max_w / img.imageWidth, max_h / img.imageHeight)
-            img.drawWidth = img.imageWidth * ratio
-            img.drawHeight = img.imageHeight * ratio
-            return img
-        except Exception as e:
-            logger.warning(f"Image load attempt {attempt+1} failed for {str(src)[:50]}... : {e}")
-            if attempt < 2:
-                time.sleep(0.5 * (attempt + 1))
-            continue
-    return None
+    """Load image from URL, base64 data URI, bytes, or file path."""
+    try:
+        if isinstance(src, str) and src.startswith("http"):
+            data = http_requests.get(src, timeout=15).content
+        elif isinstance(src, str) and src.startswith("data:"):
+            data = base64.b64decode(src.split(",", 1)[1])
+        elif isinstance(src, (bytes, bytearray)):
+            data = src
+        else:
+            with open(str(src), "rb") as f:
+                data = f.read()
+        buf = io.BytesIO(data)
+        img = Image(buf)
+        ratio = min(max_w / img.imageWidth, max_h / img.imageHeight)
+        img.drawWidth = img.imageWidth * ratio
+        img.drawHeight = img.imageHeight * ratio
+        return img
+    except Exception as e:
+        logger.debug(f"Image load failed: {e}")
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════

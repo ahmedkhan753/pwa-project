@@ -215,41 +215,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     body = await request.body()
     logger.error(f"422 Unprocessable Entity for {request.url.path}")
     logger.error(f"Validation errors: {exc.errors()}")
-    logger.error(f"Raw body snippet: {body.decode()[:500]}...")
+    logger.error(f"Raw body: {body.decode()}")
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": body.decode()[:500]},
-    )
-
-from starlette.exceptions import HTTPException as StarletteHTTPException
-@app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    if exc.status_code == 400:
-        logger.error(f"❌ 400 BAD REQUEST for {request.url.path}: {exc.detail}")
-        try:
-            # Try to log the form data or body to see what's wrong
-            if "multipart/form-data" in request.headers.get("content-type", ""):
-                form = await request.form()
-                logger.error(f"   Form keys: {list(form.keys())}")
-            else:
-                body = await request.body()
-                logger.error(f"   Body snippet: {body.decode()[:500]}...")
-        except Exception as e:
-            logger.error(f"   Could not read body for 400 error: {e}")
-
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
-
-@app.exception_handler(Exception)
-async def debug_exception_handler(request: Request, exc: Exception):
-    logger.error(f"💥 UNHANDLED EXCEPTION for {request.url.path}: {str(exc)}")
-    import traceback
-    logger.error(traceback.format_exc())
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal Server Error", "error": str(exc)}
+        content={"detail": exc.errors(), "body": body.decode()},
     )
 
 

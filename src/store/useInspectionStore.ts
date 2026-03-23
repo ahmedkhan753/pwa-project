@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '@/lib/api';
 import { submissionQueue } from '@/lib/submissionQueue';
-import { idbStorage } from '@/lib/storage';
 
 // ─── Auth & Jobs Types ──────────────────────────────────────
 export interface AuthUser {
@@ -327,8 +326,6 @@ interface InspectionState {
   // Drafts (to prevent data loss when switching jobs)
   drafts: Record<string, StepData>;
   isSubmitting: boolean;
-  // Hydration flag (IndexedDB is async)
-  _hasHydrated: boolean;
 
   // Actions
   setStep: (step: number) => void;
@@ -549,7 +546,6 @@ export const useInspectionStore = create<InspectionState>()(
       },
       drafts: {},
       isSubmitting: false,
-      _hasHydrated: false,
 
       setStep: (step: number) =>
         set((state) => ({
@@ -561,9 +557,7 @@ export const useInspectionStore = create<InspectionState>()(
       setAuth: (authUpdate) =>
         set((state) => ({ auth: { ...state.auth, ...authUpdate } })),
 
-      login: (email, token, user) => {
-        // Mirror token to localStorage for instant sync access by api.ts
-        try { localStorage.setItem('access_token', token); } catch (e) {}
+      login: (email, token, user) =>
         set(() => ({
           auth: {
             isAuthenticated: true,
@@ -574,14 +568,12 @@ export const useInspectionStore = create<InspectionState>()(
             currentUserId: user.id ? Number(user.id) : null,
             currentUserName: user.name || 'Rzeczoznawca',
           },
-        }));
-      },
+        })),
 
 
       logout: () => {
         // Clear all possible token storage locations
         try {
-          idbStorage.removeItem('inspection-storage');
           localStorage.removeItem('inspection-storage');
           localStorage.removeItem('token');
           localStorage.removeItem('access_token');
@@ -657,16 +649,20 @@ export const useInspectionStore = create<InspectionState>()(
         try {
           const deal = await api.getDeal(dealId);
           console.log('[fetchFullDeal] API response keys:', Object.keys(deal));
+          console.log('[fetchFullDeal] Full deal data:', JSON.stringify(deal, null, 2));
           set((state) => {
             const initial = JSON.parse(JSON.stringify(initialData));
+            // Backend returns snake_case keys from FieldTransformer.transform_from_bitrix()
+            // Map them to the store's vehicleData.basicInfo structure
             const newVehicleData = {
               ...initial.vehicleData,
               basicInfo: {
                 ...initial.vehicleData.basicInfo,
-                companyName: deal.company_name || deal.title || '',
-                userOwner: deal.client_name || '',
-                inspectionPlace: deal.inspection_place || deal.planned_address || '',
-                inspectionDate: deal.inspection_date || '',
+                companyName: deal.company_name || deal.clientName || deal.title || '',
+                userOwner: deal.client_name || deal.clientName || deal.title || '',
+                inspectionPlace: deal.inspection_place || deal.planned_address || deal.planned_location || deal.address || '',
+                // Try all possible sources in order: store scheduledDate, then deal payload
+                inspectionDate: useInspectionStore.getState().jobs.scheduled.find(j => j.id === dealId)?.scheduledDate || useInspectionStore.getState().jobs.unscheduled.find(j => j.id === dealId)?.scheduledDate || deal.inspection_date || deal.scheduled_date || deal.scheduledDate || deal.UF_CRM_1772108256983 || '',
                 inspectorName: deal.inspector_name || state.auth.currentUserName || 'Mateusz Chłodek',
               },
               vin: deal.vin || '',
@@ -682,7 +678,7 @@ export const useInspectionStore = create<InspectionState>()(
               bodyType: deal.body_type || '',
               gearboxType: deal.gearbox_type || '',
               driveType: deal.drive_type || '',
-              firstRegistration: deal.first_registration_date || '',
+              firstRegistration: deal.first_registration_date || deal.first_registration || '',
             };
 
             return {
@@ -1079,16 +1075,8 @@ export const useInspectionStore = create<InspectionState>()(
     }),
     {
       name: 'inspection-storage',
-      storage: createJSONStorage(() => idbStorage),
+      storage: createJSONStorage(() => localStorage),
       version: 3,
-      onRehydrateStorage: () => (state) => {
-        // Mark store as hydrated so dashboard knows it can make API calls
-        useInspectionStore.setState({ _hasHydrated: true });
-        // Also sync token to localStorage for api.ts fallback
-        if (state?.auth?.token) {
-          try { localStorage.setItem('access_token', state.auth.token); } catch (e) {}
-        }
-      },
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {
           const jobs = persistedState.jobs || {};

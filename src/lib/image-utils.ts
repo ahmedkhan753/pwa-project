@@ -27,8 +27,8 @@ export async function compressImage(file: File, maxWidth = 1600, maxHeight = 160
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, width, height);
 
-                // Use JPEG for compatibility with backend (webp not allowed)
-                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                // Use WebP for better compression in localStorage
+                const dataUrl = canvas.toDataURL('image/webp', quality);
                 resolve(dataUrl);
             };
             img.onerror = reject;

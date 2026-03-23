@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { api } from "@/lib/api";
 
 const STEPS = [
     { num: 1, short: "Dane", label: "Dane Pojazdu" },
@@ -101,18 +100,17 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             const finalDealId = useInspectionStore.getState().jobs.currentJobId;
             if (!finalDealId) throw new Error("Brak ID zlecenia");
 
-            // Get token safely — read from Zustand (IndexedDB-backed)
+            // Get token safely
             const token = (() => {
                 try {
-                    const storeToken = useInspectionStore.getState().auth?.token;
-                    console.log(`[Submit] Token check: ${storeToken ? 'OK' : 'MISSING'}`);
-                    if (storeToken) return storeToken;
-                } catch (e) {
-                    console.error("[Submit] Error reading token from store:", e);
-                }
-                const fallback = localStorage.getItem('access_token');
-                console.log(`[Submit] Fallback token check: ${fallback ? 'OK' : 'MISSING'}`);
-                return fallback || null;
+                    const stored = localStorage.getItem('inspection-storage');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (parsed?.state?.auth?.token) return parsed.state.auth.token;
+                    }
+                } catch {}
+                return localStorage.getItem('token') ||
+                       localStorage.getItem('access_token') || null;
             })();
 
             if (!token) {
@@ -122,51 +120,22 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 return;
             }
 
-            // 1. Mandatory Photo Retry Loop (Upload any remaining base64/local photos)
-            const slots = useInspectionStore.getState().data?.photos || [];
-            const pendingSlots = slots.filter((s: any) => s.base64 && s.base64.startsWith('data:'));
-            
-            if (pendingSlots.length > 0) {
-                console.log(`[Submit] Retrying ${pendingSlots.length} pending uploads: ${pendingSlots.map(s => s.id).join(', ')}`);
-                // Limit retries to first 10 to avoid connection flooding
-                const slotsToRetry = pendingSlots.slice(0, 10);
-                
-                for (const slot of slotsToRetry) {
-                    try {
-                        console.log(`[Submit] Fetching blob for ${slot.id}...`);
-                        const res = await fetch(slot.base64);
-                        const blob = await res.blob();
-                        console.log(`[Submit] Created blob for ${slot.id} (${(blob.size / 1024).toFixed(1)} KB)`);
-                        
-                        const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
-                        // String conversion to avoid any "[object Object]" issues
-                        const result = await api.uploadFile(String(finalDealId), slot.id, file);
-                        
-                        if (result.success && result.url) {
-                            console.log(`[Submit] Re-upload successful for ${slot.id} -> ${result.url}`);
-                            useInspectionStore.getState().setPhotoSlot(slot.id, result.url);
-                        } else {
-                            console.warn(`[Submit] Re-upload failed/unmapped for ${slot.id}:`, result.error || 'Check backend logs');
-                        }
-                        
-                        // Small sequential delay
-                        await new Promise(r => setTimeout(r, 300));
-                    } catch (e) {
-                        console.error(`[Submit] Critical error retrying slot ${slot.id}:`, e);
+            // Build photos map
+            const photoMap: Record<string, string> = {};
+            try {
+                const slots = useInspectionStore.getState().data?.photos || [];
+                slots.forEach((slot: any) => {
+                    if (slot?.base64?.startsWith('data:')) {
+                        photoMap[slot.id] = slot.base64;
                     }
-                }
+                });
+            } catch (e) {
+                console.warn('Photo build error:', e);
             }
-
-            // 2. Build collection for submission (prefer URLs, send base64 as absolute fallback)
-            const finalPhotos = useInspectionStore.getState().data.photos;
-            const photoCollection: Record<string, string> = {};
-            finalPhotos.forEach((s: any) => {
-                if (s.base64) photoCollection[s.id] = s.base64;
-            });
 
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            // 3. Final Submit
+            // Submit
             const response = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
@@ -176,7 +145,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 body: JSON.stringify({
                     ...useInspectionStore.getState().data,
                     deal_id: finalDealId,
-                    photos: photoCollection, // This will mostly contain URLs now!
+                    photos: photoMap,
                 })
             });
 
@@ -193,18 +162,19 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             }
 
             // SUCCESS
-            console.log('[Submit] SUCCESS! Redirecting soon...');
             setSubmitStatus('success');
 
-            // Wait 3 seconds to show success message then redirect
-            // IMPORTANT: Clear store ONLY AFTER we are sure the redirect will happen
+            // Clear store safely
+            try {
+                useInspectionStore.getState().clearInspection?.();
+            } catch (e) {
+                console.warn('Store clear error:', e);
+            }
+
+            // Wait 2 seconds to show success message then redirect
             setTimeout(() => {
-                console.log('[Submit] Cleaning up and redirecting...');
-                try {
-                    useInspectionStore.getState().clearInspection?.();
-                } catch (e) {}
                 window.location.replace('/dashboard');
-            }, 3000);
+            }, 2000);
 
         } catch (error: any) {
             console.error('Submit error:', error);
@@ -306,8 +276,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-4 safe-area-bottom shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
                 <div className="flex gap-4">
                 <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); prev(); }}
+                    onClick={prev}
                     disabled={currentStep === 1}
                     aria-label="Previous step"
                     className={cn(
@@ -324,8 +293,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 {currentStep === totalSteps ? (
                     submitStatus === 'idle' ? (
                     <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); handleSubmit(); }}
+                        onClick={handleSubmit}
                         disabled={isSubmitting}
                         aria-label="Submit inspection"
                         className={cn(
@@ -350,8 +318,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     ) : null
                 ) : (
                     <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); next(); }}
+                        onClick={next}
                         aria-label="Next step"
                         className="flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest bg-primary text-white flex items-center justify-center gap-2 shadow-xl shadow-primary/20 hover:bg-primary-hover active:scale-[0.95] uppercase ring-4 ring-primary/10"
                     >

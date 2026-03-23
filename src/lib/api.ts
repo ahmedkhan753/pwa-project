@@ -1,20 +1,18 @@
-import { useInspectionStore } from '@/store/useInspectionStore';
-
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 console.log(`[API] BASE_URL: ${BASE_URL}`)
 
-// Helper to get auth token from Zustand in-memory state (works with IndexedDB)
+// Helper to get auth token from Zustand persisted storage
 const getAuthToken = (): string | null => {
   try {
-    // Primary: read from Zustand's live in-memory state (always current)
-    const storeToken = useInspectionStore.getState().auth?.token;
-    if (storeToken) return storeToken;
-    
-    // Fallback: check localStorage mirror (set during login for instant access)
-    return localStorage.getItem('access_token') || null;
+    const storage = localStorage.getItem('inspection-storage');
+    if (storage) {
+      const parsed = JSON.parse(storage);
+      return parsed.state?.auth?.token || null;
+    }
   } catch (e) {
     return null;
   }
+  return null;
 };
 
 // Helper to build auth headers
@@ -118,30 +116,20 @@ const realApi = {
     return res.json()
   },
   async uploadFile(dealId: string, fieldKey: string, file: File) {
-    console.log(`[API] 📁 Uploading ${fieldKey} for deal ${dealId} (${(file.size / 1024).toFixed(1)} KB)`);
     const form = new FormData()
     form.append('deal_id', dealId)
     form.append('field_key', fieldKey)
     form.append('file', file)
-
-    try {
-      const res = await authFetch(`${BASE_URL}/files/upload`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: form
-      })
-      
-      const result = await res.json();
-      console.log(`[API] 📁 Upload result for ${fieldKey}:`, result);
-      
-      if (!res.ok) {
-        throw new Error(result.detail || 'File upload failed');
-      }
-      return result;
-    } catch (error) {
-      console.error(`[API] ❌ Upload failed for ${fieldKey}:`, error);
-      throw error;
+    const res = await authFetch(`${BASE_URL}/files/upload`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: form
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'File upload failed');
     }
+    return res.json()
   },
   async getMetadataOptions() {
     const res = await authFetch(`${BASE_URL}/api/metadata/options`, {
