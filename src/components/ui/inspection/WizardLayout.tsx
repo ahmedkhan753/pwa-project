@@ -101,17 +101,13 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             const finalDealId = useInspectionStore.getState().jobs.currentJobId;
             if (!finalDealId) throw new Error("Brak ID zlecenia");
 
-            // Get token safely
+            // Get token safely — read from Zustand (IndexedDB-backed)
             const token = (() => {
                 try {
-                    const stored = localStorage.getItem('inspection-storage');
-                    if (stored) {
-                        const parsed = JSON.parse(stored);
-                        if (parsed?.state?.auth?.token) return parsed.state.auth.token;
-                    }
+                    const storeToken = useInspectionStore.getState().auth?.token;
+                    if (storeToken) return storeToken;
                 } catch {}
-                return localStorage.getItem('token') ||
-                       localStorage.getItem('access_token') || null;
+                return localStorage.getItem('access_token') || null;
             })();
 
             if (!token) {
@@ -131,7 +127,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     try {
                         const res = await fetch(slot.base64);
                         const blob = await res.blob();
-                        const file = new File([blob], `${slot.id}.webp`, { type: 'image/webp' });
+                        const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
                         const result = await api.uploadFile(finalDealId, slot.id, file);
                         if (result.success && result.url) {
                             useInspectionStore.getState().setPhotoSlot(slot.id, result.url);
