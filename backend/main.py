@@ -76,6 +76,12 @@ def seed_test_inspectors():
                 "pin": "1234",
                 "email": "test@zaufajrzeczoznawcy.pl",
             },
+            {
+                "name": "Ahmed khan",
+                "phone": "03341229637",
+                "pin": "1234",
+                "email": "ahmedk32410@gmail.com",
+            },
         ]
         for data in test_inspectors:
             existing = db.query(Inspector).filter(

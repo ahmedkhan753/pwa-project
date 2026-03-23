@@ -9,7 +9,7 @@ import json
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel, field_validator, ConfigDict
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 import io
 
 from models.inspection import (
@@ -31,12 +31,41 @@ async def get_inspection_report(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """Generate and stream PDF report for a completed inspection"""
+    """Stream PDF report — serves already-uploaded Bitrix PDF first, falls back to generation."""
     gateway = request.app.state.gateway
     try:
-        logger.info(f"Generating report for deal {deal_id}")
         deal = await gateway.call("crm.deal.get", {"id": deal_id})
+        if not deal:
+            raise HTTPException(status_code=404, detail="Deal not found")
 
+        # Try to serve already-uploaded PDF from Bitrix first
+        pdf_field = deal.get("UF_CRM_1772801617")
+        if pdf_field:
+            try:
+                file_info = pdf_field[0] if isinstance(pdf_field, list) else pdf_field
+                if isinstance(file_info, dict):
+                    download_url = (
+                        file_info.get("downloadUrl") or
+                        file_info.get("DOWNLOAD_URL") or
+                        file_info.get("urlDownload") or
+                        file_info.get("url")
+                    )
+                    if download_url:
+                        import httpx as httpx_client
+                        async with httpx_client.AsyncClient(timeout=30) as client:
+                            resp = await client.get(download_url)
+                            if resp.status_code == 200:
+                                logger.info(f"✅ Serving uploaded PDF for deal {deal_id}")
+                                return Response(
+                                    content=resp.content,
+                                    media_type="application/pdf",
+                                    headers={"Content-Disposition": f"inline; filename=report_{deal_id}.pdf"}
+                                )
+            except Exception as e:
+                logger.warning(f"Could not fetch uploaded PDF: {e}, falling back to generation")
+
+        # Fallback: generate fresh PDF
+        logger.info(f"Generating report for deal {deal_id}")
         deal_info = {
             "title": deal.get("TITLE", f"Zlecenie #{deal_id}"),
             "company_name": deal.get("UF_CRM_1766057964319", ""),
@@ -49,7 +78,7 @@ async def get_inspection_report(
         from services.pdf_generator import generate_inspection_pdf
         pdf_bytes = generate_inspection_pdf(deal_info, {}, {})
 
-        logger.info(f"\u2705 Report generated for deal {deal_id} ({len(pdf_bytes)} bytes)")
+        logger.info(f"✅ Report generated for deal {deal_id} ({len(pdf_bytes)} bytes)")
 
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
@@ -59,6 +88,8 @@ async def get_inspection_report(
                 "Access-Control-Expose-Headers": "Content-Disposition"
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Report generation failed for deal {deal_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")

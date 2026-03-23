@@ -1,21 +1,9 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { useInspectionStore } from "@/store/useInspectionStore"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-const getAuthToken = (): string | null => {
-  try {
-    const storage = localStorage.getItem('inspection-storage')
-    if (storage) {
-      const parsed = JSON.parse(storage)
-      return parsed.state?.auth?.token || null
-    }
-  } catch (e) {
-    return null
-  }
-  return null
-}
 
 export default function ReviewInspectionPage() {
   const params = useParams()
@@ -27,16 +15,15 @@ export default function ReviewInspectionPage() {
   useEffect(() => {
     const fetchDeal = async () => {
       try {
-        const token = getAuthToken()
+        const token = useInspectionStore.getState().auth?.token
         const res = await fetch(`${BASE_URL}/deals/${dealId}`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+          headers: { 'Authorization': `Bearer ${token}` }
         })
-        if (res.ok) {
-          const data = await res.json()
-          setDeal(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch deal:', error)
+        const data = await res.json()
+        console.log('[Review] Deal data:', data)
+        setDeal(data)
+      } catch (e) {
+        console.error('[Review] Error:', e)
       } finally {
         setLoading(false)
       }
@@ -45,7 +32,7 @@ export default function ReviewInspectionPage() {
   }, [dealId])
 
   const handleOpenReport = () => {
-    const token = getAuthToken()
+    const token = useInspectionStore.getState().auth?.token
     if (!token) {
       alert("Brak autoryzacji. Zaloguj się ponownie.")
       return
@@ -100,13 +87,24 @@ export default function ReviewInspectionPage() {
           <h2 className="font-bold text-sm uppercase text-gray-400 mb-3">Dane zlecenia</h2>
           <div className="space-y-2">
             <Row label="Nr zlecenia" value={deal?.TITLE} />
-            <Row label="Marka" value={deal?.UF_CRM_MAKE || deal?.make} />
-            <Row label="Model" value={deal?.UF_CRM_MODEL || deal?.model} />
-            <Row label="Nr rejestracyjny" value={deal?.UF_CRM_PLATES || deal?.registrationPlates} />
+            <Row label="Marka" value={deal?.vehicle_brand} />
+            <Row label="Model" value={deal?.vehicle_model} />
+            <Row label="Nr rejestracyjny" value={deal?.registration_number} />
             <Row label="VIN" value={deal?.UF_CRM_1766057539531} />
-            <Row label="Rok produkcji" value={deal?.UF_CRM_YEAR || deal?.year} />
-            <Row label="Przebieg" value={deal?.UF_CRM_MILEAGE || deal?.mileage} />
-            <Row label="Data oględzin" value={deal?.UF_CRM_1772108256983} />
+            <Row label="Rok produkcji" value={deal?.year || deal?.UF_CRM_YEAR} />
+            <Row label="Przebieg" value={deal?.mileage} />
+            <Row label="Kolor" value={deal?.color} />
+            <Row label="Typ nadwozia" value={deal?.body_type} />
+            <Row label="Skrzynia biegów" value={deal?.gearbox_type} />
+            <Row label="Rodzaj napędu" value={deal?.drive_type} />
+            <Row label="Pojemność silnika" value={deal?.engine_capacity} />
+            <Row label="Moc silnika" value={deal?.engine_power} />
+            <Row label="Paliwo" value={deal?.fuel_type} />
+            <Row label="Miejsce oględzin" value={deal?.inspectionAddress} />
+            <Row label="Osoba kontaktowa" value={deal?.contactPerson} />
+            <Row label="Tel. kontaktowy" value={deal?.contactPhone} />
+            <Row label="Status" value={deal?.status} />
+            <Row label="Data utworzenia" value={deal?.DATE_CREATE ? new Date(deal.DATE_CREATE).toLocaleDateString('pl-PL') : ''} />
           </div>
         </div>
 

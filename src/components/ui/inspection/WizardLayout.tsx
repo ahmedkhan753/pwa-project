@@ -84,48 +84,26 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     };
 
     const handleSubmit = async () => {
+        // IMMEDIATELY stop all background activity
+        useInspectionStore.getState().setIsSubmitting?.(true);
+
         try {
             setIsSubmitting(true);
             setSubmitStatus('idle');
             setSubmitError('');
 
+            // Wait for any in-flight syncs to complete
+            await new Promise(resolve => setTimeout(resolve, 300));
+
             const dealId = useInspectionStore.getState().jobs?.currentJobId;
             if (!dealId) throw new Error("Brak ID zlecenia");
 
-            // Get token
-            const token = useInspectionStore.getState().auth?.token || localStorage.getItem('access_token');
-
+            const token = useInspectionStore.getState().auth?.token
+                || localStorage.getItem('access_token');
             if (!token) {
-                window.location.replace('/login');
+                window.location.replace('/');
                 return;
             }
-
-            // Build photos map from store
-            const photoMap: Record<string, string> = {};
-            try {
-                const storeData = useInspectionStore.getState().data;
-                const photos = storeData?.photos || [];
-                if (Array.isArray(photos)) {
-                    photos.forEach((slot: any) => {
-                        if (slot?.id && slot?.base64?.startsWith('data:')) {
-                            const base64 = slot.base64.split(',')[1];
-                            if (base64) photoMap[slot.id] = base64;
-                        }
-                    });
-                } else if (typeof photos === 'object') {
-                    Object.entries(photos).forEach(([key, val]: any) => {
-                        if (val?.startsWith?.('data:')) {
-                            photoMap[key] = val.split(',')[1];
-                        } else if (val && typeof val === 'string') {
-                            photoMap[key] = val;
-                        }
-                    });
-                }
-            } catch (e) {
-                console.warn('Photo build error:', e);
-            }
-
-            console.log(`[Submit] Sending ${Object.keys(photoMap).length} photos`);
 
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -137,7 +115,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 },
                 body: JSON.stringify({
                     deal_id: dealId,
-                    photos: photoMap
+                    photos: {}
                 })
             });
 
@@ -146,13 +124,14 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 throw new Error(err.detail || `Błąd ${response.status}`);
             }
 
-            // SUCCESS
-            setSubmitStatus('success');
-            setTimeout(() => {
-                window.location.href = '/dashboard';
-            }, 2000);
+            // Clear the current job from store
+            useInspectionStore.getState().selectJob?.(null);
+
+            // IMMEDIATE redirect — no setTimeout, no state updates
+            window.location.replace('/dashboard');
 
         } catch (error: any) {
+            useInspectionStore.getState().setIsSubmitting?.(false);
             setSubmitStatus('error');
             setSubmitError(error.message || 'Nieznany błąd');
             setIsSubmitting(false);
@@ -265,23 +244,19 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 </button>
 
                 {currentStep === totalSteps ? (
-                    submitStatus === 'idle' ? (
                     <button
                         onClick={handleSubmit}
                         disabled={isSubmitting}
                         aria-label="Submit inspection"
-                        className={cn(
-                            "flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest text-white flex items-center justify-center gap-2 shadow-xl shadow-orange-500/20 active:scale-[0.95] uppercase ring-2 ring-orange-400 ring-offset-2",
-                            isSubmitting
-                                ? "bg-gray-400 cursor-wait"
-                                : "bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500"
-                        )}
+                        className={`flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest text-white flex items-center justify-center gap-2 shadow-xl active:scale-[0.95] uppercase ${
+                            isSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500'
+                        }`}
                     >
                         {isSubmitting ? (
-                            <div className="flex items-center justify-center gap-3">
+                            <>
                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                <span>Wysyłanie raportu...</span>
-                            </div>
+                                WYSYŁANIE...
+                            </>
                         ) : (
                             <>
                                 <Send size={20} className="stroke-[3]" />
@@ -289,7 +264,6 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                             </>
                         )}
                     </button>
-                    ) : null
                 ) : (
                     <button
                         onClick={next}
@@ -302,29 +276,12 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 )}
                 </div>
 
-                {/* Submit status feedback — shown below nav buttons on Step 12 */}
-                {currentStep === totalSteps && submitStatus === 'success' && (
-                    <div className="mt-4 w-full py-4 rounded-2xl bg-green-500 text-white text-center font-bold text-lg">
-                        <div className="flex items-center justify-center gap-2">
-                            <span>✅</span>
-                            <span>Raport wysłany pomyślnie!</span>
-                        </div>
-                        <p className="text-sm font-normal mt-1 opacity-80">
-                            Przekierowywanie do dashboardu...
-                        </p>
-                    </div>
-                )}
-
-                {currentStep === totalSteps && submitStatus === 'error' && (
-                    <div className="mt-4 space-y-3">
-                        <div className="w-full py-4 rounded-2xl bg-red-50 border-2 border-red-200 text-center">
-                            <p className="font-bold text-red-700">❌ Błąd wysyłania</p>
-                            <p className="text-sm text-red-600 mt-1">{submitError}</p>
-                        </div>
-                        <button
-                            onClick={handleSubmit}
-                            className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 active:scale-95 transition-all"
-                        >
+                {/* Submit error feedback */}
+                {submitStatus === 'error' && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-center">
+                        <p className="text-red-700 font-bold text-sm">❌ Błąd wysyłania</p>
+                        <p className="text-red-600 text-xs mt-1">{submitError}</p>
+                        <button onClick={handleSubmit} className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold">
                             Spróbuj ponownie
                         </button>
                     </div>
