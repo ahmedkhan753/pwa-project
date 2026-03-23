@@ -72,7 +72,7 @@ async def upload_file(
         )
 
     try:
-        result = await gateway.upload_file(
+        result = await gateway.upload_file_to_deal(
             deal_id=deal_id,
             field_pwa_key=field_key,
             file_bytes=file_bytes,
