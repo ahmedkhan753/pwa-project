@@ -272,26 +272,7 @@ async def get_deal(request: Request, deal_id: int):
         if "scheduled_date" not in deal:
             deal["scheduled_date"] = date_val
 
-        # Inject address/contact with correct UF_CRM field IDs (same as list endpoint)
-        deal["inspectionAddress"] = (
-            deal.get("UF_CRM_1766058185504", "") or  # Planned inspection site
-            deal.get("UF_CRM_1766058194337", "") or  # Planned viewing address
-            deal.get("planned_location", "") or
-            deal.get("inspection_place", "") or
-            ""
-        )
-        deal["contactPhone"] = (
-            deal.get("UF_CRM_1766058247125", "") or  # Contact person's telephone
-            deal.get("UF_CRM_1766058053224", "") or  # Client phone
-            deal.get("client_phone", "") or
-            ""
-        )
-        deal["contactPerson"] = (
-            deal.get("UF_CRM_1766058259960", "") or  # Contact person
-            deal.get("UF_CRM_1766057941327", "") or  # Client first name
-            deal.get("userOwner", "") or
-            ""
-        )
+
 
         return deal
     except Exception as e:
