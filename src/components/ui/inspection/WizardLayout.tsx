@@ -85,57 +85,24 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
     const handleSubmit = async () => {
         try {
-            // Immediately disable button and show spinner
             setIsSubmitting(true);
             setSubmitStatus('idle');
             setSubmitError('');
 
-            // Stop background sync
-            useInspectionStore.getState().setIsSubmitting(true);
+            const dealId = useInspectionStore.getState().jobs?.currentJobId;
+            if (!dealId) throw new Error("Brak ID zlecenia");
 
-            // Wait 100ms for in-flight syncs
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            // Get deal ID
-            const finalDealId = useInspectionStore.getState().jobs.currentJobId;
-            if (!finalDealId) throw new Error("Brak ID zlecenia");
-
-            // Get token safely
-            const token = (() => {
-                try {
-                    const stored = localStorage.getItem('inspection-storage');
-                    if (stored) {
-                        const parsed = JSON.parse(stored);
-                        if (parsed?.state?.auth?.token) return parsed.state.auth.token;
-                    }
-                } catch {}
-                return localStorage.getItem('token') ||
-                       localStorage.getItem('access_token') || null;
-            })();
+            // Get token
+            const token = useInspectionStore.getState().auth?.token || localStorage.getItem('access_token');
 
             if (!token) {
-                // Clear corrupted state and redirect to login
-                localStorage.clear();
                 window.location.replace('/login');
                 return;
             }
 
-            // Build photos map
-            const photoMap: Record<string, string> = {};
-            try {
-                const slots = useInspectionStore.getState().data?.photos || [];
-                slots.forEach((slot: any) => {
-                    if (slot?.base64?.startsWith('data:')) {
-                        photoMap[slot.id] = slot.base64;
-                    }
-                });
-            } catch (e) {
-                console.warn('Photo build error:', e);
-            }
-
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            // Submit
+            // Send MINIMAL payload — no photos in body (already saved per step)
             const response = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
@@ -143,45 +110,26 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    ...useInspectionStore.getState().data,
-                    deal_id: finalDealId,
-                    photos: photoMap,
+                    deal_id: dealId,
+                    photos: {}   // Empty — photos already uploaded per step
                 })
             });
 
-            if (response.status === 401) {
-                // Token expired — clear and redirect to login
-                localStorage.clear();
-                window.location.replace('/login');
-                return;
-            }
-
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.detail || `Błąd serwera (${response.status})`);
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || `Błąd ${response.status}`);
             }
 
             // SUCCESS
             setSubmitStatus('success');
-
-            // Clear store safely
-            try {
-                useInspectionStore.getState().clearInspection?.();
-            } catch (e) {
-                console.warn('Store clear error:', e);
-            }
-
-            // Wait 2 seconds to show success message then redirect
             setTimeout(() => {
                 window.location.replace('/dashboard');
             }, 2000);
 
         } catch (error: any) {
-            console.error('Submit error:', error);
             setSubmitStatus('error');
             setSubmitError(error.message || 'Nieznany błąd');
             setIsSubmitting(false);
-            useInspectionStore.getState().setIsSubmitting(false);
         }
     };
 
