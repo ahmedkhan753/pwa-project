@@ -118,20 +118,30 @@ const realApi = {
     return res.json()
   },
   async uploadFile(dealId: string, fieldKey: string, file: File) {
+    console.log(`[API] 📁 Uploading ${fieldKey} for deal ${dealId} (${(file.size / 1024).toFixed(1)} KB)`);
     const form = new FormData()
     form.append('deal_id', dealId)
     form.append('field_key', fieldKey)
     form.append('file', file)
-    const res = await authFetch(`${BASE_URL}/files/upload`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: form
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'File upload failed');
+
+    try {
+      const res = await authFetch(`${BASE_URL}/files/upload`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: form
+      })
+      
+      const result = await res.json();
+      console.log(`[API] 📁 Upload result for ${fieldKey}:`, result);
+      
+      if (!res.ok) {
+        throw new Error(result.detail || 'File upload failed');
+      }
+      return result;
+    } catch (error) {
+      console.error(`[API] ❌ Upload failed for ${fieldKey}:`, error);
+      throw error;
     }
-    return res.json()
   },
   async getMetadataOptions() {
     const res = await authFetch(`${BASE_URL}/api/metadata/options`, {

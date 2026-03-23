@@ -105,9 +105,14 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             const token = (() => {
                 try {
                     const storeToken = useInspectionStore.getState().auth?.token;
+                    console.log(`[Submit] Token check: ${storeToken ? 'OK' : 'MISSING'}`);
                     if (storeToken) return storeToken;
-                } catch {}
-                return localStorage.getItem('access_token') || null;
+                } catch (e) {
+                    console.error("[Submit] Error reading token from store:", e);
+                }
+                const fallback = localStorage.getItem('access_token');
+                console.log(`[Submit] Fallback token check: ${fallback ? 'OK' : 'MISSING'}`);
+                return fallback || null;
             })();
 
             if (!token) {
@@ -122,18 +127,25 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             const pendingSlots = slots.filter((s: any) => s.base64 && s.base64.startsWith('data:'));
             
             if (pendingSlots.length > 0) {
-                console.log(`[Submit] Retrying ${pendingSlots.length} pending uploads...`);
+                console.log(`[Submit] Retrying ${pendingSlots.length} pending uploads: ${pendingSlots.map(s => s.id).join(', ')}`);
                 for (const slot of pendingSlots) {
                     try {
+                        console.log(`[Submit] Fetching blob for ${slot.id}...`);
                         const res = await fetch(slot.base64);
                         const blob = await res.blob();
+                        console.log(`[Submit] Created blob for ${slot.id} (${(blob.size / 1024).toFixed(1)} KB)`);
+                        
                         const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
-                        const result = await api.uploadFile(finalDealId, slot.id, file);
+                        const result = await api.uploadFile(String(finalDealId), slot.id, file);
+                        
                         if (result.success && result.url) {
+                            console.log(`[Submit] Re-upload successful for ${slot.id} -> ${result.url}`);
                             useInspectionStore.getState().setPhotoSlot(slot.id, result.url);
+                        } else {
+                            console.warn(`[Submit] Re-upload failed for ${slot.id} (success=false):`, result.error);
                         }
                     } catch (e) {
-                        console.warn(`[Submit] Retry failed for slot ${slot.id}:`, e);
+                        console.error(`[Submit] Critical error retrying slot ${slot.id}:`, e);
                     }
                 }
             }
@@ -288,7 +300,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-4 safe-area-bottom shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
                 <div className="flex gap-4">
                 <button
-                    onClick={prev}
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); prev(); }}
                     disabled={currentStep === 1}
                     aria-label="Previous step"
                     className={cn(
@@ -305,7 +318,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 {currentStep === totalSteps ? (
                     submitStatus === 'idle' ? (
                     <button
-                        onClick={handleSubmit}
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); handleSubmit(); }}
                         disabled={isSubmitting}
                         aria-label="Submit inspection"
                         className={cn(
@@ -330,7 +344,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     ) : null
                 ) : (
                     <button
-                        onClick={next}
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); next(); }}
                         aria-label="Next step"
                         className="flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest bg-primary text-white flex items-center justify-center gap-2 shadow-xl shadow-primary/20 hover:bg-primary-hover active:scale-[0.95] uppercase ring-4 ring-primary/10"
                     >

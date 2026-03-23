@@ -52,14 +52,22 @@ async def upload_file(
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
 
+    logger.info(f"📁 Upload attempt: deal={deal_id}, key={field_key}, file={file.filename}, type={file.content_type}")
+
     if not bitrix_ready:
+        logger.warning(f"   → Bitrix24 integration not ready")
         raise HTTPException(
             status_code=503,
             detail="Bitrix24 integration not ready",
         )
 
     # Validate file type
-    _validate_file(file)
+    try:
+        ext = _validate_file(file)
+        logger.info(f"   → Validation passed: ext={ext}")
+    except HTTPException as e:
+        logger.warning(f"   → Validation failed: {e.detail}")
+        raise e
 
     # Read file bytes
     file_bytes = await file.read()
