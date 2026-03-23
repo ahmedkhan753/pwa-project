@@ -39,7 +39,7 @@ export function PhotoUploadSlot({ id, label, base64, dealId, required, onCapture
                     // Convert base64 to File object for FormData
                     const res = await fetch(compressedBase64);
                     const blob = await res.blob();
-                    const uploadFile = new File([blob], `${id}.webp`, { type: 'image/webp' });
+                    const uploadFile = new File([blob], `${id}.jpg`, { type: 'image/jpeg' });
 
                     const result = await api.uploadFile(dealId, id, uploadFile);
                     if (result.success && result.url) {
