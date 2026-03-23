@@ -35,29 +35,28 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
 
-    // Bitrix Auto-Sync (Anti-Oops)
+    // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting
     useEffect(() => {
-        let cancelled = false;
-        const performSync = async () => {
+        // Never sync while a submit is in progress
+        if (isSubmitting) return;
+
+        const timer = setTimeout(async () => {
+            if (isSubmitting) return;
             setIsSyncing(true);
             setSyncError(false);
             try {
                 await syncStepWithBitrix(currentStep);
-                if (cancelled) return;
                 setShowSaved(true);
-                setTimeout(() => { if (!cancelled) setShowSaved(false); }, 2000);
+                setTimeout(() => setShowSaved(false), 2000);
             } catch (err) {
-                if (cancelled) return;
                 setSyncError(true);
             } finally {
-                if (cancelled) return;
                 setIsSyncing(false);
             }
-        };
+        }, 1500);
 
-        performSync();
-        return () => { cancelled = true; };
-    }, [currentStep, syncStepWithBitrix]);
+        return () => clearTimeout(timer);
+    }, [currentStep, syncStepWithBitrix, isSubmitting]);
 
     // Local Persistence indicator (storage events)
     useEffect(() => {
@@ -86,25 +85,26 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const handleSubmit = async (e?: React.MouseEvent) => {
         e?.preventDefault();
         e?.stopPropagation();
+
+        // Guard: prevent double-submit
         if (isSubmitting) return;
 
         setIsSubmitting(true);
         setSubmitStatus('idle');
         setSubmitError('');
 
-        // Wait for any in-flight syncs to settle before reading store / fetching
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Read from store synchronously — before any awaits
+        const store = useInspectionStore.getState();
+        const dealId = store.jobs?.currentJobId;
 
-        const dealId = useInspectionStore.getState().jobs?.currentJobId;
         if (!dealId) {
-            setSubmitError('Brak ID zlecenia');
+            setSubmitError('Brak ID zlecenia — odśwież stronę');
             setSubmitStatus('error');
             setIsSubmitting(false);
             return;
         }
 
-        const token = useInspectionStore.getState().auth?.token
-            || localStorage.getItem('access_token');
+        const token = store.auth?.token;
         if (!token) {
             window.location.replace('/');
             return;
@@ -112,32 +112,31 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            const response = await fetch(`${apiUrl}/inspection/submit`, {
+            const res = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    deal_id: dealId,
-                    photos: {}
-                })
+                body: JSON.stringify({ deal_id: dealId, photos: {} })
             });
 
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.detail || `Błąd ${response.status}`);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${res.status}`);
             }
 
-            // SUCCESS — redirect only AFTER fetch completes, don't touch store
+            // Redirect immediately on success — don't touch store before navigation
             window.location.replace('/dashboard');
 
-        } catch (error: any) {
+        } catch (err: any) {
+            setSubmitError(err.message || 'Nieznany błąd');
             setSubmitStatus('error');
-            setSubmitError(error.message || 'Nieznany błąd');
             setIsSubmitting(false);
         }
     };
+
+    console.log('[WizardLayout] currentStep:', currentStep, 'totalSteps:', totalSteps, 'isSubmitting:', isSubmitting);
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden transition-colors duration-300">
