@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { api } from "@/lib/api";
 
 const STEPS = [
     { num: 1, short: "Dane", label: "Dane Pojazdu" },
@@ -120,22 +121,37 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 return;
             }
 
-            // Build photos map
-            const photoMap: Record<string, string> = {};
-            try {
-                const slots = useInspectionStore.getState().data?.photos || [];
-                slots.forEach((slot: any) => {
-                    if (slot?.base64?.startsWith('data:')) {
-                        photoMap[slot.id] = slot.base64;
+            // 1. Mandatory Photo Retry Loop (Upload any remaining base64/local photos)
+            const slots = useInspectionStore.getState().data?.photos || [];
+            const pendingSlots = slots.filter((s: any) => s.base64 && s.base64.startsWith('data:'));
+            
+            if (pendingSlots.length > 0) {
+                console.log(`[Submit] Retrying ${pendingSlots.length} pending uploads...`);
+                for (const slot of pendingSlots) {
+                    try {
+                        const res = await fetch(slot.base64);
+                        const blob = await res.blob();
+                        const file = new File([blob], `${slot.id}.webp`, { type: 'image/webp' });
+                        const result = await api.uploadFile(finalDealId, slot.id, file);
+                        if (result.success && result.url) {
+                            useInspectionStore.getState().setPhotoSlot(slot.id, result.url);
+                        }
+                    } catch (e) {
+                        console.warn(`[Submit] Retry failed for slot ${slot.id}:`, e);
                     }
-                });
-            } catch (e) {
-                console.warn('Photo build error:', e);
+                }
             }
+
+            // 2. Build collection for submission (prefer URLs, send base64 as absolute fallback)
+            const finalPhotos = useInspectionStore.getState().data.photos;
+            const photoCollection: Record<string, string> = {};
+            finalPhotos.forEach((s: any) => {
+                if (s.base64) photoCollection[s.id] = s.base64;
+            });
 
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            // Submit
+            // 3. Final Submit
             const response = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
@@ -145,7 +161,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 body: JSON.stringify({
                     ...useInspectionStore.getState().data,
                     deal_id: finalDealId,
-                    photos: photoMap,
+                    photos: photoCollection, // This will mostly contain URLs now!
                 })
             });
 

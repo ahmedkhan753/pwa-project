@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '@/lib/api';
 import { submissionQueue } from '@/lib/submissionQueue';
+import { idbStorage } from '@/lib/storage';
 
 // ─── Auth & Jobs Types ──────────────────────────────────────
 export interface AuthUser {
@@ -574,6 +575,7 @@ export const useInspectionStore = create<InspectionState>()(
       logout: () => {
         // Clear all possible token storage locations
         try {
+          idbStorage.removeItem('inspection-storage');
           localStorage.removeItem('inspection-storage');
           localStorage.removeItem('token');
           localStorage.removeItem('access_token');
@@ -649,20 +651,16 @@ export const useInspectionStore = create<InspectionState>()(
         try {
           const deal = await api.getDeal(dealId);
           console.log('[fetchFullDeal] API response keys:', Object.keys(deal));
-          console.log('[fetchFullDeal] Full deal data:', JSON.stringify(deal, null, 2));
           set((state) => {
             const initial = JSON.parse(JSON.stringify(initialData));
-            // Backend returns snake_case keys from FieldTransformer.transform_from_bitrix()
-            // Map them to the store's vehicleData.basicInfo structure
             const newVehicleData = {
               ...initial.vehicleData,
               basicInfo: {
                 ...initial.vehicleData.basicInfo,
-                companyName: deal.company_name || deal.clientName || deal.title || '',
-                userOwner: deal.client_name || deal.clientName || deal.title || '',
-                inspectionPlace: deal.inspection_place || deal.planned_address || deal.planned_location || deal.address || '',
-                // Try all possible sources in order: store scheduledDate, then deal payload
-                inspectionDate: useInspectionStore.getState().jobs.scheduled.find(j => j.id === dealId)?.scheduledDate || useInspectionStore.getState().jobs.unscheduled.find(j => j.id === dealId)?.scheduledDate || deal.inspection_date || deal.scheduled_date || deal.scheduledDate || deal.UF_CRM_1772108256983 || '',
+                companyName: deal.company_name || deal.title || '',
+                userOwner: deal.client_name || '',
+                inspectionPlace: deal.inspection_place || deal.planned_address || '',
+                inspectionDate: deal.inspection_date || '',
                 inspectorName: deal.inspector_name || state.auth.currentUserName || 'Mateusz Chłodek',
               },
               vin: deal.vin || '',
@@ -678,7 +676,7 @@ export const useInspectionStore = create<InspectionState>()(
               bodyType: deal.body_type || '',
               gearboxType: deal.gearbox_type || '',
               driveType: deal.drive_type || '',
-              firstRegistration: deal.first_registration_date || deal.first_registration || '',
+              firstRegistration: deal.first_registration_date || '',
             };
 
             return {
@@ -1075,7 +1073,7 @@ export const useInspectionStore = create<InspectionState>()(
     }),
     {
       name: 'inspection-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => idbStorage),
       version: 3,
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {

@@ -100,13 +100,13 @@ export default function ReviewInspectionPage() {
           <h2 className="font-bold text-sm uppercase text-gray-400 mb-3">Dane zlecenia</h2>
           <div className="space-y-2">
             <Row label="Nr zlecenia" value={deal?.TITLE} />
-            <Row label="Marka" value={deal?.UF_CRM_MAKE || deal?.make} />
-            <Row label="Model" value={deal?.UF_CRM_MODEL || deal?.model} />
-            <Row label="Nr rejestracyjny" value={deal?.UF_CRM_PLATES || deal?.registrationPlates} />
-            <Row label="VIN" value={deal?.UF_CRM_1766057539531} />
-            <Row label="Rok produkcji" value={deal?.UF_CRM_YEAR || deal?.year} />
-            <Row label="Przebieg" value={deal?.UF_CRM_MILEAGE || deal?.mileage} />
-            <Row label="Data oględzin" value={deal?.UF_CRM_1772108256983} />
+            <Row label="Marka" value={deal?.vehicle_brand || deal?.make || deal?.UF_CRM_MAKE} />
+            <Row label="Model" value={deal?.vehicle_model || deal?.model || deal?.UF_CRM_MODEL} />
+            <Row label="Nr rejestracyjny" value={deal?.registration_number || deal?.plates || deal?.UF_CRM_PLATES} />
+            <Row label="VIN" value={deal?.vin || deal?.UF_CRM_1766057539531} />
+            <Row label="Rok produkcji" value={deal?.production_year || deal?.year || deal?.UF_CRM_YEAR} />
+            <Row label="Przebieg" value={deal?.mileage || deal?.UF_CRM_MILEAGE} />
+            <Row label="Data oględzin" value={deal?.inspection_date || deal?.UF_CRM_1772108256983} />
           </div>
         </div>
 

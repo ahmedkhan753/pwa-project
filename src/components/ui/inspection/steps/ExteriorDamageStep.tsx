@@ -31,7 +31,8 @@ const DAMAGE_TYPES = [
 ];
 
 export function ExteriorDamageStep() {
-    const { data, addDamage, removeDamage, updateDamage } = useInspectionStore();
+    const { data, addDamage, removeDamage, updateDamage, jobs } = useInspectionStore();
+    const dealId = jobs.currentJobId;
     const damages = data.exteriorDamage;
 
     const handleAdd = () => {
@@ -74,6 +75,7 @@ export function ExteriorDamageStep() {
                     key={dmg.id}
                     entry={dmg}
                     index={i}
+                    dealId={dealId}
                     parts={EXTERIOR_PARTS}
                     types={DAMAGE_TYPES}
                     onUpdate={(update) => updateDamage('exteriorDamage', dmg.id, update)}

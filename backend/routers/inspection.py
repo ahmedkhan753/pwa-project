@@ -273,21 +273,37 @@ async def submit_inspection(request: Request, data: SubmitRequest):
             # Also include any photos from the request body (base64 or URL)
             body_photos = body.get("photos", {})
             if isinstance(body_photos, dict):
+                # If it's the standard PWA photos array/dict
                 for k, v in body_photos.items():
-                    if v and isinstance(v, str) and (v.startswith("data:image") or v.startswith("http")):
-                        photo_urls.append(v)
+                    val = v
+                    if isinstance(v, dict):
+                        val = v.get("base64") or v.get("url") or v.get("src")
+                    
+                    if val and isinstance(val, str):
+                        if val.startswith("http") or val.startswith("data:image"):
+                            photo_urls.append(val)
             elif isinstance(body_photos, list):
                 for item in body_photos:
-                    if isinstance(item, str) and (item.startswith("data:image") or item.startswith("http")):
-                        photo_urls.append(item)
-                    elif isinstance(item, dict):
-                        url = item.get("base64") or item.get("url") or item.get("src")
-                        if url:
-                            photo_urls.append(url)
+                    val = item
+                    if isinstance(item, dict):
+                        val = item.get("base64") or item.get("url") or item.get("src")
+                    
+                    if val and isinstance(val, str):
+                        if val.startswith("http") or val.startswith("data:image"):
+                            photo_urls.append(val)
+
+            # Eliminate duplicates while preserving order
+            seen = set()
+            unique_urls = []
+            for u in photo_urls:
+                if u not in seen:
+                    unique_urls.append(u)
+                    seen.add(u)
+            photo_urls = unique_urls
 
             if photo_urls:
                 inspection_data["photos"] = photo_urls
-                logger.info(f"📷 {len(photo_urls)} photos found for PDF generation")
+                logger.info(f"📷 {len(photo_urls)} unique photo URLs/URIs ready for PDF generation")
 
             # Generate PDF bytes
             pdf_bytes = generate_inspection_pdf(deal_info, inspection_data)
