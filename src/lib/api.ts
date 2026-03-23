@@ -28,21 +28,8 @@ export const authFetch = async (url: string, options: RequestInit = {}): Promise
   const response = await fetch(url, options);
 
   if (response.status === 401) {
-    // Token expired or invalid — clean logout
-    console.warn('Token expired — redirecting to login');
-    try {
-      localStorage.removeItem('inspection-storage');
-      localStorage.removeItem('token');
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('auth_token');
-      sessionStorage.clear();
-    } catch (e) {}
-
-    // Only redirect if not already on login page
-    if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-      window.location.replace('/login');
-    }
-    throw new Error('Session expired');
+    // Don't force logout — just throw so component can handle gracefully
+    throw new Error('Sesja wygasła. Zaloguj się ponownie.');
   }
 
   return response;
