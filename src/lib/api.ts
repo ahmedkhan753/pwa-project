@@ -23,9 +23,35 @@ const authHeaders = (extra: Record<string, string> = {}) => {
   return headers;
 };
 
+// Global 401 interceptor — wraps ALL fetch calls
+export const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const response = await fetch(url, options);
+
+  if (response.status === 401) {
+    // Token expired or invalid — clean logout
+    console.warn('Token expired — redirecting to login');
+    try {
+      localStorage.removeItem('inspection-storage');
+      localStorage.removeItem('token');
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('auth_token');
+      sessionStorage.clear();
+    } catch (e) {}
+
+    // Only redirect if not already on login page
+    if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+      window.location.replace('/login');
+    }
+    throw new Error('Session expired');
+  }
+
+  return response;
+};
+
 // Real API client — all paths prefixed with BASE_URL
 const realApi = {
   async login(phone: string, pin: string) {
+    // Login doesn't use authFetch — no token yet
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -38,7 +64,7 @@ const realApi = {
     return res.json()
   },
   async getMe() {
-    const res = await fetch(`${BASE_URL}/auth/me`, {
+    const res = await authFetch(`${BASE_URL}/auth/me`, {
       headers: authHeaders()
     })
     if (!res.ok) {
@@ -48,7 +74,7 @@ const realApi = {
     return res.json()
   },
   async getDeals(dateFrom?: string, dateTo?: string) {
-    const res = await fetch(
+    const res = await authFetch(
       `${BASE_URL}/deals?date_from=${dateFrom}&date_to=${dateTo}`,
       { headers: authHeaders() }
     )
@@ -59,7 +85,7 @@ const realApi = {
     return res.json()
   },
   async getDeal(dealId: string) {
-    const res = await fetch(`${BASE_URL}/deals/${dealId}`, {
+    const res = await authFetch(`${BASE_URL}/deals/${dealId}`, {
       headers: authHeaders()
     })
     if (!res.ok) {
@@ -69,7 +95,7 @@ const realApi = {
     return res.json()
   },
   async saveStep(dealId: string, step: number, data: any) {
-    const res = await fetch(
+    const res = await authFetch(
       `${BASE_URL}/inspection/${dealId}/step/${step}`,
       {
         method: 'PATCH',
@@ -88,7 +114,7 @@ const realApi = {
   },
   async scheduleDeal(dealId: string, date: string, time: string) {
     const scheduled_date = time ? `${date}T${time}` : date;
-    const res = await fetch(
+    const res = await authFetch(
       `${BASE_URL}/inspection/${dealId}/schedule`,
       {
         method: 'POST',
@@ -107,7 +133,7 @@ const realApi = {
     form.append('deal_id', dealId)
     form.append('field_key', fieldKey)
     form.append('file', file)
-    const res = await fetch(`${BASE_URL}/files/upload`, {
+    const res = await authFetch(`${BASE_URL}/files/upload`, {
       method: 'POST',
       headers: authHeaders(),
       body: form
@@ -119,7 +145,7 @@ const realApi = {
     return res.json()
   },
   async getMetadataOptions() {
-    const res = await fetch(`${BASE_URL}/api/metadata/options`, {
+    const res = await authFetch(`${BASE_URL}/api/metadata/options`, {
       headers: authHeaders()
     })
     if (!res.ok) {
@@ -129,7 +155,7 @@ const realApi = {
     return res.json()
   },
   async submitInspection(dealId: string, data: any) {
-    const res = await fetch(`${BASE_URL}/inspection/submit`, {
+    const res = await authFetch(`${BASE_URL}/inspection/submit`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data)
@@ -143,3 +169,4 @@ const realApi = {
 }
 
 export const api = realApi
+

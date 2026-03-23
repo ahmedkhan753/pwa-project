@@ -32,7 +32,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncError, setSyncError] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [submitError, setSubmitError] = useState<string>('');
 
     // Bitrix Auto-Sync (Anti-Oops)
     useEffect(() => {
@@ -79,6 +80,108 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const goToStep = (step: number) => {
         if (step <= maxVisitedStep || step === currentStep + 1) {
             setStep(step);
+        }
+    };
+
+    const handleSubmit = async () => {
+        try {
+            // Immediately disable button and show spinner
+            setIsSubmitting(true);
+            setSubmitStatus('idle');
+            setSubmitError('');
+
+            // Stop background sync
+            useInspectionStore.getState().setIsSubmitting(true);
+
+            // Wait 100ms for in-flight syncs
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Get deal ID
+            const finalDealId = useInspectionStore.getState().jobs.currentJobId;
+            if (!finalDealId) throw new Error("Brak ID zlecenia");
+
+            // Get token safely
+            const token = (() => {
+                try {
+                    const stored = localStorage.getItem('inspection-storage');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (parsed?.state?.auth?.token) return parsed.state.auth.token;
+                    }
+                } catch {}
+                return localStorage.getItem('token') ||
+                       localStorage.getItem('access_token') || null;
+            })();
+
+            if (!token) {
+                // Clear corrupted state and redirect to login
+                localStorage.clear();
+                window.location.replace('/login');
+                return;
+            }
+
+            // Build photos map
+            const photoMap: Record<string, string> = {};
+            try {
+                const slots = useInspectionStore.getState().data?.photos || [];
+                slots.forEach((slot: any) => {
+                    if (slot?.base64?.startsWith('data:')) {
+                        photoMap[slot.id] = slot.base64;
+                    }
+                });
+            } catch (e) {
+                console.warn('Photo build error:', e);
+            }
+
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+            // Submit
+            const response = await fetch(`${apiUrl}/inspection/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    ...useInspectionStore.getState().data,
+                    deal_id: finalDealId,
+                    photos: photoMap,
+                })
+            });
+
+            if (response.status === 401) {
+                // Token expired — clear and redirect to login
+                localStorage.clear();
+                window.location.replace('/login');
+                return;
+            }
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || `Błąd serwera (${response.status})`);
+            }
+
+            // SUCCESS
+            setSubmitStatus('success');
+
+            // Clear store safely
+            try {
+                useInspectionStore.getState().clearInspection?.();
+            } catch (e) {
+                console.warn('Store clear error:', e);
+            }
+
+            // Wait 2 seconds to show success message then redirect
+            setTimeout(() => {
+                window.location.replace('/dashboard');
+            }, 2000);
+
+        } catch (error: any) {
+            console.error('Submit error:', error);
+            setSubmitStatus('error');
+            setSubmitError(error.message || 'Nieznany błąd');
+            setIsSubmitting(false);
+            useInspectionStore.getState().setIsSubmitting(false);
         }
     };
 
@@ -170,7 +273,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             </main>
 
             {/* ── Bottom Navigation ──────────────────────────── */}
-            <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-4 flex gap-4 safe-area-bottom shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+            <footer className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto glass-card border-t border-border z-30 p-4 safe-area-bottom shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+                <div className="flex gap-4">
                 <button
                     onClick={prev}
                     disabled={currentStep === 1}
@@ -187,96 +291,9 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 </button>
 
                 {currentStep === totalSteps ? (
+                    submitStatus === 'idle' ? (
                     <button
-                        onClick={async () => {
-                            if (isSubmitting) return;
-
-                            try {
-                                // 1. Stop ALL background sync immediately
-                                useInspectionStore.getState().setIsSubmitting(true);
-                                setIsSubmitting(true);
-                                setSubmitError(null);
-
-                                // 2. Wait 100ms for in-flight syncs
-                                await new Promise(resolve => setTimeout(resolve, 100));
-
-                                // Get deal ID safely
-                                const dealId = currentOrder?.vehicleData?.basicInfo?.companyName ? (useInspectionStore.getState().jobs.currentJobId) : null;
-                                const finalDealId = useInspectionStore.getState().jobs.currentJobId;
-                                
-                                if (!finalDealId) throw new Error("Brak ID zlecenia");
-
-                                // Get token safely
-                                const token = (() => {
-                                    try {
-                                        const stored = localStorage.getItem('inspection-storage');
-                                        if (stored) {
-                                            const parsed = JSON.parse(stored);
-                                            if (parsed?.state?.auth?.token) return parsed.state.auth.token;
-                                        }
-                                    } catch {}
-                                    return localStorage.getItem('token') || localStorage.getItem('access_token');
-                                })();
-
-                                if (!token) {
-                                    alert("Sesja wygasła. Zaloguj się ponownie.");
-                                    router.push('/login');
-                                    return;
-                                }
-
-                                // Build photos map safely
-                                const photoSlots = useInspectionStore.getState().data?.photos || [];
-                                const photoMap: Record<string, string> = {};
-                                photoSlots.forEach((slot: any) => {
-                                    if (slot?.base64 && slot.base64.startsWith('data:')) {
-                                        photoMap[slot.id] = slot.base64;
-                                    }
-                                });
-
-                                // Submit to backend
-                                const response = await fetch(
-                                    `${process.env.NEXT_PUBLIC_API_URL}/inspection/submit`,
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${token}`
-                                        },
-                                        body: JSON.stringify({
-                                            ...useInspectionStore.getState().data,
-                                            deal_id: finalDealId,
-                                            photos: photoMap,
-                                            job_id: finalDealId
-                                        })
-                                    }
-                                );
-
-                                if (!response.ok) {
-                                    const error = await response.json().catch(() => ({}));
-                                    throw new Error(error.detail || `HTTP ${response.status}`);
-                                }
-
-                                const result = await response.json();
-                                console.log("Submit success — navigating immediately:", result);
-
-                                // IMMEDIATE NAVIGATION BEFORE ANY STATE UPDATES
-                                window.location.replace('/dashboard');
-                                return;
-
-                            } catch (error: any) {
-                                // Reset flag on error
-                                useInspectionStore.getState().setIsSubmitting(false);
-                                console.error("Submit error:", error);
-                                setSubmitError(error.message);
-                                alert(`Błąd wysyłania: ${error.message}`);
-                            } finally {
-                                try {
-                                    setIsSubmitting(false);
-                                } catch (e) {
-                                    // ignore — component might be unmounting
-                                }
-                            }
-                        }}
+                        onClick={handleSubmit}
                         disabled={isSubmitting}
                         aria-label="Submit inspection"
                         className={cn(
@@ -287,10 +304,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                         )}
                     >
                         {isSubmitting ? (
-                            <>
-                                <RefreshCcw size={20} className="stroke-[3] animate-spin" />
-                                WYSYŁANIE...
-                            </>
+                            <div className="flex items-center justify-center gap-3">
+                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <span>Wysyłanie raportu...</span>
+                            </div>
                         ) : (
                             <>
                                 <Send size={20} className="stroke-[3]" />
@@ -298,6 +315,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                             </>
                         )}
                     </button>
+                    ) : null
                 ) : (
                     <button
                         onClick={next}
@@ -307,6 +325,35 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                         Dalej
                         <ChevronRight size={20} className="stroke-[3]" />
                     </button>
+                )}
+                </div>
+
+                {/* Submit status feedback — shown below nav buttons on Step 12 */}
+                {currentStep === totalSteps && submitStatus === 'success' && (
+                    <div className="mt-4 w-full py-4 rounded-2xl bg-green-500 text-white text-center font-bold text-lg">
+                        <div className="flex items-center justify-center gap-2">
+                            <span>✅</span>
+                            <span>Raport wysłany pomyślnie!</span>
+                        </div>
+                        <p className="text-sm font-normal mt-1 opacity-80">
+                            Przekierowywanie do dashboardu...
+                        </p>
+                    </div>
+                )}
+
+                {currentStep === totalSteps && submitStatus === 'error' && (
+                    <div className="mt-4 space-y-3">
+                        <div className="w-full py-4 rounded-2xl bg-red-50 border-2 border-red-200 text-center">
+                            <p className="font-bold text-red-700">❌ Błąd wysyłania</p>
+                            <p className="text-sm text-red-600 mt-1">{submitError}</p>
+                        </div>
+                        <button
+                            onClick={handleSubmit}
+                            className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 active:scale-95 transition-all"
+                        >
+                            Spróbuj ponownie
+                        </button>
+                    </div>
                 )}
             </footer>
         </div>

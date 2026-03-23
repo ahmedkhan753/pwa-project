@@ -571,13 +571,24 @@ export const useInspectionStore = create<InspectionState>()(
         })),
 
 
-      logout: () =>
-        set((state) => ({
+      logout: () => {
+        // Clear all possible token storage locations
+        try {
+          localStorage.removeItem('inspection-storage');
+          localStorage.removeItem('token');
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('auth_token');
+          sessionStorage.clear();
+        } catch (e) {
+          console.warn('Storage clear error during logout:', e);
+        }
+        set(() => ({
           auth: {
-            ...state.auth,
             isAuthenticated: false,
             token: null,
             user: null,
+            loading: false,
+            error: null,
             currentUserId: null,
             currentUserName: null,
           },
@@ -598,7 +609,8 @@ export const useInspectionStore = create<InspectionState>()(
           maxVisitedStep: 1,
           data: initialData,
           isSubmitting: false,
-        })),
+        }));
+      },
 
       fetchMe: async () => {
         const token = useInspectionStore.getState().auth.token;
