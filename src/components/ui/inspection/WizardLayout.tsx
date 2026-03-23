@@ -128,7 +128,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             
             if (pendingSlots.length > 0) {
                 console.log(`[Submit] Retrying ${pendingSlots.length} pending uploads: ${pendingSlots.map(s => s.id).join(', ')}`);
-                for (const slot of pendingSlots) {
+                // Limit retries to first 10 to avoid connection flooding
+                const slotsToRetry = pendingSlots.slice(0, 10);
+                
+                for (const slot of slotsToRetry) {
                     try {
                         console.log(`[Submit] Fetching blob for ${slot.id}...`);
                         const res = await fetch(slot.base64);
@@ -136,14 +139,18 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                         console.log(`[Submit] Created blob for ${slot.id} (${(blob.size / 1024).toFixed(1)} KB)`);
                         
                         const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
+                        // String conversion to avoid any "[object Object]" issues
                         const result = await api.uploadFile(String(finalDealId), slot.id, file);
                         
                         if (result.success && result.url) {
                             console.log(`[Submit] Re-upload successful for ${slot.id} -> ${result.url}`);
                             useInspectionStore.getState().setPhotoSlot(slot.id, result.url);
                         } else {
-                            console.warn(`[Submit] Re-upload failed for ${slot.id} (success=false):`, result.error);
+                            console.warn(`[Submit] Re-upload failed/unmapped for ${slot.id}:`, result.error || 'Check backend logs');
                         }
+                        
+                        // Small sequential delay
+                        await new Promise(r => setTimeout(r, 300));
                     } catch (e) {
                         console.error(`[Submit] Critical error retrying slot ${slot.id}:`, e);
                     }
@@ -186,19 +193,18 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             }
 
             // SUCCESS
+            console.log('[Submit] SUCCESS! Redirecting soon...');
             setSubmitStatus('success');
 
-            // Clear store safely
-            try {
-                useInspectionStore.getState().clearInspection?.();
-            } catch (e) {
-                console.warn('Store clear error:', e);
-            }
-
-            // Wait 2 seconds to show success message then redirect
+            // Wait 3 seconds to show success message then redirect
+            // IMPORTANT: Clear store ONLY AFTER we are sure the redirect will happen
             setTimeout(() => {
+                console.log('[Submit] Cleaning up and redirecting...');
+                try {
+                    useInspectionStore.getState().clearInspection?.();
+                } catch (e) {}
                 window.location.replace('/dashboard');
-            }, 2000);
+            }, 3000);
 
         } catch (error: any) {
             console.error('Submit error:', error);
