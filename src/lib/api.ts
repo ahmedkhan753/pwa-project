@@ -1,18 +1,20 @@
+import { useInspectionStore } from '@/store/useInspectionStore';
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 console.log(`[API] BASE_URL: ${BASE_URL}`)
 
-// Helper to get auth token from Zustand persisted storage
+// Helper to get auth token from Zustand in-memory state (works with IndexedDB)
 const getAuthToken = (): string | null => {
   try {
-    const storage = localStorage.getItem('inspection-storage');
-    if (storage) {
-      const parsed = JSON.parse(storage);
-      return parsed.state?.auth?.token || null;
-    }
+    // Primary: read from Zustand's live in-memory state (always current)
+    const storeToken = useInspectionStore.getState().auth?.token;
+    if (storeToken) return storeToken;
+    
+    // Fallback: check localStorage mirror (set during login for instant access)
+    return localStorage.getItem('access_token') || null;
   } catch (e) {
     return null;
   }
-  return null;
 };
 
 // Helper to build auth headers

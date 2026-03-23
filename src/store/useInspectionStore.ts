@@ -327,6 +327,8 @@ interface InspectionState {
   // Drafts (to prevent data loss when switching jobs)
   drafts: Record<string, StepData>;
   isSubmitting: boolean;
+  // Hydration flag (IndexedDB is async)
+  _hasHydrated: boolean;
 
   // Actions
   setStep: (step: number) => void;
@@ -547,6 +549,7 @@ export const useInspectionStore = create<InspectionState>()(
       },
       drafts: {},
       isSubmitting: false,
+      _hasHydrated: false,
 
       setStep: (step: number) =>
         set((state) => ({
@@ -558,7 +561,9 @@ export const useInspectionStore = create<InspectionState>()(
       setAuth: (authUpdate) =>
         set((state) => ({ auth: { ...state.auth, ...authUpdate } })),
 
-      login: (email, token, user) =>
+      login: (email, token, user) => {
+        // Mirror token to localStorage for instant sync access by api.ts
+        try { localStorage.setItem('access_token', token); } catch (e) {}
         set(() => ({
           auth: {
             isAuthenticated: true,
@@ -569,7 +574,8 @@ export const useInspectionStore = create<InspectionState>()(
             currentUserId: user.id ? Number(user.id) : null,
             currentUserName: user.name || 'Rzeczoznawca',
           },
-        })),
+        }));
+      },
 
 
       logout: () => {
@@ -1075,6 +1081,14 @@ export const useInspectionStore = create<InspectionState>()(
       name: 'inspection-storage',
       storage: createJSONStorage(() => idbStorage),
       version: 3,
+      onRehydrateStorage: () => (state) => {
+        // Mark store as hydrated so dashboard knows it can make API calls
+        useInspectionStore.setState({ _hasHydrated: true });
+        // Also sync token to localStorage for api.ts fallback
+        if (state?.auth?.token) {
+          try { localStorage.setItem('access_token', state.auth.token); } catch (e) {}
+        }
+      },
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {
           const jobs = persistedState.jobs || {};
