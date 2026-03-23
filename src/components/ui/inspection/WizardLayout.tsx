@@ -100,9 +100,35 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 return;
             }
 
+            // Build photos map from store
+            const photoMap: Record<string, string> = {};
+            try {
+                const storeData = useInspectionStore.getState().data;
+                const photos = storeData?.photos || [];
+                if (Array.isArray(photos)) {
+                    photos.forEach((slot: any) => {
+                        if (slot?.id && slot?.base64?.startsWith('data:')) {
+                            const base64 = slot.base64.split(',')[1];
+                            if (base64) photoMap[slot.id] = base64;
+                        }
+                    });
+                } else if (typeof photos === 'object') {
+                    Object.entries(photos).forEach(([key, val]: any) => {
+                        if (val?.startsWith?.('data:')) {
+                            photoMap[key] = val.split(',')[1];
+                        } else if (val && typeof val === 'string') {
+                            photoMap[key] = val;
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Photo build error:', e);
+            }
+
+            console.log(`[Submit] Sending ${Object.keys(photoMap).length} photos`);
+
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            // Send MINIMAL payload — no photos in body (already saved per step)
             const response = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
@@ -111,7 +137,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 },
                 body: JSON.stringify({
                     deal_id: dealId,
-                    photos: {}   // Empty — photos already uploaded per step
+                    photos: photoMap
                 })
             });
 
@@ -123,7 +149,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             // SUCCESS
             setSubmitStatus('success');
             setTimeout(() => {
-                window.location.replace('/dashboard');
+                window.location.href = '/dashboard';
             }, 2000);
 
         } catch (error: any) {
