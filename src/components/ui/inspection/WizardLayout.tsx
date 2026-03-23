@@ -83,30 +83,35 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const handleSubmit = async () => {
-        // IMMEDIATELY stop all background activity
-        useInspectionStore.getState().setIsSubmitting?.(true);
+    const handleSubmit = async (e?: React.MouseEvent) => {
+        e?.preventDefault();
+        e?.stopPropagation();
+        if (isSubmitting) return;
+
+        setIsSubmitting(true);
+        setSubmitStatus('idle');
+        setSubmitError('');
+
+        // Wait for any in-flight syncs to settle before reading store / fetching
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const dealId = useInspectionStore.getState().jobs?.currentJobId;
+        if (!dealId) {
+            setSubmitError('Brak ID zlecenia');
+            setSubmitStatus('error');
+            setIsSubmitting(false);
+            return;
+        }
+
+        const token = useInspectionStore.getState().auth?.token
+            || localStorage.getItem('access_token');
+        if (!token) {
+            window.location.replace('/');
+            return;
+        }
 
         try {
-            setIsSubmitting(true);
-            setSubmitStatus('idle');
-            setSubmitError('');
-
-            // Wait for any in-flight syncs to complete
-            await new Promise(resolve => setTimeout(resolve, 300));
-
-            const dealId = useInspectionStore.getState().jobs?.currentJobId;
-            if (!dealId) throw new Error("Brak ID zlecenia");
-
-            const token = useInspectionStore.getState().auth?.token
-                || localStorage.getItem('access_token');
-            if (!token) {
-                window.location.replace('/');
-                return;
-            }
-
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
             const response = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
@@ -124,14 +129,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 throw new Error(err.detail || `Błąd ${response.status}`);
             }
 
-            // Clear the current job from store
-            useInspectionStore.getState().selectJob?.(null);
-
-            // IMMEDIATE redirect — no setTimeout, no state updates
+            // SUCCESS — redirect only AFTER fetch completes, don't touch store
             window.location.replace('/dashboard');
 
         } catch (error: any) {
-            useInspectionStore.getState().setIsSubmitting?.(false);
             setSubmitStatus('error');
             setSubmitError(error.message || 'Nieznany błąd');
             setIsSubmitting(false);
