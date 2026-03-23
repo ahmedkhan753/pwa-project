@@ -46,6 +46,10 @@ export function PhotoUploadSlot({ id, label, base64, dealId, required, onCapture
                         // Store the URL instead of base64 to keep request sizes small
                         onCapture(result.url);
                         setUploadStatus('success');
+                    } else if (result.success === false) {
+                        // Field not mapped in Bitrix — photo is safe in IndexedDB
+                        console.info(`[Upload] Field ${id} not mapped in Bitrix — stored locally`);
+                        setUploadStatus('idle');
                     } else {
                         throw new Error('Upload failed');
                     }
