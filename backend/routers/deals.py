@@ -153,32 +153,15 @@ async def get_deals(
             "filter": filter_params,
             "select": [
                 "ID", "TITLE", "STAGE_ID", "DATE_CREATE", "BEGINDATE",
-                "ASSIGNED_BY_ID", "OPPORTUNITY",
-                # Inspector
-                "UF_CRM_1773961369947",   # inspector_phone
-                "UF_CRM_1773970466449",   # inspector list field
-                "UF_CRM_1771579888",      # appraiser_mobile
-                # Address / Location
-                "UF_CRM_1766058185504",   # Planned inspection site
-                "UF_CRM_1766058194337",   # Planned viewing address
-                # Contact
-                "UF_CRM_1766058247125",   # Contact person's telephone number
-                "UF_CRM_1766058259960",   # Contact person
-                # Client / Payer
-                "UF_CRM_1766058053224",   # Phone (client)
-                "UF_CRM_1766057941327",   # Name (client first name)
-                "UF_CRM_1766057951060",   # Last name
-                "UF_CRM_1766057964319",   # Company name
-                "UF_CRM_1766058009838",   # Town
-                "UF_CRM_1766058028123",   # Street No./Apartment
-                # Vehicle
-                "UF_CRM_1766057839684",   # vehicle_brand
-                "UF_CRM_1766057849818",   # vehicle_model
-                "UF_CRM_1766057515315",   # registration_number
-                "UF_CRM_1766057539531",   # VIN
-                "UF_CRM_1766057572300",   # production_year
-                # Date
-                "UF_CRM_1772108256983",   # inspection_date / scheduled_date
+                "CLOSEDATE", "ASSIGNED_BY_ID", "CATEGORY_ID",
+                "UF_CRM_1773970466449",   # inspector contact
+                "UF_CRM_1766058185504",   # inspection location
+                "UF_CRM_1766058194337",   # inspection address
+                "UF_CRM_1766058247125",   # contact phone
+                "UF_CRM_1766058259960",   # contact person
+                "UF_CRM_1766057839684",   # vehicle brand
+                "UF_CRM_1766057849818",   # vehicle model
+                "UF_CRM_1766057515315",   # plates
             ],
             "order": {"DATE_CREATE": "DESC"}
         })
@@ -186,43 +169,33 @@ async def get_deals(
         # Transform each deal
         result = []
         for deal in deals_raw:
-            # Debug: log raw UF fields from crm.deal.list
-            logger.info(f"Raw deal {deal.get('ID')} UF fields: "
-                        f"site={deal.get('UF_CRM_1766058185504')!r} "
-                        f"addr={deal.get('UF_CRM_1766058194337')!r} "
-                        f"cphone={deal.get('UF_CRM_1766058247125')!r} "
-                        f"cperson={deal.get('UF_CRM_1766058259960')!r} "
-                        f"phone={deal.get('UF_CRM_1766058053224')!r} "
-                        f"plates={deal.get('UF_CRM_1766057515315')!r}")
+            result_deal = {
+                "id": str(deal.get("ID", "")), # frontend fallback 
+                "ID": deal.get("ID"),
+                "TITLE": deal.get("TITLE"),
+                "STAGE_ID": deal.get("STAGE_ID"),
+                "DATE_CREATE": deal.get("DATE_CREATE"),
+                "BEGINDATE": deal.get("BEGINDATE"),
+                "status": STAGE_STATUS_MAP.get(deal.get("STAGE_ID"), "new"),
+                "stageId": deal.get("STAGE_ID"),
+                # CORRECT FIELD NAMES FOR FRONTEND:
+                "inspectionAddress": (
+                    deal.get("UF_CRM_1766058185504") or
+                    deal.get("UF_CRM_1766058194337") or ""
+                ),
+                "contactPhone": deal.get("UF_CRM_1766058247125") or "",
+                "contactPerson": deal.get("UF_CRM_1766058259960") or "",
+                "vehicle_brand": deal.get("UF_CRM_1766057839684") or "",
+                "vehicle_model": deal.get("UF_CRM_1766057849818") or "",
+                "registration_number": deal.get("UF_CRM_1766057515315") or "",
+                
+                # Extras from Bitrix 
+                "CLOSEDATE": deal.get("CLOSEDATE"),
+                "ASSIGNED_BY_ID": deal.get("ASSIGNED_BY_ID"),
+                "CATEGORY_ID": deal.get("CATEGORY_ID"),
+            }
 
-            enriched = _inject_status(deal)
-            enriched["inspectorPhone"] = deal.get("UF_CRM_1773961369947", "")
-            # Address: Planned inspection site → Planned viewing address fallback
-            enriched["inspectionAddress"] = (
-                deal.get("UF_CRM_1766058185504", "") or  # Planned inspection site
-                deal.get("UF_CRM_1766058194337", "") or  # Planned viewing address
-                ""
-            )
-            # Contact phone: Contact person's phone → Client phone fallback
-            enriched["contactPhone"] = (
-                deal.get("UF_CRM_1766058247125", "") or  # Contact person's telephone
-                deal.get("UF_CRM_1766058053224", "") or  # Client phone
-                ""
-            )
-            # Contact person name
-            enriched["contactPerson"] = (
-                deal.get("UF_CRM_1766058259960", "") or  # Contact person
-                deal.get("UF_CRM_1766057941327", "") or  # Client first name
-                ""
-            )
-            enriched["vehicle_brand"] = deal.get("UF_CRM_1766057839684", "")
-            enriched["vehicle_model"] = deal.get("UF_CRM_1766057849818", "")
-            enriched["registration_number"] = deal.get("UF_CRM_1766057515315", "")
-            enriched["scheduled_date"] = deal.get("UF_CRM_1772108256983", "")
-
-            logger.info(f"Deal {deal.get('ID')} enriched: addr={enriched['inspectionAddress']!r} phone={enriched['contactPhone']!r} contact={enriched['contactPerson']!r}")
-
-            result.append(enriched)
+            result.append(result_deal)
 
         logger.info(f"Found {len(result)} deals for phone {inspector_phone}")
 
