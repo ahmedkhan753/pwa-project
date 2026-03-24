@@ -72,12 +72,14 @@ async def upload_file(
         )
 
     try:
-        result = await gateway.upload_file(
+        logger.info(f"Uploading file to deal {deal_id}, field_key={field_key}, size={len(file_bytes)}B")
+        result = await gateway.upload_file_to_deal(
             deal_id=deal_id,
             field_pwa_key=field_key,
             file_bytes=file_bytes,
             filename=file.filename,
         )
+        logger.info(f"Upload result for {field_key}: {result}")
 
         return FileUploadResult(
             field_key=field_key,
@@ -87,7 +89,7 @@ async def upload_file(
         )
 
     except Exception as e:
-        logger.error(f"File upload failed (deal={deal_id}, key={field_key}): {e}")
+        logger.error(f"File upload failed (deal={deal_id}, key={field_key}): {type(e).__name__}: {e}")
         return FileUploadResult(
             field_key=field_key,
             file_id=None,

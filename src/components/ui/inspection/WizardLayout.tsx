@@ -112,11 +112,15 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     formData.append('field_key', slot.id);
                     formData.append('file', file);
 
-                    await fetch(`${apiUrl}/files/upload`, {
+                    const uploadPromise = fetch(`${apiUrl}/files/upload`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}` },
                         body: formData
                     });
+                    const timeoutPromise = new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('timeout')), 5000)
+                    );
+                    await Promise.race([uploadPromise, timeoutPromise]);
                     console.log(`[Submit] Uploaded photo: ${slot.id}`);
                 } catch (e) {
                     console.warn(`[Submit] Photo upload failed for ${slot.id}:`, e);
