@@ -91,42 +91,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // Build compressed photo map — resize to max 600px, 40% quality for PDF
+        // Photos empty - PDF generated from Bitrix data
         const photoMap: Record<string, string> = {};
         try {
-            const rawPhotos = store.data?.photos || [];
-            const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
-            for (const slot of photoArray as Array<{ id: string; base64: string }>) {
-                if (!slot?.base64?.startsWith('data:image')) continue;
-                try {
-                    const compressed = await new Promise<string>((resolve, reject) => {
-                        const img = new window.Image();
-                        img.onload = () => {
-                            const MAX = 600;
-                            const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
-                            const canvas = document.createElement('canvas');
-                            canvas.width = Math.round(img.width * ratio);
-                            canvas.height = Math.round(img.height * ratio);
-                            const ctx = canvas.getContext('2d')!;
-                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                            // Keep full data URI so backend detects and decodes it
-                            resolve(canvas.toDataURL('image/jpeg', 0.4));
-                        };
-                        img.onerror = reject;
-                        img.src = slot.base64;
-                    });
-                    photoMap[slot.id] = compressed;
-                } catch (e) {
-                    console.warn(`[Submit] Photo compression failed for ${slot.id}:`, e);
-                }
-            }
-            console.log(`[Submit] Compressed ${Object.keys(photoMap).length} photos for PDF`);
-        } catch (e) {
-            console.warn('[Submit] Photo build error:', e);
-        }
-
-        try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
             const res = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
