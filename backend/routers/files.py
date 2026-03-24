@@ -54,6 +54,7 @@ async def upload_file(
     Upload a single file to a specific deal field.
     Validates file type (jpg/png/pdf) and size (<10MB).
     """
+    print(f"[files/upload] handler called: deal_id={deal_id}, field_key={field_key}, filename={file.filename!r}, content_type={file.content_type!r}", flush=True)
     try:
         gateway = request.app.state.gateway
         bitrix_ready = getattr(request.app.state, "bitrix_ready", False)

@@ -58,7 +58,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         }
     };
 
-// Compress a base64 image to max 1280px, 70% quality
+// Compress a base64 image to max 1280px, 70% quality — returns data URL
 async function compressImage(base64: string): Promise<string> {
     return new Promise((resolve) => {
         const img = new Image()
@@ -75,6 +75,19 @@ async function compressImage(base64: string): Promise<string> {
         img.onerror = () => resolve(base64) // fallback: use original
         img.src = base64
     })
+}
+
+// Convert a base64 data URL directly to a Blob — avoids fetch(dataUrl) which
+// can produce a Blob with wrong/empty Content-Type on some mobile browsers,
+// causing Starlette's multipart parser to reject the request with 400 before
+// the route handler even runs.
+function dataUrlToBlob(dataUrl: string): Blob {
+    const [header, b64] = dataUrl.split(',');
+    const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+    const bytes = atob(b64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mime });
 }
 
     const handleSubmit = async (e?: React.MouseEvent) => {
@@ -127,11 +140,10 @@ async function compressImage(base64: string): Promise<string> {
                 let uploaded = 0;
                 for (const slot of photosWithData) {
                     try {
-                        // Compress first
+                        // Compress then convert directly — no fetch(dataUrl) to avoid content-type issues
                         const compressed = await compressImage(slot.base64);
-                        const res = await fetch(compressed);
-                        const blob = await res.blob();
-                        console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB after compression`);
+                        const blob = dataUrlToBlob(compressed);
+                        console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB, type=${blob.type}`);
 
                         const formData = new FormData();
                         formData.append('deal_id', String(dealId));
