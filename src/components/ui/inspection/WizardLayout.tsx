@@ -129,13 +129,13 @@ async function compressImage(base64: string): Promise<string> {
                         const compressed = await compressImage(slot.base64);
                         const res = await fetch(compressed);
                         const blob = await res.blob();
-                        const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
                         console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB after compression`);
 
                         const formData = new FormData();
                         formData.append('deal_id', String(dealId));
                         formData.append('field_key', slot.id);
-                        formData.append('file', file);
+                        // Use 3-arg append to guarantee filename in Content-Disposition on all mobile browsers
+                        formData.append('file', blob, `${slot.id}.jpg`);
 
                         const uploadRes = await fetch(`${apiUrl}/files/upload`, {
                             method: 'POST',
@@ -197,6 +197,7 @@ async function compressImage(base64: string): Promise<string> {
             }, 1500);
 
         } catch (err: any) {
+            console.error('[Submit] FETCH ERROR:', err?.name, err?.message, err);
             setSubmitError(err.message || 'Nieznany błąd');
             setSubmitStatus('error');
             setIsSubmitting(false);

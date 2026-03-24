@@ -88,7 +88,8 @@ async def upload_file(
             success=result.get("success", False),
         )
 
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"❌ Upload HTTPException {e.status_code}: {e.detail} (deal={deal_id}, key={field_key})")
         raise  # let FastAPI handle 400/413/503 normally
     except Exception as e:
         logger.error(f"❌ Upload parse error: {type(e).__name__}: {e}")
