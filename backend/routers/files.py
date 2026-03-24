@@ -23,17 +23,22 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 def _validate_file(file: UploadFile) -> str:
     """
     Validate file type and return the extension.
-    Raises HTTPException on invalid files.
+    Falls back to 'jpg' if filename is missing or has no recognised extension.
     """
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="File has no filename")
-
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type: .{ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
-        )
+        # Attempt to infer from content-type before rejecting
+        ct = (file.content_type or "").lower()
+        if "jpeg" in ct or "jpg" in ct:
+            ext = "jpg"
+        elif "png" in ct:
+            ext = "png"
+        elif "pdf" in ct:
+            ext = "pdf"
+        else:
+            ext = "jpg"  # default for canvas-compressed blobs
+        logger.warning(f"No valid extension in filename '{filename}'; inferred '{ext}' from content-type '{ct}'")
     return ext
 
 
@@ -59,8 +64,9 @@ async def upload_file(
                 detail="Bitrix24 integration not ready",
             )
 
-        # Validate file type
-        _validate_file(file)
+        # Validate file type (never raises — falls back to jpg)
+        ext = _validate_file(file)
+        safe_filename = file.filename or f"{field_key}.{ext}"
 
         # Read file bytes
         file_bytes = await file.read()
@@ -72,12 +78,12 @@ async def upload_file(
                 detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: 10MB.",
             )
 
-        logger.info(f"Uploading file to deal {deal_id}, field_key={field_key}, size={len(file_bytes)}B")
+        logger.info(f"Uploading file to deal {deal_id}, field_key={field_key}, size={len(file_bytes)}B, filename={safe_filename}")
         result = await gateway.upload_file_to_deal(
             deal_id=deal_id,
             field_pwa_key=field_key,
             file_bytes=file_bytes,
-            filename=file.filename,
+            filename=safe_filename,
         )
         logger.info(f"Upload result for {field_key}: {result}")
 
@@ -128,7 +134,8 @@ async def upload_batch(
         fk = keys[idx] if idx < len(keys) else f"file_{idx}"
 
         try:
-            _validate_file(upload_file)
+            ext = _validate_file(upload_file)
+            safe_filename = upload_file.filename or f"{fk}.{ext}"
             file_bytes = await upload_file.read()
 
             if len(file_bytes) > MAX_FILE_SIZE:
@@ -142,7 +149,7 @@ async def upload_batch(
                 deal_id=deal_id,
                 field_pwa_key=fk,
                 file_bytes=file_bytes,
-                filename=upload_file.filename or f"file_{idx}",
+                filename=safe_filename,
             )
 
             return FileUploadResult(
