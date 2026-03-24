@@ -3,10 +3,9 @@
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { ProgressBar } from "./ProgressBar";
 import { Logo } from "@/components/ui/Logo";
-import { ChevronLeft, ChevronRight, Send, Save, LogOut, Home, Cloud, CloudOff, RefreshCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Send, LogOut, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
@@ -25,48 +24,26 @@ const STEPS = [
 ];
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
-    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix, clearInspection, data: currentOrder } = useInspectionStore();
-    const router = useRouter();
+    const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
     const totalSteps = STEPS.length;
-    const [showSaved, setShowSaved] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [syncError, setSyncError] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
 
     // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting
     useEffect(() => {
-        // Never sync while a submit is in progress
+        // Don't sync if already submitting
         if (isSubmitting) return;
 
         const timer = setTimeout(async () => {
-            if (isSubmitting) return;
-            setIsSyncing(true);
-            setSyncError(false);
-            try {
+            if (!isSubmitting) {
                 await syncStepWithBitrix(currentStep);
-                setShowSaved(true);
-                setTimeout(() => setShowSaved(false), 2000);
-            } catch (err) {
-                setSyncError(true);
-            } finally {
-                setIsSyncing(false);
             }
-        }, 1500);
+        }, 2000);
 
         return () => clearTimeout(timer);
     }, [currentStep, syncStepWithBitrix, isSubmitting]);
 
-    // Local Persistence indicator (storage events)
-    useEffect(() => {
-        const handleStorage = () => {
-            setShowSaved(true);
-            setTimeout(() => setShowSaved(false), 1500);
-        };
-        window.addEventListener("storage", handleStorage);
-        return () => window.removeEventListener("storage", handleStorage);
-    }, []);
 
     const next = () => {
         if (currentStep < totalSteps) setStep(currentStep + 1);
@@ -83,6 +60,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     };
 
     const handleSubmit = async (e?: React.MouseEvent) => {
+        console.log('[handleSubmit] FIRED — isSubmitting:', isSubmitting);
         e?.preventDefault();
         e?.stopPropagation();
 
