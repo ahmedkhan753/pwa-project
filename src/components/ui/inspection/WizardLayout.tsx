@@ -58,21 +58,35 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         }
     };
 
-// Compress a base64 image to max 1280px, 70% quality — returns data URL
+// Compress a base64 image — tries progressively harder until under MAX_B64_BYTES
+const MAX_B64_BYTES = 150 * 1024; // 150KB base64 ≈ ~110KB binary
+
 async function compressImage(base64: string): Promise<string> {
     return new Promise((resolve) => {
         const img = new Image()
         img.onload = () => {
-            const MAX = 1280
-            const ratio = Math.min(MAX / img.width, MAX / img.height, 1)
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.round(img.width * ratio)
-            canvas.height = Math.round(img.height * ratio)
-            const ctx = canvas.getContext('2d')!
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-            resolve(canvas.toDataURL('image/jpeg', 0.70))
+            // Try progressively smaller/lower quality until under limit
+            const attempts = [
+                { max: 800, quality: 0.60 },
+                { max: 600, quality: 0.50 },
+                { max: 400, quality: 0.40 },
+            ];
+            for (const { max, quality } of attempts) {
+                const ratio = Math.min(max / img.width, max / img.height, 1)
+                const canvas = document.createElement('canvas')
+                canvas.width = Math.round(img.width * ratio)
+                canvas.height = Math.round(img.height * ratio)
+                const ctx = canvas.getContext('2d')!
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+                const result = canvas.toDataURL('image/jpeg', quality)
+                if (result.length <= MAX_B64_BYTES || quality === 0.40) {
+                    resolve(result)
+                    return
+                }
+            }
+            resolve('') // give up — skip this photo
         }
-        img.onerror = () => resolve(base64) // fallback: use original
+        img.onerror = () => resolve('') // can't load — skip, don't send original
         img.src = base64
     })
 }
@@ -140,31 +154,41 @@ function dataUrlToBlob(dataUrl: string): Blob {
                 let uploaded = 0;
                 for (const slot of photosWithData) {
                     try {
-                        // Compress then send as JSON+base64 — bypasses multipart/form-data
-                        // entirely (avoids python-multipart 400 rejection on some mobile browsers)
                         const compressed = await compressImage(slot.base64);
-                        const b64 = compressed.split(',')[1]; // strip "data:image/jpeg;base64," prefix
-                        console.log(`[Photo] ${slot.id}: ${(b64.length * 0.75 / 1024).toFixed(0)}KB`);
+                        const b64 = compressed.split(',')[1]; // strip data URL prefix
+                        if (!b64) {
+                            console.warn(`[Photo] ${slot.id}: skipped (empty after compression)`);
+                            continue;
+                        }
+                        console.log(`[Photo] ${slot.id}: ${(b64.length * 0.75 / 1024).toFixed(0)}KB (b64 ${(b64.length/1024).toFixed(0)}KB)`);
 
-                        const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                deal_id: Number(dealId),
-                                field_key: slot.id,
-                                file_base64: b64,
-                                filename: `${slot.id}.jpg`
-                            })
-                        });
-                        if (uploadRes.ok) {
-                            uploaded++;
-                            setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
-                        } else {
-                            const errBody = await uploadRes.text().catch(() => '<unreadable>');
-                            console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status} — body: ${errBody.slice(0, 500)}`);
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+                        try {
+                            const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
+                                method: 'POST',
+                                signal: controller.signal,
+                                headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    deal_id: Number(dealId),
+                                    field_key: slot.id,
+                                    file_base64: b64,
+                                    filename: `${slot.id}.jpg`
+                                })
+                            });
+                            clearTimeout(timeout);
+                            if (uploadRes.ok) {
+                                uploaded++;
+                                setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
+                            } else {
+                                const errBody = await uploadRes.text().catch(() => '<unreadable>');
+                                console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status} — ${errBody.slice(0, 300)}`);
+                            }
+                        } finally {
+                            clearTimeout(timeout);
                         }
                     } catch(e) {
                         console.warn(`[Photo] Error for ${slot.id}:`, e);

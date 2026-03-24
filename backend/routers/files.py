@@ -11,6 +11,7 @@ import logging
 from typing import List
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+from starlette.requests import ClientDisconnect
 
 from models.inspection import FileUploadResult, BatchUploadResult
 
@@ -185,6 +186,9 @@ async def upload_file_json(request: Request):
             success=result.get("success", False),
         )
 
+    except ClientDisconnect:
+        logger.warning(f"[upload-json] Client disconnected before body was fully received — body too large for connection?")
+        raise HTTPException(status_code=499, detail="Client disconnected")
     except HTTPException as e:
         logger.error(f"❌ upload-json HTTPException {e.status_code}: {e.detail}")
         raise
