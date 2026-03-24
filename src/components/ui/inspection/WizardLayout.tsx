@@ -91,17 +91,48 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // Photos empty - PDF generated from Bitrix data
-        const photoMap: Record<string, string> = {};
-        try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+        // Upload photos to Bitrix before submit so PDF can fetch them
+        const rawPhotos = store.data?.photos || [];
+        const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
+        const photosToUpload = (photoArray as Array<{ id: string; base64: string }>)
+            .filter(slot => slot?.base64?.startsWith('data:image'));
+
+        if (photosToUpload.length > 0) {
+            setSubmitError('Wysyłanie zdjęć...');
+            for (const slot of photosToUpload) {
+                try {
+                    const fetchResp = await fetch(slot.base64);
+                    const blob = await fetchResp.blob();
+                    const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
+
+                    const formData = new FormData();
+                    formData.append('deal_id', String(dealId));
+                    formData.append('field_key', slot.id);
+                    formData.append('file', file);
+
+                    await fetch(`${apiUrl}/files/upload`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData
+                    });
+                    console.log(`[Submit] Uploaded photo: ${slot.id}`);
+                } catch (e) {
+                    console.warn(`[Submit] Photo upload failed for ${slot.id}:`, e);
+                }
+            }
+            setSubmitError('');
+        }
+
+        try {
             const res = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ deal_id: dealId, photos: photoMap })
+                body: JSON.stringify({ deal_id: dealId, photos: {} })
             });
 
             if (!res.ok) {

@@ -95,53 +95,30 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const handleViewReport = async (e: React.MouseEvent) => {
         e.stopPropagation();
         try {
-            // Try Zustand persisted storage first (same as api.ts getAuthToken)
-            let token: string | null = null;
-            try {
-                const storage = localStorage.getItem('inspection-storage');
-                if (storage) {
-                    const parsed = JSON.parse(storage);
-                    token = parsed.state?.auth?.token || null;
-                }
-            } catch (_) {}
-
-            // Fallback to other possible keys
-            if (!token) token = localStorage.getItem("token");
-            if (!token) token = localStorage.getItem("access_token");
-            if (!token) token = localStorage.getItem("auth_token");
-            if (!token) token = sessionStorage.getItem("token");
-
+            const token = useInspectionStore.getState().auth?.token;
             if (!token) {
                 alert("Brak autoryzacji. Zaloguj się ponownie.");
                 return;
             }
 
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            const response = await fetch(
-                `${apiUrl}/inspection/${job.id}/report`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
+            const url = `${apiUrl}/inspection/${job.id}/report`;
 
-            if (response.status === 401) {
-                alert("Brak autoryzacji. Zaloguj się ponownie.");
-                return;
-            }
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) throw new Error('Failed to fetch PDF');
 
             const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            setTimeout(() => URL.revokeObjectURL(url), 10000);
+            const blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank');
 
-        } catch (error) {
-            console.error('Report error:', error);
+            // Clean up blob URL after 60 seconds
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+
+        } catch (e) {
+            console.error('PDF open error:', e);
             alert('Nie można otworzyć raportu. Spróbuj ponownie.');
         }
     };
