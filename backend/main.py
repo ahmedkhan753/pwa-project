@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -216,15 +217,24 @@ async def bitrix_generic_handler(request: Request, exc: BitrixError):
         content={"error": "bitrix_error", "message": str(exc), "code": exc.error_code},
     )
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logger.error(f"❌ HTTPException {exc.status_code} on {request.method} {request.url.path}: {exc.detail}")
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    body = await request.body()
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8", errors="replace")[:2000]
+    except Exception:
+        body_str = "<unreadable>"
     logger.error(f"422 Unprocessable Entity for {request.url.path}")
     logger.error(f"Validation errors: {exc.errors()}")
-    logger.error(f"Raw body: {body.decode()}")
+    logger.error(f"Raw body (first 2000 chars): {body_str}")
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": body.decode()},
+        content={"detail": exc.errors(), "body": body_str},
     )
 
 @app.exception_handler(Exception)

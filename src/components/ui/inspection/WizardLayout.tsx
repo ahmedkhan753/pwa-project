@@ -163,7 +163,8 @@ function dataUrlToBlob(dataUrl: string): Blob {
                             uploaded++;
                             setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
                         } else {
-                            console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status}`);
+                            const errBody = await uploadRes.text().catch(() => '<unreadable>');
+                            console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status} — body: ${errBody.slice(0, 500)}`);
                         }
                     } catch(e) {
                         console.warn(`[Photo] Error for ${slot.id}:`, e);

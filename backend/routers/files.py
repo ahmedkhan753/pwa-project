@@ -112,6 +112,17 @@ class FileUploadJSON(BaseModel):
     filename: str = "photo.jpg"
 
 
+@router.post("/debug-raw")
+async def debug_raw(request: Request):
+    """Debug: read raw body without Pydantic to confirm route is reachable."""
+    body = await request.body()
+    ct = request.headers.get("content-type", "none")
+    auth = request.headers.get("authorization", "none")[:30]
+    print(f"[debug-raw] ct={ct}, auth_prefix={auth}, body_len={len(body)}", flush=True)
+    logger.info(f"[debug-raw] ct={ct}, body_len={len(body)}")
+    return {"ok": True, "body_len": len(body), "content_type": ct}
+
+
 @router.post("/upload-json", response_model=FileUploadResult)
 async def upload_file_json(request: Request, payload: FileUploadJSON):
     """
