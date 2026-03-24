@@ -145,5 +145,18 @@
   "vinVerification": "UF_CRM_1766057539531",
   "inspector_phone": "UF_CRM_1773961369947",
   "contact_person": "UF_CRM_1766058259960",
-  "contact_phone": "UF_CRM_1766058247125"
+  "contact_phone": "UF_CRM_1766058247125",
+  "photo_diag_front_left": "UF_CRM_1772612004048",
+  "photo_diag_front_right": "UF_CRM_1772612050107",
+  "photo_right_front": "UF_CRM_1772612050107",
+  "photo_right_rear": "UF_CRM_1772612050107",
+  "photo_diag_rear_right": "UF_CRM_1772612079009",
+  "photo_diag_rear_left": "UF_CRM_1772612134646",
+  "photo_left_front": "UF_CRM_1772612134646",
+  "photo_left_rear": "UF_CRM_1772612134646",
+  "photo_cockpit_center": "UF_CRM_1772613474582",
+  "photo_steering_wheel": "UF_CRM_1772613474582",
+  "photo_dashboard_rear": "UF_CRM_1772612231675",
+  "photo_vin": "UF_CRM_1772612153446",
+  "photo_nameplate": "UF_CRM_1772612153446"
 }
