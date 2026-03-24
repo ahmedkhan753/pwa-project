@@ -124,14 +124,34 @@ async def debug_raw(request: Request):
 
 
 @router.post("/upload-json", response_model=FileUploadResult)
-async def upload_file_json(request: Request, payload: FileUploadJSON):
+async def upload_file_json(request: Request):
     """
     POST /files/upload-json
     JSON alternative to /upload — accepts base64-encoded file data.
-    Bypasses multipart parsing entirely (avoids python-multipart 400 bugs).
+    Reads raw body manually to avoid FastAPI's JSON parser raising 400 on large payloads.
     """
-    print(f"[files/upload-json] called: deal_id={payload.deal_id}, field_key={payload.field_key}, filename={payload.filename}", flush=True)
+    import json as _json
+    print(f"[files/upload-json] handler entered", flush=True)
     try:
+        raw = await request.body()
+        print(f"[files/upload-json] body received: {len(raw)} bytes", flush=True)
+        try:
+            data = _json.loads(raw)
+        except Exception as je:
+            logger.error(f"[upload-json] JSON parse error ({len(raw)}B): {je}")
+            logger.error(f"[upload-json] body prefix: {raw[:200]}")
+            raise HTTPException(status_code=400, detail=f"Invalid JSON: {je}")
+
+        deal_id = data.get("deal_id")
+        field_key = data.get("field_key", "")
+        file_base64 = data.get("file_base64", "")
+        filename = data.get("filename", "photo.jpg")
+
+        print(f"[files/upload-json] deal_id={deal_id}, field_key={field_key}, filename={filename}, b64_len={len(file_base64)}", flush=True)
+
+        if not deal_id or not field_key or not file_base64:
+            raise HTTPException(status_code=422, detail="Missing required fields: deal_id, field_key, file_base64")
+
         gateway = request.app.state.gateway
         bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
 
@@ -139,7 +159,7 @@ async def upload_file_json(request: Request, payload: FileUploadJSON):
             raise HTTPException(status_code=503, detail="Bitrix24 integration not ready")
 
         try:
-            file_bytes = base64.b64decode(payload.file_base64)
+            file_bytes = base64.b64decode(file_base64)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid base64 data")
 
@@ -149,17 +169,17 @@ async def upload_file_json(request: Request, payload: FileUploadJSON):
                 detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: 10MB.",
             )
 
-        logger.info(f"[upload-json] Uploading {payload.field_key} to deal {payload.deal_id} — {len(file_bytes)}B")
+        logger.info(f"[upload-json] Uploading {field_key} to deal {deal_id} — {len(file_bytes)}B")
         result = await gateway.upload_file_to_deal(
-            deal_id=payload.deal_id,
-            field_pwa_key=payload.field_key,
+            deal_id=int(deal_id),
+            field_pwa_key=field_key,
             file_bytes=file_bytes,
-            filename=payload.filename,
+            filename=filename,
         )
-        logger.info(f"[upload-json] Result for {payload.field_key}: {result}")
+        logger.info(f"[upload-json] Result for {field_key}: {result}")
 
         return FileUploadResult(
-            field_key=payload.field_key,
+            field_key=field_key,
             file_id=result.get("file_id"),
             url=result.get("url"),
             success=result.get("success", False),
