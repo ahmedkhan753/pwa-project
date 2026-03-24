@@ -155,11 +155,13 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 throw new Error(err.detail || `HTTP ${res.status}`);
             }
 
-            // SUCCESS — delay redirect slightly to let any in-flight ops settle
+            // SUCCESS — show feedback then redirect
             console.log('[handleSubmit] SUCCESS — navigating to dashboard');
+            setSubmitStatus('success');
+            setIsSubmitting(false);
             setTimeout(() => {
                 window.location.href = '/dashboard';
-            }, 100);
+            }, 1500);
 
         } catch (err: any) {
             setSubmitError(err.message || 'Nieznany błąd');
@@ -278,10 +280,13 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 {currentStep === totalSteps ? (
                     <button
                         onClick={handleSubmit}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || submitStatus === 'success'}
                         aria-label="Submit inspection"
                         className={`flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest text-white flex items-center justify-center gap-2 shadow-xl active:scale-[0.95] uppercase ${
-                            isSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500'
+                            isSubmitting ? 'bg-gray-400 cursor-wait' :
+                            submitStatus === 'success' ? 'bg-green-500 cursor-default' :
+                            submitStatus === 'error' ? 'bg-red-500' :
+                            'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500'
                         }`}
                     >
                         {isSubmitting ? (
@@ -289,6 +294,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                 WYSYŁANIE...
                             </>
+                        ) : submitStatus === 'success' ? (
+                            <>✅ Raport wysłany pomyślnie!</>
+                        ) : submitStatus === 'error' ? (
+                            <>❌ Błąd — spróbuj ponownie</>
                         ) : (
                             <>
                                 <Send size={20} className="stroke-[3]" />

@@ -274,10 +274,22 @@ async def get_deal(request: Request, deal_id: int):
         deal.setdefault("TITLE", deal.get("title", ""))
         deal.setdefault("DATE_CREATE", deal.get("date_create", ""))
 
-        # Normalize address/contact fields to the names the review page expects
-        deal.setdefault("inspectionAddress", deal.get("inspection_place", "") or deal.get("inspectionPlace", ""))
-        deal.setdefault("contactPerson", deal.get("contact_person", ""))
-        deal.setdefault("contactPhone", deal.get("contact_phone", ""))
+        # Normalize address/contact fields — read directly from UF_CRM IDs
+        # (transformer maps UF_CRM_1766058194337 → planned_address; contact fields have no mapping)
+        try:
+            raw_crm = await gateway.call("crm.deal.get", {
+                "ID": deal_id,
+                "select": ["UF_CRM_1766058194337", "UF_CRM_1766058259960", "UF_CRM_1766058247125"]
+            })
+            deal["inspectionAddress"] = (raw_crm.get("UF_CRM_1766058194337")
+                                          or deal.get("planned_address")
+                                          or deal.get("inspection_place") or "")
+            deal["contactPerson"] = raw_crm.get("UF_CRM_1766058259960") or deal.get("contact_person") or ""
+            deal["contactPhone"] = raw_crm.get("UF_CRM_1766058247125") or deal.get("contact_phone") or ""
+        except Exception:
+            deal.setdefault("inspectionAddress", deal.get("planned_address") or deal.get("inspection_place") or "")
+            deal.setdefault("contactPerson", deal.get("contact_person") or "")
+            deal.setdefault("contactPhone", deal.get("contact_phone") or "")
 
         # Ensure inspection date fields are present
         date_val = deal.get("inspection_date", "") or deal.get("scheduled_date", "")

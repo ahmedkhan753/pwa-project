@@ -92,34 +92,26 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         }
     };
 
-    const handleViewReport = async (e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleViewReport = async () => {
         try {
-            const token = useInspectionStore.getState().auth?.token;
-            if (!token) {
-                alert("Brak autoryzacji. Zaloguj się ponownie.");
-                return;
-            }
-
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            const url = `${apiUrl}/inspection/${job.id}/report`;
-
-            const response = await fetch(url, {
+            const token = useInspectionStore.getState().auth?.token
+            if (!token) { alert('Sesja wygasła — zaloguj się ponownie'); return }
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+            const res = await fetch(`${apiUrl}/inspection/${job.id}/report`, {
                 headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) throw new Error('Failed to fetch PDF');
-
-            const blob = await response.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            window.open(blobUrl, '_blank');
-
-            // Clean up blob URL after 60 seconds
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-
-        } catch (e) {
-            console.error('PDF open error:', e);
-            alert('Nie można otworzyć raportu. Spróbuj ponownie.');
+            })
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.target = '_blank'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            setTimeout(() => URL.revokeObjectURL(url), 60000)
+        } catch(e: any) {
+            alert(`Nie można otworzyć raportu: ${e.message}`)
         }
     };
 
