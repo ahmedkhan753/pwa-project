@@ -283,48 +283,50 @@ async def submit_inspection(request: Request, data: SubmitRequest):
             # Use inspection data from the request body
             inspection_data = body
 
-            # Extract photo URLs from deal result — Bitrix file fields
-            # return download URLs when fetched via crm.deal.get
+            # ── Source 1: photos already uploaded to Bitrix file fields ──
             photo_urls = []
+            bitrix_base = gateway.webhook_url.split("/rest/")[0]
             for key, value in deal_result.items():
-                if key.startswith("UF_CRM_") and isinstance(value, dict):
-                    # File field: {"id": 123, "url": "https://..."}
-                    url = value.get("url") or value.get("downloadUrl") or value.get("showUrl")
+                if not key.startswith("UF_CRM_"):
+                    continue
+                if isinstance(value, dict):
+                    url = value.get("downloadUrl") or value.get("url") or value.get("showUrl")
                     if url and isinstance(url, str):
-                        # Make absolute URL if relative
-                        if url.startswith("/"):
-                            base = gateway.webhook_url.split("/rest/")[0]
-                            url = f"{base}{url}"
+                        if not url.startswith("http"):
+                            url = f"https://b24-05xr3e.bitrix24.pl{url}"
                         photo_urls.append(url)
-                elif key.startswith("UF_CRM_") and isinstance(value, list):
-                    # Multi-file field
+                elif isinstance(value, list):
                     for item in value:
                         if isinstance(item, dict):
-                            url = item.get("url") or item.get("downloadUrl") or item.get("showUrl")
+                            url = item.get("downloadUrl") or item.get("url") or item.get("showUrl")
                             if url and isinstance(url, str):
-                                if url.startswith("/"):
-                                    base = gateway.webhook_url.split("/rest/")[0]
-                                    url = f"{base}{url}"
+                                if not url.startswith("http"):
+                                    url = f"https://b24-05xr3e.bitrix24.pl{url}"
                                 photo_urls.append(url)
+            logger.info(f"📷 Bitrix file photos: {len(photo_urls)}")
 
-            # Also include any photos from the request body (base64 or URL)
+            # ── Source 2: compressed base64 photos from submit body ──
             body_photos = body.get("photos", {})
+            body_count = 0
             if isinstance(body_photos, dict):
                 for k, v in body_photos.items():
                     if v and isinstance(v, str) and (v.startswith("data:image") or v.startswith("http")):
                         photo_urls.append(v)
+                        body_count += 1
             elif isinstance(body_photos, list):
                 for item in body_photos:
                     if isinstance(item, str) and (item.startswith("data:image") or item.startswith("http")):
                         photo_urls.append(item)
+                        body_count += 1
                     elif isinstance(item, dict):
                         url = item.get("base64") or item.get("url") or item.get("src")
                         if url:
                             photo_urls.append(url)
+                            body_count += 1
+            logger.info(f"📷 Body photos: {body_count} — total for PDF: {len(photo_urls)}")
 
             if photo_urls:
                 inspection_data["photos"] = photo_urls
-                logger.info(f"📷 {len(photo_urls)} photos found for PDF generation")
 
             # Generate PDF bytes
             pdf_bytes = generate_inspection_pdf(deal_info, inspection_data)

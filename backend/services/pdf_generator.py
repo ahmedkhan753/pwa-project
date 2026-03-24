@@ -160,13 +160,28 @@ def section_header(title, w):
 
 
 # ─── Image Loader ─────────────────────────────────────────────
+def load_image_from_source(src: str) -> bytes:
+    """Load raw image bytes from a base64 data URI or HTTP URL."""
+    if src.startswith("data:"):
+        return base64.b64decode(src.split(",", 1)[1])
+    elif src.startswith("http"):
+        try:
+            import httpx
+            response = httpx.get(src, timeout=10, follow_redirects=True)
+            if response.status_code == 200:
+                return response.content
+        except Exception as e:
+            logger.warning(f"Could not fetch image from {src[:80]}: {e}")
+    return b""
+
+
 def load_image(src, max_w, max_h):
     """Load image from URL, base64 data URI, bytes, or file path."""
     try:
-        if isinstance(src, str) and src.startswith("http"):
-            data = http_requests.get(src, timeout=15).content
-        elif isinstance(src, str) and src.startswith("data:"):
-            data = base64.b64decode(src.split(",", 1)[1])
+        if isinstance(src, str) and (src.startswith("http") or src.startswith("data:")):
+            data = load_image_from_source(src)
+            if not data:
+                return None
         elif isinstance(src, (bytes, bytearray)):
             data = src
         else:

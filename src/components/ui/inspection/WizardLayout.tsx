@@ -109,9 +109,14 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 throw new Error(err.detail || `HTTP ${res.status}`);
             }
 
-            // Success — force full page navigation
+            // SUCCESS
+            console.log('[handleSubmit] SUCCESS — navigating to dashboard');
             (window as any).__submitInProgress = false;
-            window.location.href = '/dashboard';
+            try {
+                window.location.href = '/dashboard';
+            } catch(e) {
+                window.location.replace('/dashboard');
+            }
 
         } catch (err: any) {
             setSubmitError(err.message || 'Nieznany błąd');
