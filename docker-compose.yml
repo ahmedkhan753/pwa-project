@@ -13,6 +13,11 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pwa_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
@@ -36,7 +41,8 @@ services:
     volumes:
       - backend_data:/app/data
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     dns:
       - 8.8.8.8
       - 8.8.4.4
