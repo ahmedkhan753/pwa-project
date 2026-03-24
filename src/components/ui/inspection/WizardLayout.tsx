@@ -140,21 +140,24 @@ function dataUrlToBlob(dataUrl: string): Blob {
                 let uploaded = 0;
                 for (const slot of photosWithData) {
                     try {
-                        // Compress then convert directly — no fetch(dataUrl) to avoid content-type issues
+                        // Compress then send as JSON+base64 — bypasses multipart/form-data
+                        // entirely (avoids python-multipart 400 rejection on some mobile browsers)
                         const compressed = await compressImage(slot.base64);
-                        const blob = dataUrlToBlob(compressed);
-                        console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB, type=${blob.type}`);
+                        const b64 = compressed.split(',')[1]; // strip "data:image/jpeg;base64," prefix
+                        console.log(`[Photo] ${slot.id}: ${(b64.length * 0.75 / 1024).toFixed(0)}KB`);
 
-                        const formData = new FormData();
-                        formData.append('deal_id', String(dealId));
-                        formData.append('field_key', slot.id);
-                        // Use 3-arg append to guarantee filename in Content-Disposition on all mobile browsers
-                        formData.append('file', blob, `${slot.id}.jpg`);
-
-                        const uploadRes = await fetch(`${apiUrl}/files/upload`, {
+                        const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
                             method: 'POST',
-                            headers: { 'Authorization': `Bearer ${token}` },
-                            body: formData
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                deal_id: Number(dealId),
+                                field_key: slot.id,
+                                file_base64: b64,
+                                filename: `${slot.id}.jpg`
+                            })
                         });
                         if (uploadRes.ok) {
                             uploaded++;

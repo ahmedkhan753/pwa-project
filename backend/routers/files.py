@@ -6,9 +6,11 @@ Validates file type (jpg/png/pdf) and size (<10MB).
 """
 
 import asyncio
+import base64
 import logging
 from typing import List
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 
 from models.inspection import FileUploadResult, BatchUploadResult
 
@@ -101,6 +103,63 @@ async def upload_file(
     except Exception as e:
         logger.error(f"❌ Upload parse error: {type(e).__name__}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class FileUploadJSON(BaseModel):
+    deal_id: int
+    field_key: str
+    file_base64: str          # raw base64 string (no data: prefix)
+    filename: str = "photo.jpg"
+
+
+@router.post("/upload-json", response_model=FileUploadResult)
+async def upload_file_json(request: Request, payload: FileUploadJSON):
+    """
+    POST /files/upload-json
+    JSON alternative to /upload — accepts base64-encoded file data.
+    Bypasses multipart parsing entirely (avoids python-multipart 400 bugs).
+    """
+    print(f"[files/upload-json] called: deal_id={payload.deal_id}, field_key={payload.field_key}, filename={payload.filename}", flush=True)
+    try:
+        gateway = request.app.state.gateway
+        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+
+        if not bitrix_ready:
+            raise HTTPException(status_code=503, detail="Bitrix24 integration not ready")
+
+        try:
+            file_bytes = base64.b64decode(payload.file_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 data")
+
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: 10MB.",
+            )
+
+        logger.info(f"[upload-json] Uploading {payload.field_key} to deal {payload.deal_id} — {len(file_bytes)}B")
+        result = await gateway.upload_file_to_deal(
+            deal_id=payload.deal_id,
+            field_pwa_key=payload.field_key,
+            file_bytes=file_bytes,
+            filename=payload.filename,
+        )
+        logger.info(f"[upload-json] Result for {payload.field_key}: {result}")
+
+        return FileUploadResult(
+            field_key=payload.field_key,
+            file_id=result.get("file_id"),
+            url=result.get("url"),
+            success=result.get("success", False),
+        )
+
+    except HTTPException as e:
+        logger.error(f"❌ upload-json HTTPException {e.status_code}: {e.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"❌ upload-json error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/upload-batch", response_model=BatchUploadResult)
