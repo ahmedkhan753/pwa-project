@@ -32,13 +32,11 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
     // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting
     useEffect(() => {
-        // Don't sync if already submitting
         if (isSubmitting) return;
 
         const timer = setTimeout(async () => {
-            if (!isSubmitting) {
-                await syncStepWithBitrix(currentStep);
-            }
+            if ((window as any).__submitInProgress) return;
+            await syncStepWithBitrix(currentStep);
         }, 2000);
 
         return () => clearTimeout(timer);
@@ -66,6 +64,11 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
         // Guard: prevent double-submit
         if (isSubmitting) return;
+
+        // Kill any in-flight auto-sync before submitting
+        if (typeof window !== 'undefined') {
+            (window as any).__submitInProgress = true;
+        }
 
         setIsSubmitting(true);
         setSubmitStatus('idle');
@@ -104,8 +107,9 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 throw new Error(err.detail || `HTTP ${res.status}`);
             }
 
-            // Redirect immediately on success — don't touch store before navigation
-            window.location.replace('/dashboard');
+            // Success — force full page navigation
+            (window as any).__submitInProgress = false;
+            window.location.href = '/dashboard';
 
         } catch (err: any) {
             setSubmitError(err.message || 'Nieznany błąd');

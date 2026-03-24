@@ -41,6 +41,7 @@ async def get_inspection_report(
         # Try to serve already-uploaded PDF from Bitrix first
         pdf_field = deal.get("UF_CRM_1772801617")
         if pdf_field:
+            logger.info(f"PDF field content for deal {deal_id}: {pdf_field}")
             try:
                 file_info = pdf_field[0] if isinstance(pdf_field, list) else pdf_field
                 if isinstance(file_info, dict):
@@ -48,8 +49,13 @@ async def get_inspection_report(
                         file_info.get("downloadUrl") or
                         file_info.get("DOWNLOAD_URL") or
                         file_info.get("urlDownload") or
-                        file_info.get("url")
+                        file_info.get("url") or
+                        file_info.get("URL") or
+                        ""
                     )
+                    # Ensure URL has protocol (Bitrix sometimes returns relative paths)
+                    if download_url and not download_url.startswith("http"):
+                        download_url = f"https://b24-05xr3e.bitrix24.pl{download_url}"
                     if download_url:
                         import httpx as httpx_client
                         async with httpx_client.AsyncClient(timeout=30) as client:
