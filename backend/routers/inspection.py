@@ -33,6 +33,14 @@ async def get_inspection_report(
 ):
     """Stream PDF report — serves already-uploaded Bitrix PDF first, falls back to generation."""
     gateway = request.app.state.gateway
+    # Extract Bitrix auth token from webhook URL (format: .../rest/USER_ID/TOKEN/)
+    bitrix_auth_token = ""
+    try:
+        webhook_parts = gateway.webhook_url.rstrip("/").split("/")
+        bitrix_auth_token = webhook_parts[-1] if webhook_parts else ""
+    except Exception:
+        pass
+
     try:
         deal = await gateway.call("crm.deal.get", {"id": deal_id})
         if not deal:
@@ -58,8 +66,12 @@ async def get_inspection_report(
                         download_url = f"https://b24-05xr3e.bitrix24.pl{download_url}"
                     if download_url:
                         import httpx as httpx_client
+                        # Pass Bitrix auth token so internal download URLs work
+                        headers = {}
+                        if bitrix_auth_token:
+                            headers["Authorization"] = f"Bearer {bitrix_auth_token}"
                         async with httpx_client.AsyncClient(timeout=30) as client:
-                            resp = await client.get(download_url)
+                            resp = await client.get(download_url, headers=headers)
                             if resp.status_code == 200:
                                 logger.info(f"✅ Serving uploaded PDF for deal {deal_id}")
                                 return Response(
@@ -67,22 +79,30 @@ async def get_inspection_report(
                                     media_type="application/pdf",
                                     headers={"Content-Disposition": f"inline; filename=report_{deal_id}.pdf"}
                                 )
+                            else:
+                                logger.warning(f"Bitrix PDF download returned {resp.status_code} — falling back to generation")
             except Exception as e:
                 logger.warning(f"Could not fetch uploaded PDF: {e}, falling back to generation")
 
-        # Fallback: generate fresh PDF
+        # Fallback: generate fresh PDF with deal data
         logger.info(f"Generating report for deal {deal_id}")
         deal_info = {
             "title": deal.get("TITLE", f"Zlecenie #{deal_id}"),
+            "order_number": f"Zlecenie nr. {deal_id} - {deal.get('TITLE', '')}",
             "company_name": deal.get("UF_CRM_1766057964319", ""),
             "client_name": deal.get("UF_CRM_1766057941327", ""),
             "inspection_place": deal.get("UF_CRM_1766058185504", ""),
             "inspection_date": deal.get("UF_CRM_1772108256983", ""),
             "inspector_name": current_user.get("name", ""),
+            "plates": deal.get("UF_CRM_1766057515315", ""),
+            "make": deal.get("UF_CRM_1766057839684", ""),
+            "model": deal.get("UF_CRM_1766057849818", ""),
+            "vin": deal.get("UF_CRM_1766057539531", ""),
+            "year": deal.get("UF_CRM_1766057572300", ""),
         }
 
         from services.pdf_generator import generate_inspection_pdf
-        pdf_bytes = generate_inspection_pdf(deal_info, {}, {})
+        pdf_bytes = generate_inspection_pdf(deal_info, deal_info)
 
         logger.info(f"✅ Report generated for deal {deal_id} ({len(pdf_bytes)} bytes)")
 
@@ -250,6 +270,13 @@ async def submit_inspection(request: Request, data: SubmitRequest):
     # Use the validated data model and get full body from model_dump()
     deal_id = data.deal_id
     body = data.model_dump()
+
+    # Extract signatures from submit body (extra fields via ConfigDict extra="allow")
+    summary_from_body = body.get("finalSummary", {})
+    if summary_from_body and isinstance(summary_from_body, dict):
+        logger.info(f"✅ Signatures received: {[k for k, v in summary_from_body.items() if v]}")
+    else:
+        logger.warning("⚠️ No signatures in submit body")
 
     logger.info(f"🚀 Submit received — deal_id: {data.deal_id}, photos: {len(data.photos)}")
 

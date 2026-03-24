@@ -265,14 +265,24 @@ async def get_deal(request: Request, deal_id: int):
 
     try:
         deal = await gateway.get_deal(deal_id=deal_id)
-        # Ensure date fields are explicitly available for the frontend mapping
-        date_val = deal.get("UF_CRM_1772108256983", "") or deal.get("inspection_date", "") or deal.get("scheduled_date", "")
-        if "inspection_date" not in deal:
-            deal["inspection_date"] = date_val
-        if "scheduled_date" not in deal:
-            deal["scheduled_date"] = date_val
 
+        # Inject status from stage_id (system fields are lowercased by transform_from_bitrix)
+        stage_id = deal.get("stage_id") or deal.get("STAGE_ID") or "NEW"
+        deal["status"] = STAGE_STATUS_MAP.get(stage_id.upper() if stage_id else "NEW", "new")
 
+        # Add uppercase aliases so both old and new page code works
+        deal.setdefault("TITLE", deal.get("title", ""))
+        deal.setdefault("DATE_CREATE", deal.get("date_create", ""))
+
+        # Normalize address/contact fields to the names the review page expects
+        deal.setdefault("inspectionAddress", deal.get("inspection_place", "") or deal.get("inspectionPlace", ""))
+        deal.setdefault("contactPerson", deal.get("contact_person", ""))
+        deal.setdefault("contactPhone", deal.get("contact_phone", ""))
+
+        # Ensure inspection date fields are present
+        date_val = deal.get("inspection_date", "") or deal.get("scheduled_date", "")
+        deal.setdefault("inspection_date", date_val)
+        deal.setdefault("scheduled_date", date_val)
 
         return deal
     except Exception as e:

@@ -129,6 +129,17 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             setSubmitError('');
         }
 
+        // Collect signatures from store before submitting
+        const storeData = useInspectionStore.getState().data;
+        const finalSummary = storeData?.finalSummary || {};
+        const sigPayload = {
+            signatureAppraiser: finalSummary.signatureAppraiser || '',
+            signatureClient: finalSummary.signatureClient || '',
+            signatureYard: finalSummary.signatureYard || '',
+            vinConfirmed: finalSummary.vinConfirmed || false,
+        };
+        console.log('[Submit] Signatures:', Object.entries(sigPayload).filter(([, v]) => v).map(([k]) => k));
+
         try {
             const res = await fetch(`${apiUrl}/inspection/submit`, {
                 method: 'POST',
@@ -136,7 +147,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ deal_id: dealId, photos: {} })
+                body: JSON.stringify({ deal_id: dealId, photos: {}, finalSummary: sigPayload })
             });
 
             if (!res.ok) {
@@ -144,14 +155,11 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 throw new Error(err.detail || `HTTP ${res.status}`);
             }
 
-            // SUCCESS
+            // SUCCESS — delay redirect slightly to let any in-flight ops settle
             console.log('[handleSubmit] SUCCESS — navigating to dashboard');
-            (window as any).__submitInProgress = false;
-            try {
+            setTimeout(() => {
                 window.location.href = '/dashboard';
-            } catch(e) {
-                window.location.replace('/dashboard');
-            }
+            }, 100);
 
         } catch (err: any) {
             setSubmitError(err.message || 'Nieznany błąd');
