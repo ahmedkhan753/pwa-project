@@ -95,23 +95,37 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const handleViewReport = async () => {
         try {
             const token = useInspectionStore.getState().auth?.token
-            if (!token) { alert('Sesja wygasła — zaloguj się ponownie'); return }
+            if (!token) { alert('Sesja wygasła'); return }
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+            // Show loading
+            const btn = document.activeElement as HTMLButtonElement
+            if (btn) btn.disabled = true
+
             const res = await fetch(`${apiUrl}/inspection/${job.id}/report`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
-            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+            if (!res.ok) throw new Error(`Błąd serwera: ${res.status}`)
+
             const blob = await res.blob()
             const url = URL.createObjectURL(blob)
+
+            // Use anchor click — works better than window.open
             const a = document.createElement('a')
             a.href = url
             a.target = '_blank'
+            a.rel = 'noopener'
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
             setTimeout(() => URL.revokeObjectURL(url), 60000)
         } catch(e: any) {
+            console.error('PDF error:', e)
             alert(`Nie można otworzyć raportu: ${e.message}`)
+        } finally {
+            const btn = document.activeElement as HTMLButtonElement
+            if (btn) btn.disabled = false
         }
     };
 

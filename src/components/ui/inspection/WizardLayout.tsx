@@ -57,6 +57,25 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         }
     };
 
+// Compress a base64 image to max 1280px, 70% quality
+async function compressImage(base64: string): Promise<string> {
+    return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+            const MAX = 1280
+            const ratio = Math.min(MAX / img.width, MAX / img.height, 1)
+            const canvas = document.createElement('canvas')
+            canvas.width = Math.round(img.width * ratio)
+            canvas.height = Math.round(img.height * ratio)
+            const ctx = canvas.getContext('2d')!
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            resolve(canvas.toDataURL('image/jpeg', 0.70))
+        }
+        img.onerror = () => resolve(base64) // fallback: use original
+        img.src = base64
+    })
+}
+
     const handleSubmit = async (e?: React.MouseEvent) => {
         console.log('[handleSubmit] FIRED — isSubmitting:', isSubmitting);
         e?.preventDefault();
@@ -93,40 +112,45 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-        // Upload photos to Bitrix before submit so PDF can fetch them
+        // Compress and upload photos before submit
         const rawPhotos = store.data?.photos || [];
         const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
-        const photosToUpload = (photoArray as Array<{ id: string; base64: string }>)
+        const photosWithData = (photoArray as Array<{id: string; base64: string}>)
             .filter(slot => slot?.base64?.startsWith('data:image'));
 
-        if (photosToUpload.length > 0) {
-            setSubmitError('Wysyłanie zdjęć...');
-            for (const slot of photosToUpload) {
+        if (photosWithData.length > 0) {
+            setSubmitError(`Kompresowanie i wysyłanie ${photosWithData.length} zdjęć...`);
+            let uploaded = 0;
+            for (const slot of photosWithData) {
                 try {
-                    const fetchResp = await fetch(slot.base64);
-                    const blob = await fetchResp.blob();
+                    // Compress first
+                    const compressed = await compressImage(slot.base64);
+                    const res = await fetch(compressed);
+                    const blob = await res.blob();
                     const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
+                    console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB after compression`);
 
                     const formData = new FormData();
                     formData.append('deal_id', String(dealId));
                     formData.append('field_key', slot.id);
                     formData.append('file', file);
 
-                    const uploadPromise = fetch(`${apiUrl}/files/upload`, {
+                    const uploadRes = await fetch(`${apiUrl}/files/upload`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}` },
                         body: formData
                     });
-                    const timeoutPromise = new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('timeout')), 5000)
-                    );
-                    await Promise.race([uploadPromise, timeoutPromise]);
-                    console.log(`[Submit] Uploaded photo: ${slot.id}`);
-                } catch (e) {
-                    console.warn(`[Submit] Photo upload failed for ${slot.id}:`, e);
+                    if (uploadRes.ok) {
+                        uploaded++;
+                        setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
+                    } else {
+                        console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status}`);
+                    }
+                } catch(e) {
+                    console.warn(`[Photo] Error for ${slot.id}:`, e);
                 }
             }
-            setSubmitError('');
+            setSubmitError(''); // clear before submit
         }
 
         // Collect signatures from store before submitting
@@ -160,7 +184,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             setSubmitStatus('success');
             setIsSubmitting(false);
             setTimeout(() => {
-                window.location.href = '/dashboard';
+                window.location.replace('/dashboard');
             }, 1500);
 
         } catch (err: any) {
@@ -316,6 +340,11 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                     </button>
                 )}
                 </div>
+
+                {/* Upload progress feedback */}
+                {isSubmitting && submitError && (
+                    <p className="mt-2 text-center text-xs text-muted font-medium">{submitError}</p>
+                )}
 
                 {/* Submit error feedback */}
                 {submitStatus === 'error' && (
