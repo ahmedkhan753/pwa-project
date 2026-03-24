@@ -119,7 +119,8 @@ const realApi = {
     const form = new FormData()
     form.append('deal_id', dealId)
     form.append('field_key', fieldKey)
-    form.append('file', file)
+    // Use blob+filename to guarantee Content-Disposition filename on all mobile browsers
+    form.append('file', file, file.name)
     const res = await authFetch(`${BASE_URL}/files/upload`, {
       method: 'POST',
       headers: authHeaders(),

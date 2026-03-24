@@ -1,6 +1,7 @@
 "use client";
 
 import { useInspectionStore } from "@/store/useInspectionStore";
+import { api } from "@/lib/api";
 import { ProgressBar } from "./ProgressBar";
 import { Logo } from "@/components/ui/Logo";
 import { ChevronLeft, ChevronRight, Send, LogOut, Home } from "lucide-react";
@@ -111,6 +112,7 @@ async function compressImage(base64: string): Promise<string> {
         }
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        console.log('[Submit] apiUrl:', apiUrl);
 
         // Compress and upload photos before submit
         const rawPhotos = store.data?.photos || [];
@@ -160,7 +162,7 @@ async function compressImage(base64: string): Promise<string> {
         }
 
         // ALWAYS reaches here regardless of photo upload outcome
-        console.log('[Submit] Starting submit POST...');
+        console.log('[Submit] Starting submit POST via api.submitInspection...');
 
         // Collect signatures from store before submitting
         const storeData = useInspectionStore.getState().data;
@@ -174,19 +176,12 @@ async function compressImage(base64: string): Promise<string> {
         console.log('[Submit] Signatures:', Object.entries(sigPayload).filter(([, v]) => v).map(([k]) => k));
 
         try {
-            const res = await fetch(`${apiUrl}/inspection/submit`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ deal_id: dealId, photos: {}, finalSummary: sigPayload })
+            // Use the shared api client (same BASE_URL + authFetch as all working calls)
+            await api.submitInspection(String(dealId), {
+                deal_id: dealId,
+                photos: {},
+                finalSummary: sigPayload
             });
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || `HTTP ${res.status}`);
-            }
 
             // SUCCESS — show feedback then redirect
             console.log('[handleSubmit] SUCCESS — navigating to dashboard');
@@ -197,7 +192,7 @@ async function compressImage(base64: string): Promise<string> {
             }, 1500);
 
         } catch (err: any) {
-            console.error('[Submit] FETCH ERROR:', err?.name, err?.message, err);
+            console.error('[Submit] ERROR:', err?.name, err?.message, err);
             setSubmitError(err.message || 'Nieznany błąd');
             setSubmitStatus('error');
             setIsSubmitting(false);
