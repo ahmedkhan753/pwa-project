@@ -118,40 +118,49 @@ async function compressImage(base64: string): Promise<string> {
         const photosWithData = (photoArray as Array<{id: string; base64: string}>)
             .filter(slot => slot?.base64?.startsWith('data:image'));
 
-        if (photosWithData.length > 0) {
-            setSubmitError(`Kompresowanie i wysyłanie ${photosWithData.length} zdjęć...`);
-            let uploaded = 0;
-            for (const slot of photosWithData) {
-                try {
-                    // Compress first
-                    const compressed = await compressImage(slot.base64);
-                    const res = await fetch(compressed);
-                    const blob = await res.blob();
-                    const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
-                    console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB after compression`);
+        // Photo upload phase (non-blocking — entire phase is guarded)
+        try {
+            if (photosWithData.length > 0) {
+                setSubmitError(`Kompresowanie i wysyłanie ${photosWithData.length} zdjęć...`);
+                let uploaded = 0;
+                for (const slot of photosWithData) {
+                    try {
+                        // Compress first
+                        const compressed = await compressImage(slot.base64);
+                        const res = await fetch(compressed);
+                        const blob = await res.blob();
+                        const file = new File([blob], `${slot.id}.jpg`, { type: 'image/jpeg' });
+                        console.log(`[Photo] ${slot.id}: ${(blob.size/1024).toFixed(0)}KB after compression`);
 
-                    const formData = new FormData();
-                    formData.append('deal_id', String(dealId));
-                    formData.append('field_key', slot.id);
-                    formData.append('file', file);
+                        const formData = new FormData();
+                        formData.append('deal_id', String(dealId));
+                        formData.append('field_key', slot.id);
+                        formData.append('file', file);
 
-                    const uploadRes = await fetch(`${apiUrl}/files/upload`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${token}` },
-                        body: formData
-                    });
-                    if (uploadRes.ok) {
-                        uploaded++;
-                        setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
-                    } else {
-                        console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status}`);
+                        const uploadRes = await fetch(`${apiUrl}/files/upload`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` },
+                            body: formData
+                        });
+                        if (uploadRes.ok) {
+                            uploaded++;
+                            setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
+                        } else {
+                            console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status}`);
+                        }
+                    } catch(e) {
+                        console.warn(`[Photo] Error for ${slot.id}:`, e);
                     }
-                } catch(e) {
-                    console.warn(`[Photo] Error for ${slot.id}:`, e);
                 }
+                setSubmitError('');
             }
-            setSubmitError(''); // clear before submit
+        } catch (photoErr) {
+            console.warn('[Submit] Photo upload phase failed:', photoErr);
+            setSubmitError(''); // ensure cleared so submit can proceed
         }
+
+        // ALWAYS reaches here regardless of photo upload outcome
+        console.log('[Submit] Starting submit POST...');
 
         // Collect signatures from store before submitting
         const storeData = useInspectionStore.getState().data;

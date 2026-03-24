@@ -49,29 +49,29 @@ async def upload_file(
     Upload a single file to a specific deal field.
     Validates file type (jpg/png/pdf) and size (<10MB).
     """
-    gateway = request.app.state.gateway
-    bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
-
-    if not bitrix_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Bitrix24 integration not ready",
-        )
-
-    # Validate file type
-    _validate_file(file)
-
-    # Read file bytes
-    file_bytes = await file.read()
-
-    # Validate file size
-    if len(file_bytes) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: 10MB.",
-        )
-
     try:
+        gateway = request.app.state.gateway
+        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+
+        if not bitrix_ready:
+            raise HTTPException(
+                status_code=503,
+                detail="Bitrix24 integration not ready",
+            )
+
+        # Validate file type
+        _validate_file(file)
+
+        # Read file bytes
+        file_bytes = await file.read()
+
+        # Validate file size
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: 10MB.",
+            )
+
         logger.info(f"Uploading file to deal {deal_id}, field_key={field_key}, size={len(file_bytes)}B")
         result = await gateway.upload_file_to_deal(
             deal_id=deal_id,
@@ -88,15 +88,11 @@ async def upload_file(
             success=result.get("success", False),
         )
 
+    except HTTPException:
+        raise  # let FastAPI handle 400/413/503 normally
     except Exception as e:
-        logger.error(f"File upload failed (deal={deal_id}, key={field_key}): {type(e).__name__}: {e}")
-        return FileUploadResult(
-            field_key=field_key,
-            file_id=None,
-            url=None,
-            success=False,
-            error=str(e),
-        )
+        logger.error(f"❌ Upload parse error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/upload-batch", response_model=BatchUploadResult)
