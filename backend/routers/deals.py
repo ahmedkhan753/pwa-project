@@ -279,17 +279,29 @@ async def get_deal(request: Request, deal_id: int):
         try:
             raw_crm = await gateway.call("crm.deal.get", {
                 "ID": deal_id,
-                "select": ["UF_CRM_1766058194337", "UF_CRM_1766058259960", "UF_CRM_1766058247125"]
+                "select": [
+                    "UF_CRM_1766058194337", "UF_CRM_1766058259960", "UF_CRM_1766058247125",
+                    "UF_CRM_1766057539531",  # VIN
+                    "UF_CRM_1766057515315",  # registration plates
+                ]
             })
             deal["inspectionAddress"] = (raw_crm.get("UF_CRM_1766058194337")
                                           or deal.get("planned_address")
                                           or deal.get("inspection_place") or "")
             deal["contactPerson"] = raw_crm.get("UF_CRM_1766058259960") or deal.get("contact_person") or ""
             deal["contactPhone"] = raw_crm.get("UF_CRM_1766058247125") or deal.get("contact_phone") or ""
+            # VIN and plates — override transform result (reverse mapping collision)
+            vin_raw = raw_crm.get("UF_CRM_1766057539531") or ""
+            if str(vin_raw).strip() not in ("0", "None", ""):
+                deal["vin"] = str(vin_raw).strip()
+            deal.setdefault("vin", "")
+            deal["registration_number"] = raw_crm.get("UF_CRM_1766057515315") or deal.get("registration_number") or ""
         except Exception:
             deal.setdefault("inspectionAddress", deal.get("planned_address") or deal.get("inspection_place") or "")
             deal.setdefault("contactPerson", deal.get("contact_person") or "")
             deal.setdefault("contactPhone", deal.get("contact_phone") or "")
+            deal.setdefault("vin", "")
+            deal.setdefault("registration_number", "")
 
         # Ensure inspection date fields are present
         date_val = deal.get("inspection_date", "") or deal.get("scheduled_date", "")

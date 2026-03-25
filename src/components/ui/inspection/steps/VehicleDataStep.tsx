@@ -162,7 +162,7 @@ export function VehicleDataStep() {
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <FormField label="Nr rejestracyjny" value={v.registrationPlates} onChange={(val) => handleChange('registrationPlates', val)} placeholder="XX 12345" />
+                    <FormField label="Nr rejestracyjny" value={v.registrationPlates} onChange={(val) => handleChange('registrationPlates', val.toUpperCase())} placeholder="XX 12345" />
                     
                     {/* Brand — datalist with free text */}
                     <div>
