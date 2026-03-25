@@ -37,6 +37,11 @@ export default function ReviewInspectionPage() {
       alert("Brak autoryzacji. Zaloguj się ponownie.")
       return
     }
+
+    // Open window synchronously before async fetch — preserves user interaction context
+    // so mobile browsers (iOS Safari) don't block it as a popup
+    const win = window.open('', '_blank')
+
     fetch(`${BASE_URL}/inspection/${dealId}/report`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -46,10 +51,15 @@ export default function ReviewInspectionPage() {
       })
       .then(blob => {
         const url = URL.createObjectURL(blob)
-        window.open(url, '_blank')
-        setTimeout(() => URL.revokeObjectURL(url), 10000)
+        if (win) {
+          win.location.href = url
+        } else {
+          window.location.href = url
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
       })
       .catch(err => {
+        win?.close()
         console.error('Report error:', err)
         alert('Nie można otworzyć raportu. Spróbuj ponownie.')
       })

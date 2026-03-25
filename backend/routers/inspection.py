@@ -337,24 +337,12 @@ async def submit_inspection(request: Request, data: SubmitRequest):
                     url = _re.sub(r'auth=[^&]*', f'auth={bitrix_auth_token}', url)
                 return url
 
-            # ── Source 1: photos already uploaded to Bitrix file fields ──
+            # ── Source 1: skip Bitrix HTTP file URLs ──
+            # show_file.php requires a user session token — the webhook key does NOT work.
+            # All Bitrix photo URLs return text/html (login page), creating empty boxes in PDF.
+            # The base64 photos from the submit body are the reliable source.
             photo_urls = []
-            for key, value in deal_result.items():
-                if not key.startswith("UF_CRM_"):
-                    continue
-                if key == PDF_FIELD_KEY:  # skip — this is the PDF field, not a photo
-                    continue
-                if isinstance(value, dict):
-                    url = value.get("downloadUrl") or value.get("url") or value.get("showUrl")
-                    if url and isinstance(url, str):
-                        photo_urls.append(_fix_bitrix_url(url))
-                elif isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, dict):
-                            url = item.get("downloadUrl") or item.get("url") or item.get("showUrl")
-                            if url and isinstance(url, str):
-                                photo_urls.append(_fix_bitrix_url(url))
-            logger.info(f"📷 Bitrix file photos: {len(photo_urls)}")
+            logger.info(f"📷 Bitrix file photos: skipped (auth not supported for show_file.php)")
 
             # ── Source 2: compressed base64 photos from submit body ──
             body_photos = body.get("photos", {})
