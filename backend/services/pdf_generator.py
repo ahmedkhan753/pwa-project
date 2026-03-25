@@ -168,10 +168,14 @@ def load_image_from_source(src: str) -> bytes:
         try:
             import httpx
             response = httpx.get(src, timeout=10, follow_redirects=True)
-            if response.status_code == 200:
+            ct = response.headers.get("content-type", "")
+            logger.info(f"[PDF img] {src[:100]} → {response.status_code}, content-type={ct}, size={len(response.content)}B")
+            if response.status_code == 200 and "image" in ct:
                 return response.content
+            elif response.status_code == 200:
+                logger.warning(f"[PDF img] Non-image response ({ct}) — skipping")
         except Exception as e:
-            logger.warning(f"Could not fetch image from {src[:80]}: {e}")
+            logger.warning(f"[PDF img] Fetch failed for {src[:80]}: {e}")
     return b""
 
 
@@ -194,7 +198,7 @@ def load_image(src, max_w, max_h):
         img.drawHeight = img.imageHeight * ratio
         return img
     except Exception as e:
-        logger.debug(f"Image load failed: {e}")
+        logger.warning(f"[PDF img] Image load failed: {e}")
         return None
 
 
