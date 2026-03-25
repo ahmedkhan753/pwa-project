@@ -150,6 +150,8 @@ function dataUrlToBlob(dataUrl: string): Blob {
         // Photo upload phase (non-blocking — entire phase is guarded)
         // NOTE: No setSubmitError calls inside the loop — React re-renders during the
         // animated spinner cause insertBefore DOM crashes. Use console.log only.
+        // Collect compressed data URLs for PDF generation (avoids re-downloading from Bitrix).
+        const uploadedPhotoData: Record<string, string> = {};
         try {
             if (photosWithData.length > 0) {
                 console.log(`[Submit] Uploading ${photosWithData.length} photos...`);
@@ -192,6 +194,8 @@ function dataUrlToBlob(dataUrl: string): Blob {
                                 if (uploadRes.ok) {
                                     uploadOk = true;
                                     uploaded++;
+                                    // Keep compressed data URL for PDF (avoids downloading from Bitrix)
+                                    uploadedPhotoData[slot.id] = compressed;
                                     console.log(`[Photo] ${slot.id}: uploaded OK (${uploaded}/${photosWithData.length})`);
                                 } else {
                                     const errBody = await uploadRes.text().catch(() => '<unreadable>');
@@ -230,7 +234,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
             // Use the shared api client (same BASE_URL + authFetch as all working calls)
             await api.submitInspection(String(dealId), {
                 deal_id: dealId,
-                photos: {},
+                photos: uploadedPhotoData,  // pass compressed data URLs for PDF generation
                 finalSummary: sigPayload
             });
 
