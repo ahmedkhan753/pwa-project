@@ -280,9 +280,22 @@ async def get_deal(request: Request, deal_id: int):
             raw_crm = await gateway.call("crm.deal.get", {
                 "ID": deal_id,
                 "select": [
-                    "UF_CRM_1766058194337", "UF_CRM_1766058259960", "UF_CRM_1766058247125",
+                    "UF_CRM_1766058194337",  # address
+                    "UF_CRM_1766058259960",  # contact person
+                    "UF_CRM_1766058247125",  # contact phone
                     "UF_CRM_1766057539531",  # VIN
                     "UF_CRM_1766057515315",  # registration plates
+                    "UF_CRM_1766057839684",  # vehicle brand
+                    "UF_CRM_1766057849818",  # vehicle model
+                    "UF_CRM_1766057572300",  # production year
+                    "UF_CRM_1772534309693",  # mileage
+                    "UF_CRM_1772534410706",  # vehicle color
+                    "UF_CRM_1772534081105",  # engine capacity
+                    "UF_CRM_1772534094039",  # engine power
+                    "UF_CRM_1772534193",     # fuel type
+                    "UF_CRM_1772796562336",  # body type
+                    "UF_CRM_1772796772039",  # gearbox type
+                    "UF_CRM_1772534384484",  # drive type
                 ]
             })
             deal["inspectionAddress"] = (raw_crm.get("UF_CRM_1766058194337")
@@ -290,18 +303,37 @@ async def get_deal(request: Request, deal_id: int):
                                           or deal.get("inspection_place") or "")
             deal["contactPerson"] = raw_crm.get("UF_CRM_1766058259960") or deal.get("contact_person") or ""
             deal["contactPhone"] = raw_crm.get("UF_CRM_1766058247125") or deal.get("contact_phone") or ""
-            # VIN and plates — override transform result (reverse mapping collision)
+            # VIN and plates — direct read bypasses reverse mapping collision
             vin_raw = raw_crm.get("UF_CRM_1766057539531") or ""
             if str(vin_raw).strip() not in ("0", "None", ""):
                 deal["vin"] = str(vin_raw).strip()
             deal.setdefault("vin", "")
             deal["registration_number"] = raw_crm.get("UF_CRM_1766057515315") or deal.get("registration_number") or ""
+            # Vehicle fields — direct mapping to avoid reverse-map collision
+            deal["vehicle_brand"] = raw_crm.get("UF_CRM_1766057839684") or deal.get("vehicle_brand") or deal.get("make") or ""
+            deal["vehicle_model"] = raw_crm.get("UF_CRM_1766057849818") or deal.get("vehicle_model") or deal.get("model") or ""
+            deal["production_year"] = raw_crm.get("UF_CRM_1766057572300") or deal.get("production_year") or deal.get("year") or ""
+            deal["mileage"] = raw_crm.get("UF_CRM_1772534309693") or deal.get("mileage") or ""
+            deal["vehicle_color"] = raw_crm.get("UF_CRM_1772534410706") or deal.get("vehicle_color") or deal.get("color") or ""
+            deal["engine_capacity"] = raw_crm.get("UF_CRM_1772534081105") or deal.get("engine_capacity") or deal.get("engineCapacity") or ""
+            deal["engine_power"] = raw_crm.get("UF_CRM_1772534094039") or deal.get("engine_power") or deal.get("enginePower") or ""
+            deal["fuel_type"] = raw_crm.get("UF_CRM_1772534193") or deal.get("fuel_type") or ""
+            deal["body_type"] = raw_crm.get("UF_CRM_1772796562336") or deal.get("body_type") or ""
+            deal["gearbox_type"] = raw_crm.get("UF_CRM_1772796772039") or deal.get("gearbox_type") or ""
+            deal["drive_type"] = raw_crm.get("UF_CRM_1772534384484") or deal.get("drive_type") or ""
         except Exception:
             deal.setdefault("inspectionAddress", deal.get("planned_address") or deal.get("inspection_place") or "")
             deal.setdefault("contactPerson", deal.get("contact_person") or "")
             deal.setdefault("contactPhone", deal.get("contact_phone") or "")
             deal.setdefault("vin", "")
             deal.setdefault("registration_number", "")
+            deal.setdefault("vehicle_brand", deal.get("make") or "")
+            deal.setdefault("vehicle_model", deal.get("model") or "")
+            deal.setdefault("production_year", deal.get("year") or "")
+            deal.setdefault("mileage", "")
+            deal.setdefault("vehicle_color", deal.get("color") or "")
+            deal.setdefault("engine_capacity", deal.get("engineCapacity") or "")
+            deal.setdefault("engine_power", deal.get("enginePower") or "")
 
         # Ensure inspection date fields are present
         date_val = deal.get("inspection_date", "") or deal.get("scheduled_date", "")

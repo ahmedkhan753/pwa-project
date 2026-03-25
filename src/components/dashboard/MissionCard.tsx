@@ -356,22 +356,6 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                             🔍 Przejrzyj oględziny
                         </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            onClick={handleCall}
-                            className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                        >
-                            <Phone className="w-5 h-5 text-primary" />
-                            <span className="text-[9px] font-black uppercase text-muted tracking-widest">Dzwoń</span>
-                        </button>
-                        <button
-                            onClick={handleNavigate}
-                            className="flex flex-col items-center justify-center gap-1.5 bg-surface-raised/50 hover:bg-surface-raised py-4 rounded-3xl transition-all"
-                        >
-                            <Navigation className="w-5 h-5 text-primary" />
-                            <span className="text-[9px] font-black uppercase text-muted tracking-widest">Jedź</span>
-                        </button>
-                    </div>
                 </div>
             ) : job.status === 'scheduled' || job.scheduledDate ? (
                 /* Scheduled: show Start button prominently */

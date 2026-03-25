@@ -20,6 +20,8 @@ from models.inspection import (
 )
 from services.field_transformer import FieldTransformer
 from deps import get_current_user
+from database import get_db
+from models.inspector import InspectionPDF
 
 router = APIRouter(prefix="/inspection", tags=["Inspection"])
 logger = logging.getLogger("routers.inspection")
@@ -29,10 +31,22 @@ logger = logging.getLogger("routers.inspection")
 async def get_inspection_report(
     deal_id: int,
     request: Request,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    """Stream PDF report — serves already-uploaded Bitrix PDF first, falls back to generation."""
+    """Stream PDF report — serves DB-stored PDF first, falls back to Bitrix then generation."""
     gateway = request.app.state.gateway
+
+    # ── Primary: serve PDF saved in DB at submit time ──
+    stored = db.query(InspectionPDF).filter(InspectionPDF.deal_id == deal_id).first()
+    if stored:
+        logger.info(f"✅ Serving DB-stored PDF for deal {deal_id} ({len(stored.pdf_bytes)} bytes)")
+        return Response(
+            content=stored.pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=raport_{deal_id}.pdf"},
+        )
+
     # Extract Bitrix auth token from webhook URL (format: .../rest/USER_ID/TOKEN/)
     bitrix_auth_token = ""
     try:
@@ -258,7 +272,7 @@ class SubmitRequest(BaseModel):
             return v
 
 @router.post("/submit")
-async def submit_inspection(request: Request, data: SubmitRequest):
+async def submit_inspection(request: Request, data: SubmitRequest, db=Depends(get_db)):
     """
     POST /inspection/submit
     Finalizes the inspection — sets Bitrix deal stage to "Inspection Completed".
@@ -370,6 +384,19 @@ async def submit_inspection(request: Request, data: SubmitRequest):
             # Generate PDF bytes
             pdf_bytes = generate_inspection_pdf(deal_info, inspection_data)
             logger.info(f"📄 PDF generated for deal {deal_id} — {len(pdf_bytes)} bytes")
+
+            # Save PDF to DB so report endpoint can serve it without Bitrix file auth
+            try:
+                existing = db.query(InspectionPDF).filter(InspectionPDF.deal_id == deal_id).first()
+                if existing:
+                    existing.pdf_bytes = pdf_bytes
+                else:
+                    db.add(InspectionPDF(deal_id=deal_id, pdf_bytes=pdf_bytes))
+                db.commit()
+                logger.info(f"💾 PDF saved to DB for deal {deal_id}")
+            except Exception as db_err:
+                logger.warning(f"Could not save PDF to DB: {db_err}")
+                db.rollback()
 
             # Upload PDF directly to deal's file field (no disk scope needed)
             pdf_b64 = b64_module.b64encode(pdf_bytes).decode('utf-8')

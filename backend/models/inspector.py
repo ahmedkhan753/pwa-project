@@ -4,7 +4,7 @@ Inspector Model
 SQLAlchemy model for the inspectors table.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, UniqueConstraint, LargeBinary
 from sqlalchemy.sql import func
 from database import Base
 
@@ -39,3 +39,13 @@ class InspectorNotification(Base):
 
     def __repr__(self):
         return f"<InspectorNotification(deal_id='{self.deal_id}', phone='{self.phone}')>"
+
+
+class InspectionPDF(Base):
+    """Stores the generated PDF for each submitted inspection."""
+    __tablename__ = "inspection_pdfs"
+
+    id = Column(Integer, primary_key=True)
+    deal_id = Column(Integer, unique=True, nullable=False, index=True)
+    pdf_bytes = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
