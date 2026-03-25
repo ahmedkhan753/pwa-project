@@ -8,12 +8,13 @@ interface Props {
 interface State {
   hasError: boolean
   isNavigating: boolean
+  errorMessage: string
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false, isNavigating: false }
+    this.state = { hasError: false, isNavigating: false, errorMessage: '' }
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -26,7 +27,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     // For navigation errors, show loading screen not error screen
     return {
       hasError: true,
-      isNavigating: !!isNavError
+      isNavigating: !!isNavError,
+      errorMessage: error?.message || 'unknown'
     }
   }
 
@@ -90,9 +92,12 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center p-8">
-            <p className="text-red-500 mb-4">Wystąpił błąd</p>
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <div className="text-center p-8 max-w-sm">
+            <p className="text-red-600 font-bold mb-2">Wystąpił błąd</p>
+            <p className="text-xs text-gray-800 bg-gray-100 rounded p-2 mb-4 break-all text-left font-mono">
+              {this.state.errorMessage}
+            </p>
             <button
               onClick={() => this.goToDashboard()}
               className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold"
