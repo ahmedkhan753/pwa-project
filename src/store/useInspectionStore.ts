@@ -326,6 +326,7 @@ interface InspectionState {
   // Drafts (to prevent data loss when switching jobs)
   drafts: Record<string, StepData>;
   isSubmitting: boolean;
+  submissionStatuses: Record<string, string>;
 
   // Actions
   setStep: (step: number) => void;
@@ -374,6 +375,7 @@ interface InspectionState {
   fetchDealsForCalendar: (date: string) => Promise<void>;
   fetchFullDeal: (dealId: string) => Promise<void>;
   setIsSubmitting: (val: boolean) => void;
+  setSubmissionStatus: (dealId: string, status: string) => void;
 }
 
 // ─── Default Paint Zone ───────────────────────────────────
@@ -546,6 +548,7 @@ export const useInspectionStore = create<InspectionState>()(
       },
       drafts: {},
       isSubmitting: false,
+      submissionStatuses: {},
 
       setStep: (step: number) =>
         set((state) => ({
@@ -1078,6 +1081,11 @@ export const useInspectionStore = create<InspectionState>()(
       },
 
       setIsSubmitting: (val: boolean) => set({ isSubmitting: val }),
+
+      setSubmissionStatus: (dealId: string, status: string) =>
+        set((state) => ({
+          submissionStatuses: { ...state.submissionStatuses, [dealId]: status },
+        })),
     }),
     {
       name: 'inspection-storage',

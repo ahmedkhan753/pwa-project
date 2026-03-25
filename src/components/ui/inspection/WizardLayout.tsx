@@ -7,6 +7,7 @@ import { Logo } from "@/components/ui/Logo";
 import { ChevronLeft, ChevronRight, Send, LogOut, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
@@ -26,6 +27,7 @@ const STEPS = [
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
     const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
+    const router = useRouter();
     const totalSteps = STEPS.length;
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -109,19 +111,17 @@ function dataUrlToBlob(dataUrl: string): Blob {
         e?.preventDefault();
         e?.stopPropagation();
 
-        // Guard: prevent double-submit
         if (isSubmitting) return;
-
-        // Kill any in-flight auto-sync before submitting
-        if (typeof window !== 'undefined') {
-            (window as any).__submitInProgress = true;
-        }
 
         setIsSubmitting(true);
         setSubmitStatus('idle');
         setSubmitError('');
 
-        // Read from store synchronously — before any awaits
+        if (typeof window !== 'undefined') {
+            (window as any).__submitInProgress = true;
+        }
+
+        // Read store synchronously before any awaits
         const store = useInspectionStore.getState();
         const dealId = store.jobs?.currentJobId;
 
@@ -138,41 +138,42 @@ function dataUrlToBlob(dataUrl: string): Blob {
             return;
         }
 
+        // Snapshot store data NOW — before clearing inspection context
+        const storeData = { ...store.data };
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        console.log('[Submit] apiUrl:', apiUrl);
 
-        // Compress and upload photos before submit
-        const rawPhotos = store.data?.photos || [];
-        const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
-        const photosWithData = (photoArray as Array<{id: string; base64: string}>)
-            .filter(slot => slot?.base64?.startsWith('data:image'));
+        // Mark as uploading in store so dashboard shows spinner badge
+        useInspectionStore.getState().setSubmissionStatus(dealId, 'uploading');
 
-        // Photo upload phase (non-blocking — entire phase is guarded)
-        // NOTE: No setSubmitError calls inside the loop — React re-renders during the
-        // animated spinner cause insertBefore DOM crashes. Use console.log only.
-        // Collect compressed data URLs for PDF generation (avoids re-downloading from Bitrix).
-        const uploadedPhotoData: Record<string, string> = {};
-        try {
-            if (photosWithData.length > 0) {
-                console.log(`[Submit] Uploading ${photosWithData.length} photos...`);
-                let uploaded = 0;
+        // Clear wizard context so dashboard renders normally
+        useInspectionStore.getState().clearInspection();
+
+        // Navigate to dashboard immediately — inspector can start next car
+        if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
+        router.push('/dashboard');
+
+        // ── Background upload + submit (fire-and-forget) ──────────────
+        // This async IIFE continues running after client-side navigation.
+        // Never awaited — inspector is already on dashboard.
+        (async () => {
+            const rawPhotos = storeData?.photos || [];
+            const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
+            const photosWithData = (photoArray as Array<{id: string; base64: string}>)
+                .filter(slot => slot?.base64?.startsWith('data:image'));
+
+            const uploadedPhotoData: Record<string, string> = {};
+
+            // Upload photos in background
+            try {
                 for (const slot of photosWithData) {
                     try {
                         const compressed = await compressImage(slot.base64);
-                        const b64 = compressed.split(',')[1]; // strip data URL prefix
-                        if (!b64) {
-                            console.warn(`[Photo] ${slot.id}: skipped (empty after compression)`);
-                            continue;
-                        }
-                        console.log(`[Photo] ${slot.id}: ${(b64.length * 0.75 / 1024).toFixed(0)}KB (b64 ${(b64.length/1024).toFixed(0)}KB)`);
+                        const b64 = compressed.split(',')[1];
+                        if (!b64) continue;
 
-                        // Retry once — first TCP connection can fail with cold-start disconnect
                         let uploadOk = false;
                         for (let attempt = 0; attempt < 2 && !uploadOk; attempt++) {
-                            if (attempt > 0) {
-                                console.log(`[Photo] ${slot.id}: retrying after 2s...`);
-                                await new Promise(r => setTimeout(r, 2000));
-                            }
+                            if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
                             const controller = new AbortController();
                             const timeout = setTimeout(() => controller.abort(), 30000);
                             try {
@@ -193,50 +194,34 @@ function dataUrlToBlob(dataUrl: string): Blob {
                                 clearTimeout(timeout);
                                 if (uploadRes.ok) {
                                     uploadOk = true;
-                                    uploaded++;
-                                    // Keep compressed data URL for PDF (avoids downloading from Bitrix)
                                     uploadedPhotoData[slot.id] = compressed;
-                                    console.log(`[Photo] ${slot.id}: uploaded OK (${uploaded}/${photosWithData.length})`);
-                                } else {
-                                    const errBody = await uploadRes.text().catch(() => '<unreadable>');
-                                    console.warn(`[Photo] Upload failed for ${slot.id} (attempt ${attempt+1}): ${uploadRes.status} — ${errBody.slice(0, 200)}`);
+                                    console.log(`[BG Photo] ${slot.id}: OK`);
                                 }
-                            } catch(fetchErr) {
+                            } catch (fetchErr) {
                                 clearTimeout(timeout);
-                                console.warn(`[Photo] Fetch error for ${slot.id} (attempt ${attempt+1}):`, fetchErr);
+                                console.warn(`[BG Photo] ${slot.id} attempt ${attempt + 1} failed:`, fetchErr);
                             }
                         }
-                    } catch(e) {
-                        console.warn(`[Photo] Error for ${slot.id}:`, e);
+                    } catch (e) {
+                        console.warn(`[BG Photo] Error for ${slot.id}:`, e);
                     }
                 }
-                console.log(`[Submit] Photo upload done: ${uploaded}/${photosWithData.length} succeeded`);
+                console.log(`[BG] Photo upload done: ${Object.keys(uploadedPhotoData).length}/${photosWithData.length}`);
+            } catch (photoErr) {
+                console.warn('[BG] Photo upload phase failed:', photoErr);
             }
-        } catch (photoErr) {
-            console.warn('[Submit] Photo upload phase failed:', photoErr);
-        }
 
-        // ALWAYS reaches here regardless of photo upload outcome
-        console.log('[Submit] Starting submit POST via api.submitInspection...');
-
-        // Collect full store data for PDF generation
-        const storeData = useInspectionStore.getState().data;
-        const finalSummary = storeData?.finalSummary || {};
-        const sigPayload = {
-            signatureAppraiser: finalSummary.signatureAppraiser || '',
-            signatureClient: finalSummary.signatureClient || '',
-            signatureYard: finalSummary.signatureYard || '',
-            vinConfirmed: finalSummary.vinConfirmed || false,
-        };
-        console.log('[Submit] Signatures:', Object.entries(sigPayload).filter(([, v]) => v).map(([k]) => k));
-
-        try {
-            // Use the shared api client (same BASE_URL + authFetch as all working calls)
-            await api.submitInspection(String(dealId), {
+            // Submit to backend — returns immediately (backend queues background task)
+            const finalSummary = storeData?.finalSummary || {};
+            const submitPayload = {
                 deal_id: dealId,
-                photos: uploadedPhotoData,  // pass compressed data URLs for PDF generation
-                finalSummary: sigPayload,
-                // Full inspection data for PDF field population
+                photos: uploadedPhotoData,
+                finalSummary: {
+                    signatureAppraiser: finalSummary.signatureAppraiser || '',
+                    signatureClient: finalSummary.signatureClient || '',
+                    signatureYard: finalSummary.signatureYard || '',
+                    vinConfirmed: (finalSummary as any).vinConfirmed || false,
+                },
                 vehicleData: storeData?.vehicleData || {},
                 equipmentCompleteness: storeData?.equipmentCompleteness || {},
                 fullEquipment: storeData?.fullEquipment || {},
@@ -245,25 +230,28 @@ function dataUrlToBlob(dataUrl: string): Blob {
                 interiorDamage: storeData?.interiorDamage || [],
                 mechanical: storeData?.mechanical || {},
                 notesValuation: storeData?.notesValuation || {},
-            });
+            };
 
-            // SUCCESS — clear job from store so dashboard doesn't re-open wizard
-            console.log('[handleSubmit] SUCCESS — navigating to dashboard');
-            if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
-            useInspectionStore.getState().clearInspection();
-            setSubmitStatus('success');
-            setIsSubmitting(false);
-            setTimeout(() => {
-                window.location.replace('/dashboard');
-            }, 1500);
-
-        } catch (err: any) {
-            console.error('[Submit] ERROR:', err?.name, err?.message, err);
-            if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
-            setSubmitError(err.message || 'Nieznany błąd');
-            setSubmitStatus('error');
-            setIsSubmitting(false);
-        }
+            try {
+                const res = await fetch(`${apiUrl}/inspection/submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(submitPayload),
+                });
+                if (res.ok) {
+                    console.log('[BG] Submit API call accepted — backend processing in background');
+                    useInspectionStore.getState().setSubmissionStatus(dealId, 'pending');
+                } else {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+            } catch (err) {
+                console.error('[BG] Submit API call failed:', err);
+                useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
+            }
+        })();
     };
 
     console.log('[WizardLayout] currentStep:', currentStep, 'totalSteps:', totalSteps, 'isSubmitting:', isSubmitting);
@@ -410,20 +398,9 @@ function dataUrlToBlob(dataUrl: string): Blob {
                 )}
                 </div>
 
-                {/* Upload progress feedback */}
-                {isSubmitting && submitError && (
-                    <p className="mt-2 text-center text-xs text-muted font-medium">{submitError}</p>
-                )}
-
-                {/* Submit error feedback */}
-                {submitStatus === 'error' && (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-center">
-                        <p className="text-red-700 font-bold text-sm">❌ Błąd wysyłania</p>
-                        <p className="text-red-600 text-xs mt-1">{submitError}</p>
-                        <button onClick={handleSubmit} className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold">
-                            Spróbuj ponownie
-                        </button>
-                    </div>
+                {/* Validation error feedback (no dealId / no token) */}
+                {submitStatus === 'error' && submitError && (
+                    <p className="mt-2 text-center text-xs text-red-600 font-medium">{submitError}</p>
                 )}
             </footer>
         </div>

@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle, Bell, Eye, RotateCcw } from 'lucide-react';
+import { Phone, Navigation, Play, CheckCircle2, Clock, Car, MapPin, AlertCircle, Bell, Eye, RotateCcw, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { InspectionJob, useInspectionStore } from '@/store/useInspectionStore';
+import { api } from '@/lib/api';
 import { cn, formatLocaleDate } from '@/lib/utils';
 
 // ── Status display config ──
@@ -30,6 +31,8 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const { drafts, selectJob, scheduleJob } = useInspectionStore();
     const fetchFullDeal = useInspectionStore(state => state.fetchFullDeal);
     const setStep = useInspectionStore(state => state.setStep);
+    const submissionStatuses = useInspectionStore(state => state.submissionStatuses);
+    const setSubmissionStatus = useInspectionStore(state => state.setSubmissionStatus);
 
     // Date/Time defaults
     const getTodayDate = () => new Date().toISOString().split('T')[0];
@@ -47,9 +50,41 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     const [isScheduledSuccessfully, setIsScheduledSuccessfully] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
 
-    const isFinished = FINISHED_STATUSES.includes(job.status);
-    const isInProgress = !!drafts[job.id] || job.status === 'in_progress';
+    const submissionStatus = submissionStatuses?.[job.id];
+    const isUploading = submissionStatus === 'uploading' || submissionStatus === 'pending' || submissionStatus === 'processing';
+    const isSubmissionDone = submissionStatus === 'done';
+    const isSubmissionError = submissionStatus === 'error';
+
+    const isFinished = FINISHED_STATUSES.includes(job.status) || isSubmissionDone;
+    const isInProgress = (!!drafts[job.id] || job.status === 'in_progress') && !isUploading && !isSubmissionDone;
     const statusConfig = STATUS_CONFIG[job.status] || STATUS_CONFIG['new'];
+
+    // Poll backend status while upload is in-flight (pending / processing)
+    React.useEffect(() => {
+        if (submissionStatus !== 'pending' && submissionStatus !== 'processing') return;
+
+        const interval = setInterval(async () => {
+            const result = await api.getSubmissionStatus(job.id);
+            if (result.status === 'done') {
+                setSubmissionStatus(job.id, 'done');
+                // Clean up draft — inspection is fully complete
+                useInspectionStore.setState((state) => ({
+                    drafts: Object.fromEntries(
+                        Object.entries(state.drafts).filter(([k]) => k !== job.id)
+                    ),
+                }));
+                clearInterval(interval);
+            } else if (result.status === 'error') {
+                setSubmissionStatus(job.id, 'error');
+                clearInterval(interval);
+            } else if (result.status !== 'not_found') {
+                // Update to latest backend status (processing, etc.)
+                setSubmissionStatus(job.id, result.status);
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [job.id, submissionStatus, setSubmissionStatus]);
 
     const handleCall = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -64,6 +99,9 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
     };
 
     const handleStart = async () => {
+        // Block while upload is in-flight
+        if (isUploading) return;
+
         // PART 4: Block re-entry into completed inspections
         if (isFinished) {
             alert('Ta inspekcja została już zakończona.');
@@ -333,7 +371,34 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             )}
 
             {/* ── Action Bar — status-dependent ── */}
-            {isFinished ? (
+            {isUploading ? (
+                /* Background upload in progress — show spinner, block all actions */
+                <div className="space-y-2">
+                    <div className="flex items-center justify-center gap-2 py-3 bg-orange-50 dark:bg-orange-950/30 rounded-2xl border border-orange-200 dark:border-orange-800">
+                        <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                        <span className="text-xs font-black text-orange-700 dark:text-orange-400 uppercase tracking-widest">
+                            {submissionStatus === 'uploading' ? 'Wysyłanie zdjęć...' : 'Przetwarzanie raportu...'}
+                        </span>
+                    </div>
+                    <p className="text-center text-[10px] text-muted">Możesz zacząć kolejne zlecenie</p>
+                </div>
+            ) : isSubmissionError ? (
+                /* Upload failed — show error badge + retry option */
+                <div className="space-y-2">
+                    <div className="flex items-center justify-center gap-2 py-3 bg-red-50 dark:bg-red-950/30 rounded-2xl border border-red-200 dark:border-red-800">
+                        <AlertCircle className="w-4 h-4 text-red-500" />
+                        <span className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-widest">
+                            Błąd wysyłania
+                        </span>
+                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleStart(); }}
+                        className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
+                    >
+                        <RotateCcw className="w-4 h-4" /> Spróbuj ponownie
+                    </button>
+                </div>
+            ) : isFinished ? (
                 /* Completed / Closed / Lost: show report + review buttons */
                 <div className="space-y-3">
                     <div className="flex items-center justify-center gap-2 py-3 bg-green-50 dark:bg-green-950/30 rounded-2xl border border-green-200 dark:border-green-800">

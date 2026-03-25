@@ -153,6 +153,18 @@ const realApi = {
       throw new Error(err.detail || 'Submission failed');
     }
     return res.json();
+  },
+
+  async getSubmissionStatus(dealId: string): Promise<{ status: string; error_message: string | null }> {
+    try {
+      const res = await authFetch(`${BASE_URL}/inspection/${dealId}/status`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) return { status: 'not_found', error_message: null };
+      return res.json();
+    } catch {
+      return { status: 'not_found', error_message: null };
+    }
   }
 }
 

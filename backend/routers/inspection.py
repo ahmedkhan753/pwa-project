@@ -7,7 +7,7 @@ Submit full inspections and save individual wizard steps.
 import logging
 import json
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, field_validator, ConfigDict
 from fastapi.responses import StreamingResponse, Response
 import io
@@ -20,11 +20,118 @@ from models.inspection import (
 )
 from services.field_transformer import FieldTransformer
 from deps import get_current_user
-from database import get_db
-from models.inspector import InspectionPDF
+from database import get_db, SessionLocal
+from models.inspector import InspectionPDF, SubmissionJob
 
 router = APIRouter(prefix="/inspection", tags=["Inspection"])
 logger = logging.getLogger("routers.inspection")
+
+
+# ─── Background Submit Task ───────────────────────────────────
+
+async def _background_submit(gateway, deal_id: int, body: dict):
+    """
+    Background task: set Bitrix stage, generate PDF, upload to Bitrix.
+    Runs after the submit endpoint has already responded 200 to the client.
+    Updates SubmissionJob.status in DB at each stage.
+    """
+    db = SessionLocal()
+
+    def _update_status(status: str, error: str = None):
+        try:
+            job = db.query(SubmissionJob).filter(SubmissionJob.deal_id == deal_id).first()
+            if job:
+                job.status = status
+                if error is not None:
+                    job.error_message = str(error)[:1000]
+                db.commit()
+        except Exception as ex:
+            logger.error(f"[BG] DB status update failed for deal {deal_id}: {ex}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    try:
+        _update_status('processing')
+
+        # 1. Set Bitrix deal stage to "Inspection Completed"
+        await gateway.call("crm.deal.update", {
+            "ID": deal_id,
+            "fields": {"STAGE_ID": "UC_0T9W8E"}
+        })
+        logger.info(f"[BG] Deal {deal_id} stage → UC_0T9W8E")
+
+        # 2. Fetch deal from Bitrix for PDF header + authoritative vehicle data
+        deal_result = await gateway.call("crm.deal.get", {"ID": deal_id})
+        deal_info = {
+            "title": deal_result.get("TITLE", f"Zlecenie nr. {deal_id}"),
+            "order_number": f"Zlecenie nr. {deal_id} - {deal_result.get('TITLE', '')}",
+            "company_name": deal_result.get("UF_CRM_1766057964319", ""),
+            "client_name": deal_result.get("UF_CRM_1766057941327", ""),
+            "inspection_place": deal_result.get("UF_CRM_1766058185504", ""),
+            "inspection_date": deal_result.get("UF_CRM_1772108256983", ""),
+            "inspector_name": deal_result.get("UF_CRM_1771579888", ""),
+        }
+
+        # 3. Build inspection_data from body, extract photos for PDF
+        inspection_data = dict(body)
+        body_photos = body.get("photos", {})
+        photo_urls = []
+        if isinstance(body_photos, dict):
+            for v in body_photos.values():
+                if v and isinstance(v, str) and (v.startswith("data:image") or v.startswith("http")):
+                    photo_urls.append(v)
+        elif isinstance(body_photos, list):
+            for item in body_photos:
+                if isinstance(item, str) and (item.startswith("data:image") or item.startswith("http")):
+                    photo_urls.append(item)
+                elif isinstance(item, dict):
+                    url = item.get("base64") or item.get("url") or item.get("src")
+                    if url:
+                        photo_urls.append(url)
+        logger.info(f"[BG] Photos for PDF: {len(photo_urls)}")
+        if photo_urls:
+            inspection_data["photos"] = photo_urls
+
+        # 4. Generate PDF
+        from services.pdf_generator import generate_inspection_pdf
+        import base64 as b64_module
+        pdf_bytes = generate_inspection_pdf(deal_info, inspection_data)
+        logger.info(f"[BG] PDF generated: {len(pdf_bytes)} bytes")
+
+        # 5. Save PDF to DB
+        try:
+            existing_pdf = db.query(InspectionPDF).filter(InspectionPDF.deal_id == deal_id).first()
+            if existing_pdf:
+                existing_pdf.pdf_bytes = pdf_bytes
+            else:
+                db.add(InspectionPDF(deal_id=deal_id, pdf_bytes=pdf_bytes))
+            db.commit()
+            logger.info(f"[BG] PDF saved to DB for deal {deal_id}")
+        except Exception as db_err:
+            logger.warning(f"[BG] Could not save PDF to DB: {db_err}")
+            db.rollback()
+
+        # 6. Upload PDF to Bitrix deal file field
+        pdf_b64 = b64_module.b64encode(pdf_bytes).decode('utf-8')
+        pdf_filename = f"Protokol_zwrotu_pojazdu_{deal_id}.pdf"
+        await gateway.call("crm.deal.update", {
+            "ID": deal_id,
+            "fields": {
+                "UF_CRM_1772801617": {"fileData": [pdf_filename, pdf_b64]}
+            }
+        })
+        logger.info(f"[BG] PDF uploaded to Bitrix deal {deal_id}")
+
+        _update_status('done')
+        logger.info(f"[BG] ✅ Background submission complete for deal {deal_id}")
+
+    except Exception as e:
+        logger.error(f"[BG] ❌ Background submission failed for deal {deal_id}: {e}", exc_info=True)
+        _update_status('error', str(e))
+    finally:
+        db.close()
 
 
 @router.get("/{deal_id}/report")
@@ -283,12 +390,17 @@ class SubmitRequest(BaseModel):
             return v
 
 @router.post("/submit")
-async def submit_inspection(request: Request, data: SubmitRequest, db=Depends(get_db)):
+async def submit_inspection(
+    request: Request,
+    data: SubmitRequest,
+    background_tasks: BackgroundTasks,
+    db=Depends(get_db),
+):
     """
     POST /inspection/submit
-    Finalizes the inspection — sets Bitrix deal stage to "Inspection Completed".
-    Individual step data has already been saved via PATCH /step/{n} calls.
-    Accepts SubmitRequest JSON body (allows extra fields for full state).
+    Saves submission job to DB and returns immediately.
+    All heavy work (stage update, PDF generation, Bitrix upload) runs in background.
+    Poll GET /inspection/{deal_id}/status to track progress.
     """
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
@@ -299,156 +411,60 @@ async def submit_inspection(request: Request, data: SubmitRequest, db=Depends(ge
             detail="Bitrix24 integration not ready — try again later",
         )
 
-    # Use the validated data model and get full body from model_dump()
     deal_id = data.deal_id
     body = data.model_dump()
 
-    # Extract signatures from submit body (extra fields via ConfigDict extra="allow")
+    # Log signatures for debugging
     summary_from_body = body.get("finalSummary", {})
     if summary_from_body and isinstance(summary_from_body, dict):
         logger.info(f"✅ Signatures received: {[k for k, v in summary_from_body.items() if v]}")
     else:
         logger.warning("⚠️ No signatures in submit body")
 
-    logger.info(f"🚀 Submit received — deal_id: {data.deal_id}, photos: {len(data.photos)}")
+    photo_count = len(body.get("photos", {})) if isinstance(body.get("photos"), dict) else len(body.get("photos") or [])
+    logger.info(f"🚀 Submit queued — deal_id: {deal_id}, photos: {photo_count}")
 
-    warnings = []
-
+    # Save or update SubmissionJob record — inspector can track status on dashboard
     try:
-        # Step 1: Set stage to "Oględziny zakończone" (Inspection Completed)
-        await gateway.call("crm.deal.update", {
-            "ID": deal_id,
-            "fields": {"STAGE_ID": "UC_0T9W8E"}
-        })
-        logger.info(f"✅ Deal {deal_id} stage set to UC_0T9W8E (Inspection Completed)")
-
-        # Step 2: Generate PDF report
+        job = db.query(SubmissionJob).filter(SubmissionJob.deal_id == deal_id).first()
+        if job:
+            job.status = 'pending'
+            job.error_message = None
+        else:
+            job = SubmissionJob(deal_id=deal_id, status='pending')
+            db.add(job)
+        db.commit()
+    except Exception as db_err:
+        logger.warning(f"Could not save SubmissionJob to DB: {db_err}")
         try:
-            from services.pdf_generator import generate_inspection_pdf
-            import base64 as b64_module
+            db.rollback()
+        except Exception:
+            pass
 
-            # Fetch deal info from Bitrix for PDF header
-            deal_result = await gateway.call("crm.deal.get", {"ID": deal_id})
-            deal_info = {
-                "title": deal_result.get("TITLE", f"Zlecenie nr. {deal_id}"),
-                "order_number": f"Zlecenie nr. {deal_id} - {deal_result.get('TITLE', '')}",
-                "company_name": deal_result.get("UF_CRM_1766057964319", ""),
-                "client_name": deal_result.get("UF_CRM_1766057941327", ""),
-                "inspection_place": deal_result.get("UF_CRM_1766058185504", ""),
-                "inspection_date": deal_result.get("UF_CRM_1772108256983", ""),
-                "inspector_name": deal_result.get("UF_CRM_1771579888", "Mateusz Chłodek"),
-            }
+    # Queue all heavy work as a background task — runs after this response is sent
+    background_tasks.add_task(_background_submit, gateway, deal_id, body)
 
-            # Use inspection data from the request body
-            inspection_data = body
+    base_domain = gateway.webhook_url.split("/rest/")[0]
+    bitrix_url = f"{base_domain}/crm/deal/details/{deal_id}/"
 
-            # Extract auth token from webhook URL so show_file.php URLs work
-            # Webhook format: https://domain/rest/USER_ID/TOKEN/
-            bitrix_auth_token = ""
-            try:
-                bitrix_auth_token = gateway.webhook_url.rstrip("/").split("/")[-1]
-            except Exception:
-                pass
+    return SubmitResult(
+        deal_id=deal_id,
+        bitrix_url=bitrix_url,
+        status="pending",
+        message="Inspection queued — PDF and Bitrix upload processing in background.",
+    )
 
-            # PDF field key — exclude from photo collection to avoid including the PDF itself
-            PDF_FIELD_KEY = "UF_CRM_1772801617"
 
-            def _fix_bitrix_url(url: str) -> str:
-                """Add full domain + auth token to Bitrix file URLs."""
-                if not url.startswith("http"):
-                    url = f"https://b24-05xr3e.bitrix24.pl{url}"
-                if bitrix_auth_token and "auth=" in url:
-                    import re as _re
-                    url = _re.sub(r'auth=[^&]*', f'auth={bitrix_auth_token}', url)
-                return url
-
-            # ── Source 1: skip Bitrix HTTP file URLs ──
-            # show_file.php requires a user session token — the webhook key does NOT work.
-            # All Bitrix photo URLs return text/html (login page), creating empty boxes in PDF.
-            # The base64 photos from the submit body are the reliable source.
-            photo_urls = []
-            logger.info(f"📷 Bitrix file photos: skipped (auth not supported for show_file.php)")
-
-            # ── Source 2: compressed base64 photos from submit body ──
-            body_photos = body.get("photos", {})
-            body_count = 0
-            if isinstance(body_photos, dict):
-                for k, v in body_photos.items():
-                    if v and isinstance(v, str) and (v.startswith("data:image") or v.startswith("http")):
-                        photo_urls.append(v)
-                        body_count += 1
-            elif isinstance(body_photos, list):
-                for item in body_photos:
-                    if isinstance(item, str) and (item.startswith("data:image") or item.startswith("http")):
-                        photo_urls.append(item)
-                        body_count += 1
-                    elif isinstance(item, dict):
-                        url = item.get("base64") or item.get("url") or item.get("src")
-                        if url:
-                            photo_urls.append(url)
-                            body_count += 1
-            logger.info(f"📷 Body photos: {body_count} — total for PDF: {len(photo_urls)}")
-
-            if photo_urls:
-                inspection_data["photos"] = photo_urls
-
-            # Generate PDF bytes
-            pdf_bytes = generate_inspection_pdf(deal_info, inspection_data)
-            logger.info(f"📄 PDF generated for deal {deal_id} — {len(pdf_bytes)} bytes")
-
-            # Save PDF to DB so report endpoint can serve it without Bitrix file auth
-            try:
-                existing = db.query(InspectionPDF).filter(InspectionPDF.deal_id == deal_id).first()
-                if existing:
-                    existing.pdf_bytes = pdf_bytes
-                else:
-                    db.add(InspectionPDF(deal_id=deal_id, pdf_bytes=pdf_bytes))
-                db.commit()
-                logger.info(f"💾 PDF saved to DB for deal {deal_id}")
-            except Exception as db_err:
-                logger.warning(f"Could not save PDF to DB: {db_err}")
-                db.rollback()
-
-            # Upload PDF directly to deal's file field (no disk scope needed)
-            pdf_b64 = b64_module.b64encode(pdf_bytes).decode('utf-8')
-            pdf_filename = f"Protokol_zwrotu_pojazdu_{deal_id}.pdf"
-
-            await gateway.call("crm.deal.update", {
-                "ID": deal_id,
-                "fields": {
-                    # "Raport z oględzin pojazdu" file field
-                    "UF_CRM_1772801617": {
-                        "fileData": [pdf_filename, pdf_b64]
-                    }
-                }
-            })
-            logger.info(f"📎 PDF '{pdf_filename}' uploaded to deal {deal_id} field UF_CRM_1772801617")
-
-        except Exception as pdf_err:
-            # PDF failure should NOT block the submission
-            logger.error(f"PDF generation/upload failed for deal {deal_id}: {pdf_err}")
-            warnings.append(f"PDF report failed: {pdf_err}")
-
-        base_domain = gateway.webhook_url.split("/rest/")[0]
-        bitrix_url = f"{base_domain}/crm/deal/details/{deal_id}/"
-
-        return SubmitResult(
-            deal_id=deal_id,
-            bitrix_url=bitrix_url,
-            status="success",
-            warnings=warnings,
-            message="Inspection submitted to Bitrix24 successfully.",
-        )
-
-    except Exception as e:
-        logger.error(f"Inspection submit failed: {e}")
-        return SubmitResult(
-            deal_id=deal_id,
-            bitrix_url=None,
-            status="failed",
-            warnings=[str(e)],
-            message="Submission failed. Data preserved for retry.",
-        )
+@router.get("/{deal_id}/status")
+async def get_submission_status(deal_id: int, db=Depends(get_db)):
+    """
+    GET /inspection/{deal_id}/status
+    Returns background submission status: pending | processing | done | error
+    """
+    job = db.query(SubmissionJob).filter(SubmissionJob.deal_id == deal_id).first()
+    if not job:
+        return {"status": "not_found", "error_message": None}
+    return {"status": job.status, "error_message": job.error_message}
 
 
 @router.post("/{deal_id}/complete")

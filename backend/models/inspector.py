@@ -4,7 +4,7 @@ Inspector Model
 SQLAlchemy model for the inspectors table.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, UniqueConstraint, LargeBinary
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, UniqueConstraint, LargeBinary, Text
 from sqlalchemy.sql import func
 from database import Base
 
@@ -49,3 +49,16 @@ class InspectionPDF(Base):
     deal_id = Column(Integer, unique=True, nullable=False, index=True)
     pdf_bytes = Column(LargeBinary, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class SubmissionJob(Base):
+    """Tracks async background submission status for each inspection deal."""
+    __tablename__ = "submission_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, unique=True, nullable=False, index=True)
+    # pending | processing | done | error
+    status = Column(String(20), nullable=False, default='pending')
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now())
