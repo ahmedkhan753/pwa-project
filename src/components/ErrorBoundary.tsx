@@ -40,8 +40,21 @@ export class ErrorBoundary extends React.Component<Props, State> {
       error.message?.includes('Failed to execute')
 
     if (isNavError) {
-      // Always redirect to dashboard on navigation errors
-      // Don't show error page — just navigate
+      // If a submit is in progress, the async handleSubmit is still running in the
+      // background (JS event loop, independent of React renders). Don't redirect here —
+      // let handleSubmit complete and redirect itself. Add a 30s fallback in case it
+      // hangs so the user isn't stuck on the loading screen forever.
+      if (typeof window !== 'undefined' && (window as any).__submitInProgress) {
+        console.warn('ErrorBoundary: submit in progress — skipping auto-redirect, handleSubmit will redirect on completion')
+        setTimeout(() => {
+          if ((window as any).__submitInProgress) {
+            console.warn('ErrorBoundary: submit timed out after 30s — forcing dashboard redirect')
+            window.location.replace('/dashboard')
+          }
+        }, 30000)
+        return
+      }
+      // Normal navigation error (not during submit) — redirect immediately
       setTimeout(() => {
         window.location.replace('/dashboard')
       }, 50)

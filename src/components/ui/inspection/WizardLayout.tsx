@@ -236,6 +236,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
             // SUCCESS — show feedback then redirect
             console.log('[handleSubmit] SUCCESS — navigating to dashboard');
+            if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
             setSubmitStatus('success');
             setIsSubmitting(false);
             setTimeout(() => {
@@ -244,6 +245,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
         } catch (err: any) {
             console.error('[Submit] ERROR:', err?.name, err?.message, err);
+            if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
             setSubmitError(err.message || 'Nieznany błąd');
             setSubmitStatus('error');
             setIsSubmitting(false);
@@ -369,21 +371,18 @@ function dataUrlToBlob(dataUrl: string): Blob {
                             'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500'
                         }`}
                     >
-                        {isSubmitting ? (
-                            <>
-                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                WYSYŁANIE...
-                            </>
-                        ) : submitStatus === 'success' ? (
-                            <>✅ Raport wysłany pomyślnie!</>
-                        ) : submitStatus === 'error' ? (
-                            <>❌ Błąd — spróbuj ponownie</>
-                        ) : (
-                            <>
-                                <Send size={20} className="stroke-[3]" />
-                                WYŚLIJ RAPORT
-                            </>
-                        )}
+                        {/* Stable DOM: both spans always mounted, CSS-toggled.
+                            Conditional rendering swaps SVG↔div causing React insertBefore crash. */}
+                        <span style={{display: isSubmitting ? 'none' : 'flex', alignItems: 'center', gap: '8px'}}>
+                            <Send size={20} className="stroke-[3]" />
+                            {submitStatus === 'success' ? '✅ Raport wysłany pomyślnie!' :
+                             submitStatus === 'error' ? '❌ Błąd — spróbuj ponownie' :
+                             'WYŚLIJ RAPORT'}
+                        </span>
+                        <span style={{display: isSubmitting ? 'flex' : 'none', alignItems: 'center', gap: '8px'}}>
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            WYSYŁANIE...
+                        </span>
                     </button>
                 ) : (
                     <button
