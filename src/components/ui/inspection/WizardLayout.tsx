@@ -4,7 +4,7 @@ import { useInspectionStore } from "@/store/useInspectionStore";
 import { ProgressBar } from "./ProgressBar";
 import { ChevronLeft, ChevronRight, Send, LogOut, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
@@ -25,9 +25,15 @@ const STEPS = [
 export function WizardLayout({ children }: { children: React.ReactNode }) {
     const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
     const totalSteps = STEPS.length;
+    const mainRef = useRef<HTMLElement>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
+
+    // Scroll to top on step change (key={currentStep} was removed to fix iOS Safari crash)
+    useEffect(() => {
+        mainRef.current?.scrollTo({ top: 0 });
+    }, [currentStep]);
 
     // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting
     useEffect(() => {
@@ -287,7 +293,7 @@ async function compressImage(base64: string): Promise<string> {
             </header>
 
             {/* ── Main Content ───────────────────────────────── */}
-            <main className="flex-1 p-4 overflow-y-auto pb-28">
+            <main ref={mainRef} className="flex-1 p-4 overflow-y-auto pb-28">
                 {children}
             </main>
 
