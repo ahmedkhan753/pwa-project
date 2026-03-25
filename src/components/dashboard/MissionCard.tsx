@@ -100,10 +100,6 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         const btn = document.activeElement as HTMLButtonElement
         if (btn) btn.disabled = true
 
-        // Open window synchronously before async fetch — preserves user interaction context
-        // so mobile browsers (iOS Safari) don't block it as a popup
-        const win = window.open('', '_blank')
-
         try {
             const res = await fetch(`${apiUrl}/inspection/${job.id}/report`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -114,15 +110,16 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             const blob = await res.blob()
             const url = URL.createObjectURL(blob)
 
-            if (win) {
-                win.location.href = url
-            } else {
-                // Fallback: same-tab navigation (popup was blocked)
-                window.location.href = url
-            }
+            // a.download works on all platforms including iOS PWA —
+            // no popup needed, no user-interaction-context issues
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `raport_${job.id}.pdf`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
             setTimeout(() => URL.revokeObjectURL(url), 60000)
         } catch(e: any) {
-            win?.close()
             console.error('PDF error:', e)
             alert(`Nie można otworzyć raportu: ${e.message}`)
         } finally {

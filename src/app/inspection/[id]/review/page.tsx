@@ -38,10 +38,6 @@ export default function ReviewInspectionPage() {
       return
     }
 
-    // Open window synchronously before async fetch — preserves user interaction context
-    // so mobile browsers (iOS Safari) don't block it as a popup
-    const win = window.open('', '_blank')
-
     fetch(`${BASE_URL}/inspection/${dealId}/report`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -51,15 +47,16 @@ export default function ReviewInspectionPage() {
       })
       .then(blob => {
         const url = URL.createObjectURL(blob)
-        if (win) {
-          win.location.href = url
-        } else {
-          window.location.href = url
-        }
+        // a.download works on all platforms including iOS PWA
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `raport_${dealId}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 60000)
       })
       .catch(err => {
-        win?.close()
         console.error('Report error:', err)
         alert('Nie można otworzyć raportu. Spróbuj ponownie.')
       })
