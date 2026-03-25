@@ -310,26 +310,43 @@ async def submit_inspection(request: Request, data: SubmitRequest):
             # Use inspection data from the request body
             inspection_data = body
 
+            # Extract auth token from webhook URL so show_file.php URLs work
+            # Webhook format: https://domain/rest/USER_ID/TOKEN/
+            bitrix_auth_token = ""
+            try:
+                bitrix_auth_token = gateway.webhook_url.rstrip("/").split("/")[-1]
+            except Exception:
+                pass
+
+            # PDF field key — exclude from photo collection to avoid including the PDF itself
+            PDF_FIELD_KEY = "UF_CRM_1772801617"
+
+            def _fix_bitrix_url(url: str) -> str:
+                """Add full domain + auth token to Bitrix file URLs."""
+                if not url.startswith("http"):
+                    url = f"https://b24-05xr3e.bitrix24.pl{url}"
+                if bitrix_auth_token and "auth=" in url:
+                    import re as _re
+                    url = _re.sub(r'auth=[^&]*', f'auth={bitrix_auth_token}', url)
+                return url
+
             # ── Source 1: photos already uploaded to Bitrix file fields ──
             photo_urls = []
-            bitrix_base = gateway.webhook_url.split("/rest/")[0]
             for key, value in deal_result.items():
                 if not key.startswith("UF_CRM_"):
+                    continue
+                if key == PDF_FIELD_KEY:  # skip — this is the PDF field, not a photo
                     continue
                 if isinstance(value, dict):
                     url = value.get("downloadUrl") or value.get("url") or value.get("showUrl")
                     if url and isinstance(url, str):
-                        if not url.startswith("http"):
-                            url = f"https://b24-05xr3e.bitrix24.pl{url}"
-                        photo_urls.append(url)
+                        photo_urls.append(_fix_bitrix_url(url))
                 elif isinstance(value, list):
                     for item in value:
                         if isinstance(item, dict):
                             url = item.get("downloadUrl") or item.get("url") or item.get("showUrl")
                             if url and isinstance(url, str):
-                                if not url.startswith("http"):
-                                    url = f"https://b24-05xr3e.bitrix24.pl{url}"
-                                photo_urls.append(url)
+                                photo_urls.append(_fix_bitrix_url(url))
             logger.info(f"📷 Bitrix file photos: {len(photo_urls)}")
 
             # ── Source 2: compressed base64 photos from submit body ──
