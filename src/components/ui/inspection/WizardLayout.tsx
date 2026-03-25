@@ -219,7 +219,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
         // ALWAYS reaches here regardless of photo upload outcome
         console.log('[Submit] Starting submit POST via api.submitInspection...');
 
-        // Collect signatures from store before submitting
+        // Collect full store data for PDF generation
         const storeData = useInspectionStore.getState().data;
         const finalSummary = storeData?.finalSummary || {};
         const sigPayload = {
@@ -235,7 +235,16 @@ function dataUrlToBlob(dataUrl: string): Blob {
             await api.submitInspection(String(dealId), {
                 deal_id: dealId,
                 photos: uploadedPhotoData,  // pass compressed data URLs for PDF generation
-                finalSummary: sigPayload
+                finalSummary: sigPayload,
+                // Full inspection data for PDF field population
+                vehicleData: storeData?.vehicleData || {},
+                equipmentCompleteness: storeData?.equipmentCompleteness || {},
+                fullEquipment: storeData?.fullEquipment || {},
+                tires: storeData?.tires || {},
+                exteriorDamage: storeData?.exteriorDamage || [],
+                interiorDamage: storeData?.interiorDamage || [],
+                mechanical: storeData?.mechanical || {},
+                notesValuation: storeData?.notesValuation || {},
             });
 
             // SUCCESS — clear job from store so dashboard doesn't re-open wizard

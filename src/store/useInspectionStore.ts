@@ -628,19 +628,25 @@ export const useInspectionStore = create<InspectionState>()(
               }
             }));
           }
-        } catch (error) {
-          console.error("Failed to fetch current user:", error);
-          // If token is invalid, clear auth
-          set((state) => ({
-            auth: {
-              ...state.auth,
-              isAuthenticated: false,
-              token: null,
-              user: null,
-              currentUserId: null,
-              currentUserName: null
-            }
-          }));
+        } catch (error: any) {
+          // Only clear auth on 401 (token invalid/expired) — NOT on network errors
+          const isAuthError = error?.message?.includes('Sesja wygasła') || error?.message?.includes('wygasła');
+          if (isAuthError) {
+            console.warn("fetchMe: auth token invalid — clearing session");
+            set((state) => ({
+              auth: {
+                ...state.auth,
+                isAuthenticated: false,
+                token: null,
+                user: null,
+                currentUserId: null,
+                currentUserName: null
+              }
+            }));
+          } else {
+            // Network error or server error — keep auth intact, user stays logged in
+            console.warn("fetchMe: network/server error (keeping auth):", error?.message);
+          }
         }
       },
 
