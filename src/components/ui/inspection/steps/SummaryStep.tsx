@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 export function SummaryStep() {
     const { data, jobs, updateStepData, setSignature } = useInspectionStore();
-    const summary = data.finalSummary;
+    const summary = data.finalSummary ?? { vinConfirmed: false, signatureAppraiser: '', signatureClient: '', signatureYard: '', isAbsentRep: false, absentRepComment: '', submittedAt: '', submissionStatus: '' };
     const allDamages = [...(data.exteriorDamage ?? []), ...(data.interiorDamage ?? [])];
     
     // Lock logic: if appraiser has signed, lock everything
