@@ -162,33 +162,43 @@ function dataUrlToBlob(dataUrl: string): Blob {
                         }
                         console.log(`[Photo] ${slot.id}: ${(b64.length * 0.75 / 1024).toFixed(0)}KB (b64 ${(b64.length/1024).toFixed(0)}KB)`);
 
-                        const controller = new AbortController();
-                        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
-                        try {
-                            const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
-                                method: 'POST',
-                                signal: controller.signal,
-                                headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    deal_id: Number(dealId),
-                                    field_key: slot.id,
-                                    file_base64: b64,
-                                    filename: `${slot.id}.jpg`
-                                })
-                            });
-                            clearTimeout(timeout);
-                            if (uploadRes.ok) {
-                                uploaded++;
-                                setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
-                            } else {
-                                const errBody = await uploadRes.text().catch(() => '<unreadable>');
-                                console.warn(`[Photo] Upload failed for ${slot.id}: ${uploadRes.status} — ${errBody.slice(0, 300)}`);
+                        // Retry once — first TCP connection can fail with cold-start disconnect
+                        let uploadOk = false;
+                        for (let attempt = 0; attempt < 2 && !uploadOk; attempt++) {
+                            if (attempt > 0) {
+                                console.log(`[Photo] ${slot.id}: retrying after 2s...`);
+                                await new Promise(r => setTimeout(r, 2000));
                             }
-                        } finally {
-                            clearTimeout(timeout);
+                            const controller = new AbortController();
+                            const timeout = setTimeout(() => controller.abort(), 30000);
+                            try {
+                                const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
+                                    method: 'POST',
+                                    signal: controller.signal,
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        deal_id: Number(dealId),
+                                        field_key: slot.id,
+                                        file_base64: b64,
+                                        filename: `${slot.id}.jpg`
+                                    })
+                                });
+                                clearTimeout(timeout);
+                                if (uploadRes.ok) {
+                                    uploadOk = true;
+                                    uploaded++;
+                                    setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
+                                } else {
+                                    const errBody = await uploadRes.text().catch(() => '<unreadable>');
+                                    console.warn(`[Photo] Upload failed for ${slot.id} (attempt ${attempt+1}): ${uploadRes.status} — ${errBody.slice(0, 200)}`);
+                                }
+                            } catch(fetchErr) {
+                                clearTimeout(timeout);
+                                console.warn(`[Photo] Fetch error for ${slot.id} (attempt ${attempt+1}):`, fetchErr);
+                            }
                         }
                     } catch(e) {
                         console.warn(`[Photo] Error for ${slot.id}:`, e);
