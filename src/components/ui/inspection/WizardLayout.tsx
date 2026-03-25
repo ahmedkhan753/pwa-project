@@ -148,9 +148,11 @@ function dataUrlToBlob(dataUrl: string): Blob {
             .filter(slot => slot?.base64?.startsWith('data:image'));
 
         // Photo upload phase (non-blocking — entire phase is guarded)
+        // NOTE: No setSubmitError calls inside the loop — React re-renders during the
+        // animated spinner cause insertBefore DOM crashes. Use console.log only.
         try {
             if (photosWithData.length > 0) {
-                setSubmitError(`Kompresowanie i wysyłanie ${photosWithData.length} zdjęć...`);
+                console.log(`[Submit] Uploading ${photosWithData.length} photos...`);
                 let uploaded = 0;
                 for (const slot of photosWithData) {
                     try {
@@ -190,7 +192,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
                                 if (uploadRes.ok) {
                                     uploadOk = true;
                                     uploaded++;
-                                    setSubmitError(`Wysłano ${uploaded}/${photosWithData.length} zdjęć...`);
+                                    console.log(`[Photo] ${slot.id}: uploaded OK (${uploaded}/${photosWithData.length})`);
                                 } else {
                                     const errBody = await uploadRes.text().catch(() => '<unreadable>');
                                     console.warn(`[Photo] Upload failed for ${slot.id} (attempt ${attempt+1}): ${uploadRes.status} — ${errBody.slice(0, 200)}`);
@@ -204,11 +206,10 @@ function dataUrlToBlob(dataUrl: string): Blob {
                         console.warn(`[Photo] Error for ${slot.id}:`, e);
                     }
                 }
-                setSubmitError('');
+                console.log(`[Submit] Photo upload done: ${uploaded}/${photosWithData.length} succeeded`);
             }
         } catch (photoErr) {
             console.warn('[Submit] Photo upload phase failed:', photoErr);
-            setSubmitError(''); // ensure cleared so submit can proceed
         }
 
         // ALWAYS reaches here regardless of photo upload outcome
