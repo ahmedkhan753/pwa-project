@@ -28,6 +28,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
+    const [photoProgress, setPhotoProgress] = useState<{ current: number; total: number } | null>(null);
+    const [submitPhase, setSubmitPhase] = useState<'photos' | 'finalizing' | null>(null);
 
     // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting
     useEffect(() => {
@@ -88,21 +90,8 @@ async function compressImage(base64: string): Promise<string> {
     })
 }
 
-// Convert a base64 data URL directly to a Blob — avoids fetch(dataUrl) which
-// can produce a Blob with wrong/empty Content-Type on some mobile browsers,
-// causing Starlette's multipart parser to reject the request with 400 before
-// the route handler even runs.
-function dataUrlToBlob(dataUrl: string): Blob {
-    const [header, b64] = dataUrl.split(',');
-    const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-    const bytes = atob(b64);
-    const arr = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-    return new Blob([arr], { type: mime });
-}
 
     const handleSubmit = async (e?: React.MouseEvent) => {
-        console.log('[handleSubmit] FIRED — isSubmitting:', isSubmitting);
         e?.preventDefault();
         e?.stopPropagation();
 
@@ -124,135 +113,147 @@ function dataUrlToBlob(dataUrl: string): Blob {
             return;
         }
 
-        setIsSubmitting(true);
-
-        // Snapshot store data NOW — before clearing inspection context
+        // Snapshot data before any state changes
         const storeData = { ...store.data };
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-        // Mark as uploading in store so dashboard shows spinner badge
+        // Show overlay immediately
+        setIsSubmitting(true);
+        setSubmitPhase('photos');
         useInspectionStore.getState().setSubmissionStatus(dealId, 'uploading');
 
-        // Yield to render loop so the overlay appears before we clear inspection
-        await new Promise(r => setTimeout(r, 0));
+        // ── Phase 1: Upload photos sequentially ON SCREEN ──────────────
+        // CRITICAL for iOS: keep page active during all uploads.
+        // iOS Safari kills background fetches after DOM navigation.
+        // Uploads run here (before clearInspection) so the page stays mounted.
+        const rawPhotos = storeData?.photos || [];
+        const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
+        const photosWithData = (photoArray as Array<{id: string; base64: string}>)
+            .filter(slot => slot?.base64?.startsWith('data:image'));
 
-        // Clear wizard context — DashboardPage will now show <Dashboard /> directly
-        // (no router.push needed: we're already on /dashboard)
-        useInspectionStore.getState().clearInspection();
+        const uploadedPhotoData: Record<string, string> = {};
+        const total = photosWithData.length;
 
-        // ── Background upload + submit (fire-and-forget) ──────────────
-        // This async IIFE continues running after client-side navigation.
-        // Never awaited — inspector is already on dashboard.
-        (async () => {
-            const rawPhotos = storeData?.photos || [];
-            const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
-            const photosWithData = (photoArray as Array<{id: string; base64: string}>)
-                .filter(slot => slot?.base64?.startsWith('data:image'));
+        for (let i = 0; i < photosWithData.length; i++) {
+            const slot = photosWithData[i];
+            setPhotoProgress({ current: i + 1, total });
 
-            const uploadedPhotoData: Record<string, string> = {};
-
-            // Upload photos in background
             try {
-                for (const slot of photosWithData) {
-                    try {
-                        const compressed = await compressImage(slot.base64);
-                        const b64 = compressed.split(',')[1];
-                        if (!b64) continue;
+                const compressed = await compressImage(slot.base64);
+                const b64 = compressed.split(',')[1];
+                if (!b64) continue;
 
-                        let uploadOk = false;
-                        for (let attempt = 0; attempt < 2 && !uploadOk; attempt++) {
-                            if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
-                            const controller = new AbortController();
-                            const timeout = setTimeout(() => controller.abort(), 30000);
-                            try {
-                                const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
-                                    method: 'POST',
-                                    signal: controller.signal,
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        deal_id: Number(dealId),
-                                        field_key: slot.id,
-                                        file_base64: b64,
-                                        filename: `${slot.id}.jpg`
-                                    })
-                                });
-                                clearTimeout(timeout);
-                                if (uploadRes.ok) {
-                                    uploadOk = true;
-                                    uploadedPhotoData[slot.id] = compressed;
-                                    console.log(`[BG Photo] ${slot.id}: OK`);
-                                }
-                            } catch (fetchErr) {
-                                clearTimeout(timeout);
-                                console.warn(`[BG Photo] ${slot.id} attempt ${attempt + 1} failed:`, fetchErr);
-                            }
+                let uploadOk = false;
+                for (let attempt = 0; attempt < 2 && !uploadOk; attempt++) {
+                    if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 30000);
+                    try {
+                        const uploadRes = await fetch(`${apiUrl}/files/upload-json`, {
+                            method: 'POST',
+                            signal: controller.signal,
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                deal_id: Number(dealId),
+                                field_key: slot.id,
+                                file_base64: b64,
+                                filename: `${slot.id}.jpg`
+                            })
+                        });
+                        clearTimeout(timeout);
+                        if (uploadRes.ok) {
+                            uploadOk = true;
+                            uploadedPhotoData[slot.id] = compressed;
                         }
-                    } catch (e) {
-                        console.warn(`[BG Photo] Error for ${slot.id}:`, e);
+                    } catch {
+                        clearTimeout(timeout);
                     }
                 }
-                console.log(`[BG] Photo upload done: ${Object.keys(uploadedPhotoData).length}/${photosWithData.length}`);
-            } catch (photoErr) {
-                console.warn('[BG] Photo upload phase failed:', photoErr);
+            } catch {
+                // skip failed photo — continue with rest
             }
+        }
 
-            // Submit to backend — returns immediately (backend queues background task)
-            const finalSummary = storeData?.finalSummary || {};
-            const submitPayload = {
-                deal_id: dealId,
-                photos: uploadedPhotoData,
-                finalSummary: {
-                    signatureAppraiser: finalSummary.signatureAppraiser || '',
-                    signatureClient: finalSummary.signatureClient || '',
-                    signatureYard: finalSummary.signatureYard || '',
-                    vinConfirmed: (finalSummary as any).vinConfirmed || false,
+        // ── Phase 2: Submit to backend (fast — PDF runs in background) ──
+        setSubmitPhase('finalizing');
+        setPhotoProgress(null);
+
+        const finalSummary = storeData?.finalSummary || {};
+        const submitPayload = {
+            deal_id: dealId,
+            photos: uploadedPhotoData,
+            finalSummary: {
+                signatureAppraiser: finalSummary.signatureAppraiser || '',
+                signatureClient: finalSummary.signatureClient || '',
+                signatureYard: finalSummary.signatureYard || '',
+                vinConfirmed: (finalSummary as any).vinConfirmed || false,
+            },
+            vehicleData: storeData?.vehicleData || {},
+            equipmentCompleteness: storeData?.equipmentCompleteness || {},
+            fullEquipment: storeData?.fullEquipment || {},
+            tires: storeData?.tires || {},
+            exteriorDamage: storeData?.exteriorDamage || [],
+            interiorDamage: storeData?.interiorDamage || [],
+            mechanical: storeData?.mechanical || {},
+            notesValuation: storeData?.notesValuation || {},
+        };
+
+        try {
+            const res = await fetch(`${apiUrl}/inspection/submit`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
                 },
-                vehicleData: storeData?.vehicleData || {},
-                equipmentCompleteness: storeData?.equipmentCompleteness || {},
-                fullEquipment: storeData?.fullEquipment || {},
-                tires: storeData?.tires || {},
-                exteriorDamage: storeData?.exteriorDamage || [],
-                interiorDamage: storeData?.interiorDamage || [],
-                mechanical: storeData?.mechanical || {},
-                notesValuation: storeData?.notesValuation || {},
-            };
-
-            try {
-                const res = await fetch(`${apiUrl}/inspection/submit`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(submitPayload),
-                });
-                if (res.ok) {
-                    console.log('[BG] Submit API call accepted — backend processing in background');
-                    useInspectionStore.getState().setSubmissionStatus(dealId, 'pending');
-                } else {
-                    throw new Error(`HTTP ${res.status}`);
-                }
-            } catch (err) {
-                console.error('[BG] Submit API call failed:', err);
-                useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
+                body: JSON.stringify(submitPayload),
+            });
+            if (res.ok) {
+                useInspectionStore.getState().setSubmissionStatus(dealId, 'pending');
+            } else {
+                throw new Error(`HTTP ${res.status}`);
             }
-        })();
+        } catch {
+            useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
+        }
+
+        // ── Phase 3: Navigate to dashboard ──────────────────────────────
+        // All uploads done — now safe to clear. DashboardPage renders <Dashboard />.
+        useInspectionStore.getState().clearInspection();
     };
 
-    console.log('[WizardLayout] currentStep:', currentStep, 'totalSteps:', totalSteps, 'isSubmitting:', isSubmitting);
-
     if (isSubmitting) {
+        const isPhotos = submitPhase === 'photos';
+        const prog = photoProgress;
         return (
-            <div className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center">
-                <div className="text-center px-8">
+            <div className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center px-8">
+                <div className="w-full max-w-xs text-center">
                     <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-                    <h2 className="text-2xl font-black text-foreground mb-3 uppercase tracking-tight">Wysyłanie raportu...</h2>
-                    <p className="text-sm text-muted max-w-xs mx-auto leading-relaxed">
-                        Zdjęcia i dane są wysyłane w tle.<br />Za chwilę wrócisz do pulpitu.
-                    </p>
+
+                    <h2 className="text-xl font-black text-foreground mb-2 uppercase tracking-tight">
+                        {isPhotos ? 'Wysyłanie zdjęć...' : 'Finalizowanie raportu...'}
+                    </h2>
+
+                    {isPhotos && prog ? (
+                        <>
+                            <p className="text-sm font-bold text-primary mb-4">
+                                Zdjęcie {prog.current} z {prog.total}
+                            </p>
+                            {/* Progress bar */}
+                            <div className="w-full bg-border rounded-full h-2 mb-4">
+                                <div
+                                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.round((prog.current / prog.total) * 100)}%` }}
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <p className="text-sm text-muted mb-4">Generowanie PDF i synchronizacja...</p>
+                    )}
+
+                    <p className="text-xs text-muted/60">Nie zamykaj aplikacji</p>
                 </div>
             </div>
         );
