@@ -64,21 +64,28 @@ async def get_inspection_report(
                     # Ensure URL has protocol (Bitrix sometimes returns relative paths)
                     if download_url and not download_url.startswith("http"):
                         download_url = f"https://b24-05xr3e.bitrix24.pl{download_url}"
+                    # Inject auth token into show_file.php URL (Authorization header is ignored by Bitrix)
+                    if bitrix_auth_token and download_url:
+                        import re as _re
+                        if "auth=" in download_url:
+                            download_url = _re.sub(r'auth=[^&]*', f'auth={bitrix_auth_token}', download_url)
+                        else:
+                            sep = "&" if "?" in download_url else "?"
+                            download_url = f"{download_url}{sep}auth={bitrix_auth_token}"
                     if download_url:
                         import httpx as httpx_client
-                        # Pass Bitrix auth token so internal download URLs work
-                        headers = {}
-                        if bitrix_auth_token:
-                            headers["Authorization"] = f"Bearer {bitrix_auth_token}"
                         async with httpx_client.AsyncClient(timeout=30) as client:
-                            resp = await client.get(download_url, headers=headers)
-                            if resp.status_code == 200:
+                            resp = await client.get(download_url)
+                            ct = resp.headers.get("content-type", "")
+                            if resp.status_code == 200 and ("pdf" in ct or "octet-stream" in ct):
                                 logger.info(f"✅ Serving uploaded PDF for deal {deal_id}")
                                 return Response(
                                     content=resp.content,
                                     media_type="application/pdf",
                                     headers={"Content-Disposition": f"inline; filename=report_{deal_id}.pdf"}
                                 )
+                            elif resp.status_code == 200:
+                                logger.warning(f"Bitrix PDF download returned non-PDF content-type ({ct}) — falling back to generation")
                             else:
                                 logger.warning(f"Bitrix PDF download returned {resp.status_code} — falling back to generation")
             except Exception as e:

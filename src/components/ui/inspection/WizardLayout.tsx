@@ -250,7 +250,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
             // SUCCESS — clear job from store so dashboard doesn't re-open wizard
             console.log('[handleSubmit] SUCCESS — navigating to dashboard');
             if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
-            useInspectionStore.getState().selectJob(null);
+            useInspectionStore.getState().clearInspection();
             setSubmitStatus('success');
             setIsSubmitting(false);
             setTimeout(() => {
