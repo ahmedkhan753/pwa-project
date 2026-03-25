@@ -19,7 +19,7 @@ export function PhotoUploadSlot({ label, base64, required, onCapture, onClear }:
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const compressed = await compressImage(file, 1024, 1024, 0.65);
+        const compressed = await compressImage(file, 800, 800, 0.60);
         onCapture(compressed);
         e.target.value = '';
     };
