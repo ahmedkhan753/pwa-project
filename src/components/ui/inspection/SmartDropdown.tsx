@@ -91,7 +91,6 @@ export function SmartDropdown({
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted/40" size={16} />
                             <input
-                                autoFocus
                                 type="text"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}

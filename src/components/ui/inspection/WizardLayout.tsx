@@ -1,13 +1,10 @@
 "use client";
 
 import { useInspectionStore } from "@/store/useInspectionStore";
-import { api } from "@/lib/api";
 import { ProgressBar } from "./ProgressBar";
-import { Logo } from "@/components/ui/Logo";
 import { ChevronLeft, ChevronRight, Send, LogOut, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const STEPS = [
@@ -27,7 +24,6 @@ const STEPS = [
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
     const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
-    const router = useRouter();
     const totalSteps = STEPS.length;
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -38,7 +34,6 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         if (isSubmitting) return;
 
         const timer = setTimeout(async () => {
-            if ((window as any).__submitInProgress) return;
             await syncStepWithBitrix(currentStep);
         }, 2000);
 
@@ -113,14 +108,6 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
         if (isSubmitting) return;
 
-        setIsSubmitting(true);
-        setSubmitStatus('idle');
-        setSubmitError('');
-
-        if (typeof window !== 'undefined') {
-            (window as any).__submitInProgress = true;
-        }
-
         // Read store synchronously before any awaits
         const store = useInspectionStore.getState();
         const dealId = store.jobs?.currentJobId;
@@ -128,7 +115,6 @@ function dataUrlToBlob(dataUrl: string): Blob {
         if (!dealId) {
             setSubmitError('Brak ID zlecenia — odśwież stronę');
             setSubmitStatus('error');
-            setIsSubmitting(false);
             return;
         }
 
@@ -138,6 +124,8 @@ function dataUrlToBlob(dataUrl: string): Blob {
             return;
         }
 
+        setIsSubmitting(true);
+
         // Snapshot store data NOW — before clearing inspection context
         const storeData = { ...store.data };
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -145,12 +133,12 @@ function dataUrlToBlob(dataUrl: string): Blob {
         // Mark as uploading in store so dashboard shows spinner badge
         useInspectionStore.getState().setSubmissionStatus(dealId, 'uploading');
 
-        // Clear wizard context so dashboard renders normally
-        useInspectionStore.getState().clearInspection();
+        // Yield to render loop so the overlay appears before we clear inspection
+        await new Promise(r => setTimeout(r, 0));
 
-        // Navigate to dashboard immediately — inspector can start next car
-        if (typeof window !== 'undefined') (window as any).__submitInProgress = false;
-        router.push('/dashboard');
+        // Clear wizard context — DashboardPage will now show <Dashboard /> directly
+        // (no router.push needed: we're already on /dashboard)
+        useInspectionStore.getState().clearInspection();
 
         // ── Background upload + submit (fire-and-forget) ──────────────
         // This async IIFE continues running after client-side navigation.
@@ -255,6 +243,20 @@ function dataUrlToBlob(dataUrl: string): Blob {
     };
 
     console.log('[WizardLayout] currentStep:', currentStep, 'totalSteps:', totalSteps, 'isSubmitting:', isSubmitting);
+
+    if (isSubmitting) {
+        return (
+            <div className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center">
+                <div className="text-center px-8">
+                    <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+                    <h2 className="text-2xl font-black text-foreground mb-3 uppercase tracking-tight">Wysyłanie raportu...</h2>
+                    <p className="text-sm text-muted max-w-xs mx-auto leading-relaxed">
+                        Zdjęcia i dane są wysyłane w tle.<br />Za chwilę wrócisz do pulpitu.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden transition-colors duration-300">
