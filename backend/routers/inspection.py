@@ -56,7 +56,7 @@ async def get_inspection_report(
         pass
 
     try:
-        deal = await gateway.call("crm.deal.get", {"id": deal_id})
+        deal = await gateway.call("crm.deal.get", {"id": deal_id, "select": ["*", "UF_*"]})
         if not deal:
             raise HTTPException(status_code=404, detail="Deal not found")
 
@@ -105,8 +105,8 @@ async def get_inspection_report(
             except Exception as e:
                 logger.warning(f"Could not fetch uploaded PDF: {e}, falling back to generation")
 
-        # Fallback: generate fresh PDF with deal data
-        logger.info(f"Generating report for deal {deal_id}")
+        # Fallback: generate fresh PDF with all available deal data from Bitrix
+        logger.info(f"Generating fallback report for deal {deal_id}")
         deal_info = {
             "title": deal.get("TITLE", f"Zlecenie #{deal_id}"),
             "order_number": f"Zlecenie nr. {deal_id} - {deal.get('TITLE', '')}",
@@ -117,9 +117,20 @@ async def get_inspection_report(
             "inspector_name": current_user.get("name", ""),
             "plates": deal.get("UF_CRM_1766057515315", ""),
             "make": deal.get("UF_CRM_1766057839684", ""),
+            "vehicle_brand": deal.get("UF_CRM_1766057839684", ""),
             "model": deal.get("UF_CRM_1766057849818", ""),
+            "vehicle_model": deal.get("UF_CRM_1766057849818", ""),
             "vin": deal.get("UF_CRM_1766057539531", ""),
             "year": deal.get("UF_CRM_1766057572300", ""),
+            "mileage": deal.get("UF_CRM_1772534309693", ""),
+            "color": deal.get("UF_CRM_1772534410706", ""),
+            "gearbox": deal.get("UF_CRM_1772796772039", ""),
+            "body_type": deal.get("UF_CRM_1772796562336", ""),
+            "drive": deal.get("UF_CRM_1772534384484", ""),
+            "doors": deal.get("UF_CRM_1772536169528", ""),
+            "fuel_type": deal.get("UF_CRM_1772534193", ""),
+            "engine_capacity": deal.get("UF_CRM_1772534081105", ""),
+            "power_kw": deal.get("UF_CRM_1772534094039", ""),
         }
 
         from services.pdf_generator import generate_inspection_pdf

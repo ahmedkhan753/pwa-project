@@ -622,6 +622,8 @@ def generate_inspection_pdf(deal_info: dict, inspection_data: dict, logo_path: s
         flat.setdefault("registration_doc", vehicle.get("registrationCertificate", ""))
         flat.setdefault("plates", vehicle.get("registrationNumber", ""))
         flat.setdefault("gearbox", vehicle.get("gearboxType", ""))
+        flat.setdefault("body_type", vehicle.get("bodyType", ""))
+        flat.setdefault("doors", vehicle.get("doorsCount", ""))
     if basic:
         flat.setdefault("company_name", basic.get("companyName", ""))
         flat.setdefault("inspection_location", basic.get("inspectionPlace", ""))
