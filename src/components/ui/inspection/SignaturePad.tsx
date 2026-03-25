@@ -16,16 +16,19 @@ export function SignaturePad({ label, value, onSave, disabled }: SignaturePadPro
     const [isDrawing, setIsDrawing] = useState(false);
     const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
 
-    // DPI Scaling and Resize Handling
+    // DPI Scaling — set once on mount.
+    // ResizeObserver was removed: setting canvas.width inside the callback
+    // changes element layout, causing an infinite loop on iOS Safari.
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas || value) return;
 
-        const handleResize = () => {
+        const setupCanvas = () => {
             const rect = canvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
             const dpr = window.devicePixelRatio || 1;
-            canvas.width = rect.width * dpr;
-            canvas.height = rect.height * dpr;
+            canvas.width = Math.round(rect.width * dpr);
+            canvas.height = Math.round(rect.height * dpr);
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.scale(dpr, dpr);
@@ -35,11 +38,14 @@ export function SignaturePad({ label, value, onSave, disabled }: SignaturePadPro
             }
         };
 
-        handleResize();
-        const observer = new ResizeObserver(handleResize);
-        observer.observe(canvas);
+        // Small delay so the layout is settled before we read getBoundingClientRect
+        const raf = requestAnimationFrame(setupCanvas);
+        window.addEventListener('resize', setupCanvas);
 
-        return () => observer.disconnect();
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('resize', setupCanvas);
+        };
     }, [value]);
 
     const getPos = (e: any) => {

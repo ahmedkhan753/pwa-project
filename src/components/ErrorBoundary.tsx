@@ -61,6 +61,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
     }
   }
 
+  private goToDashboard() {
+    // Clear currentJobId before redirecting so the wizard doesn't remount and re-crash
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useInspectionStore } = require('@/store/useInspectionStore')
+      useInspectionStore.getState().selectJob(null)
+    } catch { /* ignore */ }
+    window.location.replace('/dashboard')
+  }
+
   render() {
     if (this.state.hasError && this.state.isNavigating) {
       return (
@@ -84,7 +94,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <div className="text-center p-8">
             <p className="text-red-500 mb-4">Wystąpił błąd</p>
             <button
-              onClick={() => window.location.replace('/dashboard')}
+              onClick={() => this.goToDashboard()}
               className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold"
             >
               Powrót do dashboardu

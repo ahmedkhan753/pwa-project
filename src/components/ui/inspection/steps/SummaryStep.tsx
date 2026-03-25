@@ -8,8 +8,20 @@ import { cn } from "@/lib/utils";
 
 export function SummaryStep() {
     const { data, jobs, updateStepData, setSignature } = useInspectionStore();
-    const summary = data.finalSummary ?? { vinConfirmed: false, signatureAppraiser: '', signatureClient: '', signatureYard: '', isAbsentRep: false, absentRepComment: '', submittedAt: '', submissionStatus: '' };
-    const allDamages = [...(data.exteriorDamage ?? []), ...(data.interiorDamage ?? [])];
+    const rawSummary = data.finalSummary;
+    const summary = {
+        vinConfirmed: rawSummary?.vinConfirmed ?? false,
+        signatureAppraiser: rawSummary?.signatureAppraiser ?? '',
+        signatureClient: rawSummary?.signatureClient ?? '',
+        signatureYard: rawSummary?.signatureYard ?? '',
+        isAbsentRep: rawSummary?.isAbsentRep ?? false,
+        absentRepComment: rawSummary?.absentRepComment ?? '',
+        submittedAt: rawSummary?.submittedAt ?? '',
+        submissionStatus: rawSummary?.submissionStatus ?? '',
+    };
+    const extDamages = Array.isArray(data.exteriorDamage) ? data.exteriorDamage : [];
+    const intDamages = Array.isArray(data.interiorDamage) ? data.interiorDamage : [];
+    const allDamages = [...extDamages, ...intDamages];
     
     // Lock logic: if appraiser has signed, lock everything
     const isLocked = !!summary.signatureAppraiser;
