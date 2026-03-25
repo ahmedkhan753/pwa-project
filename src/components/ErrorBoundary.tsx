@@ -22,7 +22,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
       error.message?.includes('removeChild') ||
       error.message?.includes('not a child') ||
       error.message?.includes('NotFoundError') ||
-      error.message?.includes('Failed to execute')
+      error.message?.includes('Failed to execute') ||
+      error.message?.includes('cannot be found')
 
     // For navigation errors, show loading screen not error screen
     return {
@@ -39,7 +40,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
       error.message?.includes('removeChild') ||
       error.message?.includes('not a child') ||
       error.message?.includes('NotFoundError') ||
-      error.message?.includes('Failed to execute')
+      error.message?.includes('Failed to execute') ||
+      error.message?.includes('cannot be found')
 
     if (isNavError) {
       // If a submit is in progress, the async handleSubmit is still running in the

@@ -287,7 +287,7 @@ async function compressImage(base64: string): Promise<string> {
             </header>
 
             {/* ── Main Content ───────────────────────────────── */}
-            <main className="flex-1 p-4 overflow-y-auto pb-28 animate-fade-in" key={currentStep}>
+            <main className="flex-1 p-4 overflow-y-auto pb-28">
                 {children}
             </main>
 
