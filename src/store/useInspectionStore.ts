@@ -313,6 +313,7 @@ interface InspectionState {
   jobs: {
     scheduled: InspectionJob[];
     unscheduled: InspectionJob[];
+    allDeals: InspectionJob[];   // full cache for calendar
     totalInBitrix: number;
     currentJobId: string | null;
     loading: boolean;
@@ -372,6 +373,7 @@ interface InspectionState {
   syncStepWithBitrix: (stepNumber: number) => Promise<void>;
   submitToBitrix: () => Promise<{ success: boolean; message: string }>;
   clearInspection: () => void;
+  fetchAllDeals: () => Promise<void>;
   fetchDealsForCalendar: (date: string) => Promise<void>;
   fetchFullDeal: (dealId: string) => Promise<void>;
   setIsSubmitting: (val: boolean) => void;
@@ -537,6 +539,7 @@ export const useInspectionStore = create<InspectionState>()(
       jobs: {
         scheduled: [],
         unscheduled: [],
+        allDeals: [],
         totalInBitrix: 0,
         currentJobId: null,
         loading: false,
@@ -784,21 +787,20 @@ export const useInspectionStore = create<InspectionState>()(
           const isoDate = date;
           const response = await api.scheduleDeal(dealId, isoDate.split('T')[0], isoDate.split('T')[1] || '09:00');
           if (response.success) {
+            const applyUpdate = (j: InspectionJob) =>
+              j.id === dealId ? { ...j, scheduledDate: isoDate, status: 'scheduled' as const, hasConflict: !!response.conflict } : j;
             set((state) => ({
               jobs: {
                 ...state.jobs,
-                scheduled: state.jobs.scheduled.map((j) =>
-                  j.id === dealId
-                    ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
-                    : j
-                ),
-                unscheduled: state.jobs.unscheduled.map((j) =>
-                  j.id === dealId
-                    ? { ...j, scheduledDate: isoDate, hasConflict: !!response.conflict }
-                    : j
-                ),
+                allDeals: state.jobs.allDeals.map(applyUpdate),
+                scheduled: state.jobs.scheduled.map(applyUpdate),
+                unscheduled: state.jobs.unscheduled.map(applyUpdate),
               },
             }));
+            // Re-filter so a rescheduled-to-different-day job disappears from today's view
+            await useInspectionStore.getState().fetchDealsForCalendar(
+              useInspectionStore.getState().calendar.selectedDate
+            );
           }
           return response;
         } catch (error: any) {
@@ -1032,52 +1034,61 @@ export const useInspectionStore = create<InspectionState>()(
         }
       },
 
-      fetchDealsForCalendar: async (date: string) => {
+      fetchAllDeals: async () => {
         set((s) => ({ jobs: { ...s.jobs, loading: true, error: null } }));
         try {
-          const auth = useInspectionStore.getState().auth;
-          const res = await api.getDeals(date, date);
+          const res = await api.getAllDeals();
+          const raw = Array.isArray(res) ? res : [...(res.scheduled || []), ...(res.unscheduled || [])];
+          const total = Array.isArray(res) ? res.length : (res.total_in_bitrix || raw.length);
 
-          // Handle both old flat array and new grouped object as requested in FIX 1
-          const scheduledRaw = Array.isArray(res) ? res : (res.scheduled || []);
-          const unscheduledRaw = Array.isArray(res) ? [] : (res.unscheduled || []);
-          const totalInBitrix = Array.isArray(res) ? res.length : (res.total_in_bitrix || 0);
-
-          const transform = (d: any) => ({
+          const transformDeal = (d: any): InspectionJob => ({
             id: String(d.ID || d.id || ''),
-            clientName: d.TITLE || d.title || (d.clientFirstName ? `${d.clientFirstName} ${d.clientLastName}` : 'Brak nazwy'),
+            clientName: d.TITLE || d.title || 'Brak nazwy',
             vin: d.vin || d.UF_CRM_1766057539531 || '',
-            plates: d.registration_number || d.registrationNumber || d.UF_CRM_1766057515315 || '',
-            phone: d.contactPhone || d.UF_CRM_1766058247125 || d.UF_CRM_1766058053224 || '',
-            appointmentTime: d.appointment_time || (d.scheduledDate ? d.scheduledDate.split('T')[1]?.slice(0, 5) : '09:00'),
-            deadline: date,
+            plates: d.registration_number || d.UF_CRM_1766057515315 || '',
+            phone: d.contactPhone || d.UF_CRM_1766058247125 || '',
+            appointmentTime: d.scheduled_date
+              ? (d.scheduled_date.split('T')[1]?.slice(0, 5) || '09:00')
+              : '09:00',
+            deadline: d.scheduled_date?.split('T')[0] || '',
             status: d.status || 'new',
             stageId: d.stageId || d.STAGE_ID || '',
-            make: d.vehicle_brand || d.brand || d.UF_CRM_1766057839684 || '',
-            model: d.vehicle_model || d.model || d.UF_CRM_1766057849818 || '',
-            city: d.inspectionAddress || d.UF_CRM_1766058185504 || d.location || '',
-            jobType: d.job_type || d.type || 'WYCENA',
-            scheduledDate: d.scheduled_date || d.scheduledDate || d.UF_CRM_1772108256983 || '',
-            inspectorPhone: d.inspectorPhone || d.UF_CRM_1773961369947 || '',
+            make: d.vehicle_brand || d.UF_CRM_1766057839684 || '',
+            model: d.vehicle_model || d.UF_CRM_1766057849818 || '',
+            city: d.inspectionAddress || d.UF_CRM_1766058185504 || '',
+            jobType: 'WYCENA',
+            scheduledDate: d.scheduled_date || d.UF_CRM_1772108256983 || '',
             inspectionAddress: d.inspectionAddress || d.UF_CRM_1766058185504 || d.UF_CRM_1766058194337 || '',
-            contactPhone: d.contactPhone || d.UF_CRM_1766058247125 || d.UF_CRM_1766058053224 || '',
-            contactPerson: d.contactPerson || d.UF_CRM_1766058259960 || d.UF_CRM_1766057941327 || '',
+            contactPhone: d.contactPhone || d.UF_CRM_1766058247125 || '',
+            contactPerson: d.contactPerson || d.UF_CRM_1766058259960 || '',
           });
 
+          const allDeals = raw.map(transformDeal);
+          const date = useInspectionStore.getState().calendar.selectedDate;
+          const FINISHED = ['completed', 'in_valuation', 'closed', 'lost'];
+          const scheduled = allDeals.filter(j => !FINISHED.includes(j.status) && j.scheduledDate?.startsWith(date));
+          const unscheduled = allDeals.filter(j => !FINISHED.includes(j.status) && !j.scheduledDate);
+
           set((s) => ({
-            jobs: {
-              ...s.jobs,
-              scheduled: scheduledRaw.map(transform),
-              unscheduled: unscheduledRaw.map(transform),
-              totalInBitrix: totalInBitrix,
-              loading: false
-            }
+            jobs: { ...s.jobs, allDeals, scheduled, unscheduled, totalInBitrix: total, loading: false }
           }));
         } catch (error: any) {
-          set((s) => ({
-            jobs: { ...s.jobs, loading: false, error: error.message }
-          }));
+          set((s) => ({ jobs: { ...s.jobs, loading: false, error: error.message } }));
         }
+      },
+
+      fetchDealsForCalendar: async (date: string) => {
+        const allDeals = useInspectionStore.getState().jobs.allDeals;
+        if (allDeals.length === 0) {
+          // First load — fetch everything from backend
+          await useInspectionStore.getState().fetchAllDeals();
+          return;
+        }
+        // Already have the full set — just re-filter client-side (instant, no network)
+        const FINISHED = ['completed', 'in_valuation', 'closed', 'lost'];
+        const scheduled = allDeals.filter(j => !FINISHED.includes(j.status) && j.scheduledDate?.startsWith(date));
+        const unscheduled = allDeals.filter(j => !FINISHED.includes(j.status) && !j.scheduledDate);
+        set((s) => ({ jobs: { ...s.jobs, scheduled, unscheduled } }));
       },
 
       setIsSubmitting: (val: boolean) => set({ isSubmitting: val }),

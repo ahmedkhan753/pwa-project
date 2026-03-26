@@ -60,6 +60,14 @@ const realApi = {
     }
     return res.json()
   },
+  async getAllDeals() {
+    const res = await authFetch(`${BASE_URL}/deals`, { headers: authHeaders() })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch deals');
+    }
+    return res.json()
+  },
   async getDeals(dateFrom?: string, dateTo?: string) {
     const res = await authFetch(
       `${BASE_URL}/deals?date_from=${dateFrom}&date_to=${dateTo}`,

@@ -162,6 +162,7 @@ async def get_deals(
                 "UF_CRM_1766057839684",   # vehicle brand
                 "UF_CRM_1766057849818",   # vehicle model
                 "UF_CRM_1766057515315",   # plates
+                "UF_CRM_1772108256983",   # scheduled inspection date
             ],
             "order": {"DATE_CREATE": "DESC"}
         })
@@ -188,6 +189,7 @@ async def get_deals(
                 "vehicle_brand": deal.get("UF_CRM_1766057839684") or "",
                 "vehicle_model": deal.get("UF_CRM_1766057849818") or "",
                 "registration_number": deal.get("UF_CRM_1766057515315") or "",
+                "scheduled_date": deal.get("UF_CRM_1772108256983") or "",
                 
                 # Extras from Bitrix 
                 "CLOSEDATE": deal.get("CLOSEDATE"),
