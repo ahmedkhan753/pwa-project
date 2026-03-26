@@ -19,13 +19,17 @@ ALGORITHM = "HS256"
 def get_current_user(request: Request) -> dict:
     """
     Extract and verify user from JWT Bearer token.
-    Returns the decoded user payload dict.
+    Accepts token via Authorization header OR ?token= query param
+    (query param used for direct PDF links on iOS where fetch headers aren't available).
     """
     auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        token = request.query_params.get("token")
 
-    token = auth_header.split(" ")[1]
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

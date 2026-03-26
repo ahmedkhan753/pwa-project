@@ -1089,7 +1089,25 @@ export const useInspectionStore = create<InspectionState>()(
     }),
     {
       name: 'inspection-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => ({
+        getItem: (name: string) => {
+          try { return localStorage.getItem(name); } catch { return null; }
+        },
+        setItem: (name: string, value: string) => {
+          try {
+            localStorage.setItem(name, value);
+          } catch (e: any) {
+            // QuotaExceededError — storage full, data not saved.
+            // Log but don't crash — app continues, user loses data only on refresh.
+            if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+              console.error('[Storage] localStorage quota exceeded — photos may not persist across refresh');
+            }
+          }
+        },
+        removeItem: (name: string) => {
+          try { localStorage.removeItem(name); } catch { /* ignore */ }
+        },
+      })),
       version: 3,
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {

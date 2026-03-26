@@ -130,39 +130,13 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         }
     };
 
-    const handleViewReport = async () => {
-        const token = useInspectionStore.getState().auth?.token
-        if (!token) { alert('Sesja wygasła'); return }
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-        const btn = document.activeElement as HTMLButtonElement
-        if (btn) btn.disabled = true
-
-        try {
-            const res = await fetch(`${apiUrl}/inspection/${job.id}/report`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-
-            if (!res.ok) throw new Error(`Błąd serwera: ${res.status}`)
-
-            const blob = await res.blob()
-            const url = URL.createObjectURL(blob)
-
-            // a.download works on all platforms including iOS PWA —
-            // no popup needed, no user-interaction-context issues
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `raport_${job.id}.pdf`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            setTimeout(() => URL.revokeObjectURL(url), 60000)
-        } catch(e: any) {
-            console.error('PDF error:', e)
-            alert(`Nie można otworzyć raportu: ${e.message}`)
-        } finally {
-            if (btn) btn.disabled = false
-        }
+    const handleViewReport = () => {
+        const token = useInspectionStore.getState().auth?.token;
+        if (!token) { alert('Sesja wygasła'); return; }
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        // Open PDF directly — no fetch() needed, works on iOS Safari & Chrome.
+        // Token passed as query param because iOS can't send custom headers via window.open.
+        window.open(`${apiUrl}/inspection/${job.id}/report?token=${encodeURIComponent(token)}`, '_blank');
     };
 
     const handleReviewInspection = (e: React.MouseEvent) => {
