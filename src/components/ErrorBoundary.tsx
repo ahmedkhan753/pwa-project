@@ -8,13 +8,14 @@ interface Props {
 interface State {
   hasError: boolean
   isNavigating: boolean
+  isReloading: boolean
   errorMessage: string
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false, isNavigating: false, errorMessage: '' }
+    this.state = { hasError: false, isNavigating: false, isReloading: false, errorMessage: '' }
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -25,10 +26,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
       error.message?.includes('Failed to execute') ||
       error.message?.includes('cannot be found')
 
-    // For navigation errors, show loading screen not error screen
     return {
       hasError: true,
       isNavigating: !!isNavError,
+      isReloading: false,
       errorMessage: error?.message || 'unknown'
     }
   }
@@ -44,29 +45,38 @@ export class ErrorBoundary extends React.Component<Props, State> {
       error.message?.includes('cannot be found')
 
     if (isNavError) {
-      // If a submit is in progress, the async handleSubmit is still running in the
-      // background (JS event loop, independent of React renders). Don't redirect here —
-      // let handleSubmit complete and redirect itself. Add a 30s fallback in case it
-      // hangs so the user isn't stuck on the loading screen forever.
+      // Submit in progress — don't interfere, let it finish
       if (typeof window !== 'undefined' && (window as any).__submitInProgress) {
-        console.warn('ErrorBoundary: submit in progress — skipping auto-redirect, handleSubmit will redirect on completion')
+        console.warn('ErrorBoundary: submit in progress — skipping auto-reload')
         setTimeout(() => {
           if ((window as any).__submitInProgress) {
-            console.warn('ErrorBoundary: submit timed out after 30s — forcing dashboard redirect')
             window.location.replace('/dashboard')
           }
         }, 30000)
         return
       }
-      // Normal navigation error (not during submit) — redirect immediately
-      setTimeout(() => {
-        window.location.replace('/dashboard')
-      }, 50)
+
+      // Auto-reload once to recover from stale cached code.
+      // After reload, Zustand rehydrates from localStorage and the user
+      // lands exactly where they were. sessionStorage prevents an
+      // infinite reload loop if the crash persists after fresh code.
+      if (typeof window !== 'undefined') {
+        const reloadKey = 'eb_nav_reloaded'
+        if (!sessionStorage.getItem(reloadKey)) {
+          sessionStorage.setItem(reloadKey, '1')
+          this.setState({ isReloading: true })
+          window.location.reload()
+          return
+        }
+        // Already reloaded once and still crashing — go to dashboard
+        sessionStorage.removeItem(reloadKey)
+      }
+
+      setTimeout(() => window.location.replace('/dashboard'), 50)
     }
   }
 
   private goToDashboard() {
-    // Clear currentJobId before redirecting so the wizard doesn't remount and re-crash
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useInspectionStore } = require('@/store/useInspectionStore')
@@ -76,6 +86,19 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   render() {
+    // Auto-reloading — show spinner so user doesn't see a flash of error
+    if (this.state.hasError && this.state.isReloading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center p-8">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-500 text-sm">Ładowanie...</p>
+          </div>
+        </div>
+      )
+    }
+
+    // Submit-triggered navigation — show success screen
     if (this.state.hasError && this.state.isNavigating) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
