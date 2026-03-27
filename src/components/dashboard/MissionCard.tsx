@@ -344,6 +344,17 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                             </a>
                         </div>
                     )}
+
+                    {/* Uwagi / Notes */}
+                    {job.notes && (
+                        <div className="flex items-start gap-3 text-xs bg-amber-50 dark:bg-amber-950/30 p-3 rounded-2xl border border-amber-200 dark:border-amber-800">
+                            <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <p className="font-black text-amber-700 dark:text-amber-400 uppercase text-[10px] mb-0.5">Uwagi</p>
+                                <span className="font-medium text-amber-800 dark:text-amber-300">{job.notes}</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

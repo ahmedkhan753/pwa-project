@@ -179,7 +179,7 @@ export function SummaryStep() {
                         label="Podpis Przedstawiciela Placu (Opcjonalnie)"
                         value={summary.signatureYard}
                         onSave={(b64) => setSignature('signatureYard', b64)}
-                        disabled={isLocked}
+                        disabled={isLocked && !!summary.signatureYard}
                     />
                 </div>
 

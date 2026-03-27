@@ -66,7 +66,9 @@ async def send_assignment_email(
 ) -> bool:
     """Send order assignment notification to inspector."""
 
-    subject = f"Nowe zlecenie oględzin — {order_title}"
+    vehicle_info = f"{vehicle_make} {vehicle_model}".strip()
+    plates_info = f" ({registration_plates})" if registration_plates else ""
+    subject = f"Zlecenie #{order_id} — {vehicle_info}{plates_info}" if vehicle_info else f"Nowe zlecenie oględzin — {order_title}"
 
     html_body = f"""
     <!DOCTYPE html>

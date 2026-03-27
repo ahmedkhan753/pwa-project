@@ -160,7 +160,7 @@ async def get_deals(
             "filter": filter_params,
             "select": [
                 "ID", "TITLE", "STAGE_ID", "DATE_CREATE", "BEGINDATE",
-                "CLOSEDATE", "ASSIGNED_BY_ID", "CATEGORY_ID",
+                "CLOSEDATE", "ASSIGNED_BY_ID", "CATEGORY_ID", "COMMENTS",
                 "UF_CRM_1773970466449",   # inspector contact
                 "UF_CRM_1766058185504",   # inspection location
                 "UF_CRM_1766058194337",   # inspection address
@@ -197,6 +197,7 @@ async def get_deals(
                 "vehicle_model": deal.get("UF_CRM_1766057849818") or "",
                 "registration_number": deal.get("UF_CRM_1766057515315") or "",
                 "scheduled_date": deal.get("UF_CRM_1772108256983") or "",
+                "notes": deal.get("COMMENTS") or "",
                 
                 # Extras from Bitrix 
                 "CLOSEDATE": deal.get("CLOSEDATE"),
@@ -247,9 +248,9 @@ async def _notify_inspector_new_order(deal: dict, inspector_phone: str, db):
             client_name=deal.get("UF_CRM_1766057964319", ""),
             inspection_address=deal.get("UF_CRM_1766058185504", ""),
             inspection_date=deal.get("UF_CRM_1772108256983", "Nie ustalono"),
-            vehicle_make="",
-            vehicle_model="",
-            registration_plates="",
+            vehicle_make=deal.get("UF_CRM_1766057839684") or deal.get("vehicle_brand") or "",
+            vehicle_model=deal.get("UF_CRM_1766057849818") or deal.get("vehicle_model") or "",
+            registration_plates=deal.get("UF_CRM_1766057515315") or deal.get("registration_number") or "",
         )
         logger.info(f"📧 New order email sent to {inspector.email} for deal {deal.get('ID')}")
 

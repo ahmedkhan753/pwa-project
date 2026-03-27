@@ -32,6 +32,7 @@ export interface InspectionJob {
   contactPhone?: string;
   contactPerson?: string;
   inspectorPhone?: string;
+  notes?: string;
 }
 
 // ─── Toggle Type ───────────────────────────────────────────
@@ -1081,6 +1082,7 @@ export const useInspectionStore = create<InspectionState>()(
             inspectionAddress: d.inspectionAddress || d.UF_CRM_1766058185504 || d.UF_CRM_1766058194337 || '',
             contactPhone: d.contactPhone || d.UF_CRM_1766058247125 || '',
             contactPerson: d.contactPerson || d.UF_CRM_1766058259960 || '',
+            notes: d.notes || d.COMMENTS || '',
           });
 
           const allDeals = raw.map(transformDeal);

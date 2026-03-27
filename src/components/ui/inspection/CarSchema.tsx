@@ -11,26 +11,26 @@ interface CarSchemaProps {
 }
 
 const ZONES: { id: string; label: string; x: number; y: number; w: number; h: number }[] = [
-    // Walking order: front → left side (front→back) → rear → right side (back→front) → roof → sills
-    { id: "hood", label: "Pokrywa przednia", x: 30, y: 6, w: 40, h: 18 },
-    { id: "leftFrontFender", label: "Błotnik P.L", x: 10, y: 5, w: 18, h: 18 },
-    { id: "leftAColumn", label: "Słupek P.L", x: 28, y: 24, w: 4, h: 6 },
-    { id: "leftFrontDoor", label: "Drzwi P.L", x: 10, y: 24, w: 18, h: 22 },
-    { id: "leftBColumn", label: "Słupek Śr.L", x: 28, y: 44, w: 4, h: 6 },
-    { id: "leftRearDoor", label: "Drzwi T.L", x: 10, y: 47, w: 18, h: 22 },
-    { id: "leftCColumn", label: "Słupek T.L", x: 28, y: 56, w: 4, h: 6 },
-    { id: "leftRearFender", label: "Błotnik T.L", x: 10, y: 70, w: 18, h: 18 },
-    { id: "trunk", label: "Pokrywa tylna", x: 30, y: 64, w: 40, h: 15 },
-    { id: "rightRearFender", label: "Błotnik T.P", x: 72, y: 70, w: 18, h: 18 },
-    { id: "rightCColumn", label: "Słupek T.P", x: 68, y: 56, w: 4, h: 6 },
-    { id: "rightRearDoor", label: "Drzwi T.P", x: 72, y: 47, w: 18, h: 22 },
-    { id: "rightBColumn", label: "Słupek Śr.P", x: 68, y: 44, w: 4, h: 6 },
-    { id: "rightFrontDoor", label: "Drzwi P.P", x: 72, y: 24, w: 18, h: 22 },
-    { id: "rightAColumn", label: "Słupek P.P", x: 68, y: 24, w: 4, h: 6 },
-    { id: "rightFrontFender", label: "Błotnik P.P", x: 72, y: 5, w: 18, h: 18 },
-    { id: "roof", label: "Dach", x: 32, y: 25, w: 36, h: 36 },
-    { id: "leftSill", label: "Próg L", x: 5, y: 25, w: 4, h: 45 },
-    { id: "rightSill", label: "Próg P", x: 91, y: 25, w: 4, h: 45 },
+    // Client-confirmed order: front → left (with sill after B-column) → rear → right (with sill after B-column) → roof
+    { id: "hood", label: "Pokrywa przednia", x: 30, y: 6, w: 40, h: 18 },         // 1
+    { id: "leftFrontFender", label: "Błotnik P.L", x: 10, y: 5, w: 18, h: 18 },   // 2
+    { id: "leftAColumn", label: "Słupek P.L", x: 28, y: 24, w: 4, h: 6 },         // 3
+    { id: "leftFrontDoor", label: "Drzwi P.L", x: 10, y: 24, w: 18, h: 22 },      // 4
+    { id: "leftBColumn", label: "Słupek Śr.L", x: 28, y: 44, w: 4, h: 6 },        // 5
+    { id: "leftSill", label: "Próg L", x: 5, y: 25, w: 4, h: 45 },                // 6  ← moved here
+    { id: "leftRearDoor", label: "Drzwi T.L", x: 10, y: 47, w: 18, h: 22 },       // 7
+    { id: "leftCColumn", label: "Słupek T.L", x: 28, y: 56, w: 4, h: 6 },         // 8
+    { id: "leftRearFender", label: "Błotnik T.L", x: 10, y: 70, w: 18, h: 18 },   // 9
+    { id: "trunk", label: "Pokrywa tylna", x: 30, y: 64, w: 40, h: 15 },           // 10
+    { id: "rightRearFender", label: "Błotnik T.P", x: 72, y: 70, w: 18, h: 18 },  // 11
+    { id: "rightCColumn", label: "Słupek T.P", x: 68, y: 56, w: 4, h: 6 },        // 12
+    { id: "rightRearDoor", label: "Drzwi T.P", x: 72, y: 47, w: 18, h: 22 },      // 13
+    { id: "rightBColumn", label: "Słupek Śr.P", x: 68, y: 44, w: 4, h: 6 },       // 14
+    { id: "rightSill", label: "Próg P", x: 91, y: 25, w: 4, h: 45 },              // 15 ← moved here
+    { id: "rightFrontDoor", label: "Drzwi P.P", x: 72, y: 24, w: 18, h: 22 },     // 16
+    { id: "rightAColumn", label: "Słupek P.P", x: 68, y: 24, w: 4, h: 6 },        // 17
+    { id: "rightFrontFender", label: "Błotnik P.P", x: 72, y: 5, w: 18, h: 18 },  // 18
+    { id: "roof", label: "Dach", x: 32, y: 25, w: 36, h: 36 },                     // 19
 ];
 
 const PAINT_RANGES = [
