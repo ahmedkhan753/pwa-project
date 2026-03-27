@@ -96,21 +96,46 @@ async def _sync_inspector_to_bitrix(
         logger.info(f"Bitrix sync: {len(current_items)} existing items in dropdown")
 
         # 3. Build updated list
+        import re as _re
+
+        # Helper: find existing item by phone number match (handles "Name - phone" format)
+        def _find_by_phone(items):
+            for item in items:
+                if _re.search(r'\b' + _re.escape(phone) + r'\b', str(item.get("VALUE", ""))):
+                    return str(item["ID"])
+            return None
+
         if action == "add":
+            # Guard: if inspector already exists in Bitrix (e.g. legacy or failed deactivation),
+            # return their existing ID instead of adding a duplicate (causes XML_ID collision).
+            existing_id = _find_by_phone(current_items)
+            if existing_id:
+                logger.info(f"Bitrix sync: {name}/{phone} already exists (ID={existing_id}), skipping add")
+                from routers.deals import invalidate_inspector_cache
+                invalidate_inspector_cache()
+                return existing_id
+
             new_list = [
                 {"ID": str(item["ID"]), "VALUE": str(item.get("VALUE", ""))}
                 for item in current_items
             ]
             new_list.append({"VALUE": display_value})
-        elif action == "remove" and bitrix_list_id:
+
+        elif action == "remove":
+            # Resolve the item to remove: prefer stored bitrix_list_id, fall back to phone match
+            effective_id = str(bitrix_list_id) if bitrix_list_id else _find_by_phone(current_items)
+            if not effective_id:
+                logger.warning(f"Bitrix sync: cannot remove {name}/{phone} — not found in list")
+                return None
             new_list = [
                 {"ID": str(item["ID"]), "VALUE": str(item.get("VALUE", ""))}
                 for item in current_items
-                if str(item.get("ID", "")) != str(bitrix_list_id)
+                if str(item.get("ID", "")) != effective_id
             ]
-            logger.info(f"Bitrix sync: removing item {bitrix_list_id}, {len(new_list)} items remain")
+            logger.info(f"Bitrix sync: removing item {effective_id}, {len(new_list)} items remain")
+
         else:
-            logger.warning(f"Bitrix sync: invalid action={action!r} or missing bitrix_list_id")
+            logger.warning(f"Bitrix sync: invalid action={action!r}")
             return None
 
         # 4. Update Bitrix field
