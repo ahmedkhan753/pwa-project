@@ -97,13 +97,35 @@ async def _sync_inspector_to_bitrix(
 
         # 3. Build updated list
         import re as _re
+        import uuid as _uuid
 
-        # Helper: find existing item by phone number match (handles "Name - phone" format)
+        # Helper: find existing item by digits-only phone match.
+        # Handles \xa0 (non-breaking space) and other whitespace variants in Bitrix VALUES.
         def _find_by_phone(items):
-            for item in items:
-                if _re.search(r'\b' + _re.escape(phone) + r'\b', str(item.get("VALUE", ""))):
+            phone_digits = _re.sub(r'\D', '', phone)
+            if len(phone_digits) < 7:
+                return None
+            # Prefer highest ID (most recent entry) so we keep the correct duplicate
+            for item in sorted(items, key=lambda x: int(x.get("ID", 0)), reverse=True):
+                value_digits = _re.sub(r'\D', '', str(item.get("VALUE", "")))
+                if phone_digits in value_digits:
                     return str(item["ID"])
             return None
+
+        # Deduplicate current_items: when the same phone appears multiple times (e.g. due
+        # to a previous failed deactivation), keep only the entry with the highest ID.
+        # This removes stale duplicates that cause XML_ID collisions on every LIST update.
+        seen_phones: dict = {}
+        for item in sorted(current_items, key=lambda x: int(x.get("ID", 0))):
+            digits = _re.sub(r'\D', '', str(item.get("VALUE", "")))
+            seen_phones[digits] = item  # last (highest ID) wins
+        deduplicated_items = list(seen_phones.values())
+        if len(deduplicated_items) < len(current_items):
+            logger.info(
+                f"Bitrix sync: deduplicated {len(current_items) - len(deduplicated_items)} "
+                f"duplicate item(s) from dropdown"
+            )
+        current_items = deduplicated_items
 
         if action == "add":
             # Guard: if inspector already exists in Bitrix (e.g. legacy or failed deactivation),
@@ -119,7 +141,9 @@ async def _sync_inspector_to_bitrix(
                 {"ID": str(item["ID"]), "VALUE": str(item.get("VALUE", ""))}
                 for item in current_items
             ]
-            new_list.append({"VALUE": display_value})
+            # Provide an explicit XML_ID so Bitrix doesn't auto-generate one that collides
+            # with a previously deleted item at the same list position.
+            new_list.append({"VALUE": display_value, "XML_ID": _uuid.uuid4().hex})
 
         elif action == "remove":
             # Resolve the item to remove: prefer stored bitrix_list_id, fall back to phone match
