@@ -53,6 +53,7 @@ export const Dashboard: React.FC = () => {
     useEffect(() => {
         registerPushNotifications();
         fetchMe();
+        fetchAllDeals(); // Always fetch fresh on mount — picks up new Bitrix orders
     }, []);
 
     // Pull-to-refresh
