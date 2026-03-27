@@ -92,6 +92,10 @@ export const Dashboard: React.FC = () => {
     const scheduledJobs = (jobs.scheduled || []).filter(j => submissionStatuses?.[j.id] !== 'done');
     const newJobs = (jobs.unscheduled || []).filter(j => submissionStatuses?.[j.id] !== 'done');
 
+    // NOWE (unscheduled) orders have no date — show them only when viewing today
+    const todayISO = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+    const isViewingToday = calendar.selectedDate === todayISO;
+
     if (showCalendar) {
         return <CalendarView onClose={() => setShowCalendar(false)} />;
     }
@@ -205,8 +209,8 @@ export const Dashboard: React.FC = () => {
                     )}
                 </section>
 
-                {/* ── Section 2: NOWE (no date assigned) ── */}
-                <section className="space-y-3">
+                {/* ── Section 2: NOWE (no date assigned) — only visible when viewing today ── */}
+                {isViewingToday && <section className="space-y-3">
                     <div className="flex items-center gap-2 px-1">
                         <span className="w-2.5 h-2.5 rounded-full bg-orange-400 flex-shrink-0" />
                         <h3 className="text-sm font-black tracking-tight text-foreground uppercase flex items-center gap-2">
@@ -228,7 +232,7 @@ export const Dashboard: React.FC = () => {
                             {newJobs.map(job => <MissionCard key={job.id} job={job} />)}
                         </div>
                     )}
-                </section>
+                </section>}
 
                 {/* ── Section 3: ZAKOŃCZONE (completed, collapsed by default) ── */}
                 {completedJobs.length > 0 && (
