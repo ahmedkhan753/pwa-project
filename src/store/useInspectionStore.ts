@@ -619,6 +619,7 @@ export const useInspectionStore = create<InspectionState>()(
           jobs: {
             scheduled: [],
             unscheduled: [],
+            allDeals: [],
             totalInBitrix: 0,
             currentJobId: null,
             loading: false,
