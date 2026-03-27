@@ -17,13 +17,24 @@ interface CalendarViewProps {
     onClose: () => void;
 }
 
+// Returns "YYYY-MM-DD" in LOCAL timezone
+const toLocalISO = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
 export const CalendarView: React.FC<CalendarViewProps> = ({ onClose }) => {
-    const { jobs, submissionStatuses } = useInspectionStore();
+    const { jobs, submissionStatuses, setSelectedDate, fetchDealsForCalendar, calendar } = useInspectionStore();
     const allDeals = jobs.allDeals || [];
 
-    const today = new Date().toISOString().split('T')[0];
-    const [viewDate, setViewDate] = useState(() => new Date());
-    const [selectedDay, setSelectedDay] = useState<string>(today);
+    const today = toLocalISO(new Date());
+    const [viewDate, setViewDate] = useState(() => {
+        // Open on the currently selected date, not always today
+        return new Date(calendar.selectedDate + 'T12:00:00');
+    });
+    const [selectedDay, setSelectedDay] = useState<string>(calendar.selectedDate || today);
 
     // Group deal counts by date for dot rendering
     const dealsByDate = useMemo(() => {
@@ -129,7 +140,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onClose }) => {
                                 return (
                                     <button
                                         key={i}
-                                        onClick={() => setSelectedDay(iso)}
+                                        onClick={() => {
+                                            setSelectedDay(iso);
+                                            setSelectedDate(iso);
+                                            fetchDealsForCalendar(iso);
+                                        }}
                                         className={cn(
                                             'flex flex-col items-center justify-center rounded-xl py-1.5 transition-all relative',
                                             isSelected

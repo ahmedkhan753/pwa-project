@@ -5,14 +5,22 @@ import { useInspectionStore } from '@/store/useInspectionStore';
 import { ChevronDown, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// Returns "YYYY-MM-DD" in LOCAL timezone (not UTC) to avoid midnight off-by-one
+const toLocalISO = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
 export const CalendarStrip: React.FC = () => {
     const { calendar, setSelectedDate, toggleCalendarExpanded, jobs } = useInspectionStore();
 
-    // Generate 7 days centered on today (or around the selected date)
+    // Generate 7 days centered on the currently selected date
     const getDays = () => {
         const days = [];
-        const baseDate = new Date();
-        // Shift to start 3 days ago to show a "strip"
+        // Use noon to avoid DST/midnight edge cases
+        const baseDate = new Date(calendar.selectedDate + 'T12:00:00');
         for (let i = -3; i <= 3; i++) {
             const date = new Date(baseDate);
             date.setDate(baseDate.getDate() + i);
@@ -31,18 +39,16 @@ export const CalendarStrip: React.FC = () => {
     };
 
     const isSelected = (date: Date) => {
-        const isoString = date.toISOString().split('T')[0];
-        return calendar.selectedDate === isoString;
+        return calendar.selectedDate === toLocalISO(date);
     };
 
     const hasTasks = (date: Date) => {
-        const isoString = date.toISOString().split('T')[0];
+        const isoString = toLocalISO(date);
         return (jobs.allDeals || []).some(job => job.scheduledDate?.startsWith(isoString));
     };
 
     const formatDate = (date: Date) => {
-        const iso = date.toISOString().split('T')[0];
-        setSelectedDate(iso);
+        setSelectedDate(toLocalISO(date));
     };
 
     return (

@@ -564,7 +564,7 @@ export const useInspectionStore = create<InspectionState>()(
         error: null,
       },
       calendar: {
-        selectedDate: new Date().toISOString().split('T')[0],
+        selectedDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
         expanded: false,
       },
       drafts: {},
@@ -1077,7 +1077,7 @@ export const useInspectionStore = create<InspectionState>()(
             model: d.vehicle_model || d.UF_CRM_1766057849818 || '',
             city: d.inspectionAddress || d.UF_CRM_1766058185504 || '',
             jobType: 'WYCENA',
-            scheduledDate: d.scheduled_date || d.UF_CRM_1772108256983 || '',
+            scheduledDate: d.scheduled_date || d.UF_CRM_1772108256983 || d.BEGINDATE || '',
             inspectionAddress: d.inspectionAddress || d.UF_CRM_1766058185504 || d.UF_CRM_1766058194337 || '',
             contactPhone: d.contactPhone || d.UF_CRM_1766058247125 || '',
             contactPerson: d.contactPerson || d.UF_CRM_1766058259960 || '',
