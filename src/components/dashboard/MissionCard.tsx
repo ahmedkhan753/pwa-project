@@ -123,11 +123,14 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
         setIsSubmitting(true);
         try {
             await fetchFullDeal(job.id);
-        } catch (err) {
-            setError("Błąd pobierania danych deala");
-        } finally {
+        } catch (err: any) {
+            const msg = err?.message || "Błąd pobierania danych zlecenia";
+            setError(msg);
             setIsSubmitting(false);
+            alert(`Błąd: ${msg}. Sprawdź połączenie i spróbuj ponownie.`);
+            return;
         }
+        setIsSubmitting(false);
     };
 
     const handleViewReport = () => {
@@ -160,7 +163,7 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
             const res: any = await Promise.race([
                 scheduleJob(job.id, fullIso),
                 new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Przekroczono czas oczekiwania (timeout 5s)')), 5000)
+                    setTimeout(() => reject(new Error('Przekroczono czas oczekiwania (timeout 20s)')), 20000)
                 )
             ]);
 
@@ -341,6 +344,14 @@ export const MissionCard: React.FC<MissionCardProps> = ({ job }) => {
                             </a>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Global error display (fetch/network errors outside scheduling flow) */}
+            {error && !isScheduling && (
+                <div className="flex items-center gap-2 text-danger bg-danger-light p-3 rounded-2xl border border-danger/20 mb-4">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-xs font-bold">{error}</span>
                 </div>
             )}
 

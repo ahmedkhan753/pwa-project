@@ -30,9 +30,15 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
 
-    // Scroll to top on step change (key={currentStep} was removed to fix iOS Safari crash)
+    // Scroll to top on step change — covers both the inner scroll container
+    // and window/document for browsers where the page itself scrolls.
     useEffect(() => {
-        mainRef.current?.scrollTo({ top: 0 });
+        if (mainRef.current) mainRef.current.scrollTop = 0;
+        try {
+            window.scrollTo(0, 0);
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+        } catch { /* ignore */ }
     }, [currentStep]);
 
     // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting

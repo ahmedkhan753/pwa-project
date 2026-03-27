@@ -87,8 +87,9 @@ export const Dashboard: React.FC = () => {
         return merged.filter((j, idx, arr) => arr.findIndex(x => x.id === j.id) === idx);
     }, [jobs.allDeals, jobs.scheduled, jobs.unscheduled, calendar.selectedDate, submissionStatuses]);
 
-    const scheduledJobs = jobs.scheduled || [];
-    const newJobs = jobs.unscheduled || [];
+    // Exclude locally-submitted jobs so they only appear in ZAKOŃCZONE
+    const scheduledJobs = (jobs.scheduled || []).filter(j => submissionStatuses?.[j.id] !== 'done');
+    const newJobs = (jobs.unscheduled || []).filter(j => submissionStatuses?.[j.id] !== 'done');
 
     if (showCalendar) {
         return <CalendarView onClose={() => setShowCalendar(false)} />;

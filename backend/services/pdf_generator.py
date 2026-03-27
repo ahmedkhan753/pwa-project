@@ -290,35 +290,39 @@ def build_wyposazenie(eq, w):
     col_w = [w * 0.50, w * 0.12, w * 0.076, w * 0.12, w * 0.076]
 
     ITEMS = [
-        ("Dowód rejestracyjny",                    "dowod_rejestracyjny"),
-        ("Karta pojazdu",                          "karta_pojazdu"),
-        ("Tablice rejestracyjne",                  "tablice_rejestracyjne"),
-        ("Kluczyki",                               "kluczyki"),
-        ("Kluczyki (ilość)",                       "kluczyki_ilosc"),
-        ("Dodatkowy komplet kół",                  "dodatkowy_komplet_kol"),
-        ("Gaśnica",                                "gasnica"),
-        ("Klimatyzacja sprawna",                   "klimatyzacja_sprawna"),
-        ("Klucz do kół",                           "klucz_do_kol"),
-        ("Książka serwisowa",                      "ksiazka_serwisowa"),
-        ("Nawigacja satelitarna (karta) sprawna",  "nawigacja_satelitarna"),
-        ("Podnośnik",                              "podnosnik"),
-        ("Przewód ładowania baterii trakcyjnej",   "przewod_ladowania_baterii"),
-        ("Stacja ładowania baterii trakcyjnej",    "stacja_ladowania_baterii"),
-        ("Trójkąt ostrzegawczy",                   "trojkat_ostrzegawczy"),
+        ("Dowód rejestracyjny",                     "dowod_rejestracyjny"),
+        ("Karta pojazdu",                           "karta_pojazdu"),
+        ("Tablice rejestracyjne",                   "tablice_rejestracyjne"),
+        ("Kluczyki",                                "kluczyki"),
+        ("Kluczyki (ilość)",                        "kluczyki_ilosc"),
+        ("Dodatkowy komplet kół",                   "dodatkowy_komplet_kol"),
+        ("Gaśnica",                                 "gasnica"),
+        ("Klimatyzacja sprawna",                    "klimatyzacja_sprawna"),
+        ("Klucz do kół",                            "klucz_do_kol"),
+        ("Książka serwisowa",                       "ksiazka_serwisowa"),
+        ("Nawigacja satelitarna (karta) sprawna",   "nawigacja_satelitarna"),
+        ("Podnośnik",                               "podnosnik"),
+        ("Przewód ładowania baterii trakcyjnej",    "przewod_ladowania_baterii"),
+        ("Stacja ładowania baterii trakcyjnej",     "stacja_ladowania_baterii"),
+        ("Trójkąt ostrzegawczy",                    "trojkat_ostrzegawczy"),
         ("Wskaźnik naładowania baterii trakcyjnej", "wskaznik_naladowania_baterii"),
-        ("Zestaw naprawczy koła",                  "zestaw_naprawczy_kola"),
+        ("Zestaw naprawczy koła",                   "zestaw_naprawczy_kola"),
+        ("Kable do ładowania",                      "kable_do_ladowania"),
+        ("VIN zgodny z dokumentami",                "vin_zgodny_z_dokumentami"),
+        ("Instrukcja obsługi",                      "instrukcja_obslugi"),
+        ("Dodatkowe wyposażenie",                   "dodatkowe_wyposazenie"),
     ]
 
     rows = [[p(""), pc("TAK", True), pc(""), pc("NIE", True), pc("")]]
 
     for label, key in ITEMS:
-        raw = str(eq.get(key, "")).strip().upper()
+        raw = str(eq.get(key, "") or "").strip().upper()
 
-        if label == "Kluczyki (ilość)":
-            # Show count number in the middle column, not X
-            rows.append([p(label), p(""), pc(eq.get(key, "")), p(""), p("")])
+        if label in ("Kluczyki (ilość)", "Dodatkowe wyposażenie"):
+            # Show free-text value in the middle columns
+            text_val = str(eq.get(key, "") or "")
+            rows.append([p(label), p(""), pc(text_val), p(""), p("")])
         elif raw == "ELEKTRONICZNA":
-            # Special case: "Książka serwisowa" shows ELEKTRONICZNA
             rows.append([p(label), p(""), pc("ELEKTRO-\nNICZNA"), p(""), p("")])
         elif raw in ("TAK", "YES", "TRUE", "1"):
             rows.append([p(label), pc("TAK"), pc("X"), pc("NIE"), p("")])
@@ -642,25 +646,42 @@ def generate_inspection_pdf(deal_info: dict, inspection_data: dict, logo_path: s
     # Order number
     order_number = val(flat, "order_number", "nr_zlecenia", "deal_number", "title", default="ZR/2025/XXXXX")
 
-    # Equipment — try new flat keys first, then old nested format
+    # Equipment — try new flat keys first, then map from equipmentCompleteness
     equipment = inspection_data.get("equipment", {}) or {}
     if not equipment and eq_comp:
-        # Map old equipmentCompleteness to new format
+        def _tv(key):
+            """Return 'TAK', 'NIE', 'ELEKTRONICZNA', 'ND', or '' from a ToggleValue field."""
+            v = str(eq_comp.get(key, "") or "").strip().upper()
+            return v if v in ("TAK", "NIE", "ND", "ELEKTRONICZNA") else ""
+
         equipment = {
-            "dowod_rejestracyjny": "TAK",
-            "karta_pojazdu": "",
-            "tablice_rejestracyjne": "TAK",
-            "kluczyki": "TAK" if eq_comp.get("keysCount") else "",
-            "kluczyki_ilosc": str(eq_comp.get("keysCount", "")),
-            "gasnica": "TAK" if eq_comp.get("fireExtinguisher") else "NIE",
-            "trojkat_ostrzegawczy": "TAK" if eq_comp.get("triangular") else "NIE",
-            "klucz_do_kol": "TAK" if eq_comp.get("jackAndTools") else "NIE",
-            "podnosnik": "TAK" if eq_comp.get("jackAndTools") else "NIE",
-            "zestaw_naprawczy_kola": "TAK" if eq_comp.get("repairKit") else "NIE",
-            "ksiazka_serwisowa": "TAK" if eq_comp.get("serviceBookPresented") else "NIE",
-            "nawigacja_satelitarna": "TAK" if full_eq.get("navigation") else "NIE",
-            "klimatyzacja_sprawna": "TAK" if full_eq.get("airConditioning") else "NIE",
-            "dodatkowy_komplet_kol": "NIE",
+            # Items 1-4
+            "dowod_rejestracyjny":          _tv("registrationDocPresented"),
+            "karta_pojazdu":                _tv("vehicleCardPresented"),
+            "tablice_rejestracyjne":        _tv("registrationPlates"),
+            "kluczyki":                     _tv("keys"),
+            # Item 5 — count
+            "kluczyki_ilosc":               str(eq_comp.get("keysCount", "") or ""),
+            # Items 6-9
+            "dodatkowy_komplet_kol":        _tv("spareWheel"),
+            "gasnica":                      _tv("fireExtinguisher"),
+            "klimatyzacja_sprawna":         _tv("airConditioningWorking"),
+            "klucz_do_kol":                 _tv("wheelWrench"),
+            # Item 10 — may be ELEKTRONICZNA
+            "ksiazka_serwisowa":            _tv("serviceBookPresented"),
+            # Items 11-17
+            "nawigacja_satelitarna":        _tv("navigationCardWorking"),
+            "podnosnik":                    _tv("jackAndTools"),
+            "przewod_ladowania_baterii":    _tv("tractionBatteryChargingCable"),
+            "stacja_ladowania_baterii":     _tv("tractionBatteryChargingStation"),
+            "trojkat_ostrzegawczy":         _tv("triangular"),
+            "wskaznik_naladowania_baterii": _tv("tractionBatteryChargeIndicator"),
+            "zestaw_naprawczy_kola":        _tv("repairKit"),
+            # Items 18-21
+            "kable_do_ladowania":           _tv("chargingCables"),
+            "vin_zgodny_z_dokumentami":     _tv("vinMatchesDocs"),
+            "instrukcja_obslugi":           _tv("ownerManual"),
+            "dodatkowe_wyposazenie":        str(eq_comp.get("additionalEquipment", "") or ""),
         }
 
     # Damages
