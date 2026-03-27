@@ -121,9 +121,11 @@ async def lifespan(app: FastAPI):
     logger.info("STARTING Auto-Inspection PWA Backend")
     logger.info("=" * 60)
 
-    # Step 0: Create database tables
+    # Step 0: Create database tables + run column migrations
     logger.info("Creating database tables...")
     Base.metadata.create_all(bind=engine)
+    from database import migrate_db
+    migrate_db(engine)
     logger.info("✓ Database tables ready")
 
     # Step 1: Seed test inspectors

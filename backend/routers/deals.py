@@ -38,6 +38,13 @@ _cache_timestamp: float = 0
 CACHE_TTL = 300  # 5 minutes
 
 
+def invalidate_inspector_cache() -> None:
+    """Force next call to get_phone_to_bitrix_id to re-fetch from Bitrix."""
+    global _inspector_list_cache, _cache_timestamp
+    _inspector_list_cache = {}
+    _cache_timestamp = 0
+
+
 async def get_phone_to_bitrix_id(gateway) -> dict:
     """
     Fetches the Bitrix24 list field UF_CRM_1773970466449 to build

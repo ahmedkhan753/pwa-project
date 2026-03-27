@@ -18,6 +18,7 @@ class Inspector(Base):
     pin_hash = Column(String(255), nullable=False)
     email = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
+    bitrix_list_id = Column(String(20), nullable=True)  # Bitrix list item ID for UF_CRM_1773970466449
     created_at = Column(DateTime, server_default=func.now())
 
     def __repr__(self):

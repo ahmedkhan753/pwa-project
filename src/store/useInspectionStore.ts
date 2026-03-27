@@ -73,10 +73,11 @@ export interface VehicleData {
 
 // ─── Step 2: Equipment Completeness ────────────────────────
 export interface EquipmentCompleteness {
+  // Original fields (kept for backward compat)
   registrationDocPresented: ToggleValue;
   vehicleCardPresented: ToggleValue;
   purchaseInvoicePresented: ToggleValue;
-  serviceBookPresented: ToggleValue;
+  serviceBookPresented: string | null;  // TAK | NIE | ELEKTRONICZNA
   antiTheftSystem: ToggleValue;
   immobilizerWorking: ToggleValue;
   keysCount: string;
@@ -88,6 +89,18 @@ export interface EquipmentCompleteness {
   compressor: ToggleValue;
   repairKit: ToggleValue;
   ownerManual: ToggleValue;
+  // New fields per client checklist
+  registrationPlates: ToggleValue;
+  keys: ToggleValue;
+  airConditioningWorking: ToggleValue;
+  wheelWrench: ToggleValue;
+  navigationCardWorking: ToggleValue;
+  tractionBatteryChargingCable: ToggleValue;
+  tractionBatteryChargingStation: ToggleValue;
+  tractionBatteryChargeIndicator: ToggleValue;
+  chargingCables: ToggleValue;
+  vinMatchesDocs: ToggleValue;
+  additionalEquipment: string;
 }
 
 // ─── Step 3: Full Equipment List ───────────────────────────
@@ -453,6 +466,11 @@ const initialData: StepData = {
     triangular: null, firstAidKit: null,
     fireExtinguisher: null, compressor: null, repairKit: null,
     ownerManual: null,
+    registrationPlates: null, keys: null, airConditioningWorking: null,
+    wheelWrench: null, navigationCardWorking: null,
+    tractionBatteryChargingCable: null, tractionBatteryChargingStation: null,
+    tractionBatteryChargeIndicator: null, chargingCables: null,
+    vinMatchesDocs: null, additionalEquipment: '',
   },
   fullEquipment: {
     abs: null, esp: null, airbagDriver: null, airbagPassenger: null,

@@ -7,6 +7,7 @@ interface Inspector {
   phone: string
   email: string
   is_active: boolean
+  bitrix_synced: boolean
 }
 
 interface DealOrder {
@@ -124,7 +125,11 @@ export default function AdminPanel() {
         body: JSON.stringify(newInspector)
       })
       if (res.ok) {
-        setMessage("✅ Inspektor dodany pomyślnie!")
+        const result = await res.json()
+        const syncNote = result.bitrix_synced
+          ? "✅ Inspektor dodany i zsynchronizowany z Bitrix!"
+          : "✅ Inspektor dodany (⚠️ synchronizacja z Bitrix nie powiodła się — sprawdź logi)"
+        setMessage(syncNote)
         setShowAddForm(false)
         setNewInspector({ name: "", phone: "", pin: "1234", email: "" })
         fetchInspectors(adminToken)
@@ -166,8 +171,13 @@ export default function AdminPanel() {
         headers: { Authorization: `Bearer ${adminToken}` }
       })
       if (res.ok) {
+        const result = await res.json()
+        const baseMsg = isActive ? "Inspektor dezaktywowany" : "Inspektor aktywowany"
+        const syncNote = result.bitrix_synced !== undefined
+          ? (result.bitrix_synced ? " i zsynchronizowany z Bitrix" : " (Bitrix: brak synchronizacji)")
+          : ""
+        setMessage(`✅ ${baseMsg}${syncNote}`)
         fetchInspectors(adminToken)
-        setMessage(isActive ? "✅ Inspektor dezaktywowany" : "✅ Inspektor aktywowany")
       }
     } catch {
       setMessage("❌ Błąd zmiany statusu")
@@ -402,13 +412,22 @@ export default function AdminPanel() {
                           <p className="text-[10px] text-gray-400 truncate">{inspector.email}</p>
                         )}
                       </div>
-                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold whitespace-nowrap ml-2 ${
-                        inspector.is_active
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-500"
-                      }`}>
-                        {inspector.is_active ? "Aktywny" : "Nieaktywny"}
-                      </span>
+                      <div className="flex flex-col items-end gap-1 ml-2">
+                        <span className={`text-[10px] px-2 py-1 rounded-full font-bold whitespace-nowrap ${
+                          inspector.is_active
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-500"
+                        }`}>
+                          {inspector.is_active ? "Aktywny" : "Nieaktywny"}
+                        </span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${
+                          inspector.bitrix_synced
+                            ? "bg-blue-50 text-blue-500"
+                            : "bg-yellow-50 text-yellow-600"
+                        }`}>
+                          {inspector.bitrix_synced ? "Bitrix ✓" : "Bitrix ⚠"}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex gap-2 mt-2">
                       <button

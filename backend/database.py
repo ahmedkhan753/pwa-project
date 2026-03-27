@@ -30,3 +30,34 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def migrate_db(engine_instance) -> None:
+    """
+    Run lightweight column-level migrations that create_all() can't handle
+    (adding columns to existing tables). Safe to call on every startup.
+    """
+    import logging
+    from sqlalchemy import text, inspect as sa_inspect
+
+    log = logging.getLogger("database.migrate")
+
+    try:
+        inspector = sa_inspect(engine_instance)
+        existing_cols = {col["name"] for col in inspector.get_columns("inspectors")}
+
+        pending = {
+            "bitrix_list_id": "VARCHAR(20)",
+        }
+
+        with engine_instance.connect() as conn:
+            for col_name, col_type in pending.items():
+                if col_name not in existing_cols:
+                    conn.execute(text(f"ALTER TABLE inspectors ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                    log.info(f"Migration: added column inspectors.{col_name}")
+                else:
+                    log.debug(f"Migration: inspectors.{col_name} already exists — skip")
+
+    except Exception as e:
+        log.error(f"Migration error: {e}")
