@@ -21,16 +21,11 @@ function VideoRecordSlot({
     const streamRef = useRef<MediaStream | null>(null);
     const chunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [state, setState] = useState<'idle' | 'recording' | 'preview'>('idle');
+    const [state, setState] = useState<'idle' | 'recording' | 'preview' | 'fallback'>('idle');
     const [countdown, setCountdown] = useState(6);
     const [recordedUrl, setRecordedUrl] = useState<string>('');
-    const [supportsMediaRecorder] = useState(() =>
-        typeof window !== 'undefined'
-        && !!window.isSecureContext
-        && !!navigator?.mediaDevices?.getUserMedia
-        && typeof MediaRecorder !== 'undefined'
-    );
 
     const stopStream = useCallback(() => {
         streamRef.current?.getTracks().forEach(t => t.stop());
@@ -42,7 +37,9 @@ function VideoRecordSlot({
     useEffect(() => () => { stopStream(); if (recordedUrl) URL.revokeObjectURL(recordedUrl); }, [stopStream, recordedUrl]);
 
     const startRecording = async () => {
+        // Always try MediaRecorder first — works on HTTPS and some HTTP
         try {
+            if (!navigator?.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
                 audio: true,
@@ -51,9 +48,9 @@ function VideoRecordSlot({
             if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
 
             chunksRef.current = [];
-            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus'
-                : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
-                : MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
+            const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus'
+                : typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
+                : typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
             const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
             mediaRecorderRef.current = recorder;
 
@@ -81,10 +78,12 @@ function VideoRecordSlot({
                 }
             }, 1000);
         } catch (err) {
-            console.error('Camera access error:', err);
-            alert('Nie udało się otworzyć kamery. Upewnij się, że strona działa przez HTTPS i kamera ma uprawnienia.');
+            // MediaRecorder/getUserMedia failed → fall back to native file input
+            console.warn('MediaRecorder unavailable, falling back to file input:', err);
             stopStream();
-            setState('idle');
+            setState('fallback');
+            // Auto-trigger the file input
+            setTimeout(() => fileInputRef.current?.click(), 100);
         }
     };
 
@@ -96,7 +95,6 @@ function VideoRecordSlot({
 
     const handleConfirm = () => {
         if (!recordedUrl) return;
-        // Convert blob URL → base64 for storage
         fetch(recordedUrl)
             .then(r => r.blob())
             .then(blob => {
@@ -104,6 +102,11 @@ function VideoRecordSlot({
                 reader.onload = () => { onCapture(reader.result as string); };
                 reader.readAsDataURL(blob);
             });
+        setState('idle');
+    };
+
+    const handleFallbackInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        onFallbackCapture(e);
         setState('idle');
     };
 
@@ -121,20 +124,6 @@ function VideoRecordSlot({
                         <X size={14} />
                     </button>
                 </div>
-            </div>
-        );
-    }
-
-    // Fallback for browsers without MediaRecorder
-    if (!supportsMediaRecorder) {
-        return (
-            <div className="flex flex-col gap-2 col-span-2">
-                <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
-                <label className="flex flex-col items-center justify-center gap-2 py-6 bg-surface-raised border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-primary transition-colors">
-                    <Video size={24} className="text-primary" />
-                    <span className="text-xs font-black uppercase text-muted">Nagraj video</span>
-                    <input type="file" accept="video/*" capture="environment" onChange={onFallbackCapture} className="hidden" />
-                </label>
             </div>
         );
     }
@@ -190,6 +179,14 @@ function VideoRecordSlot({
                         </button>
                     </div>
                 </div>
+            )}
+
+            {state === 'fallback' && (
+                <label className="flex flex-col items-center justify-center gap-2 py-6 bg-surface-raised border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-primary transition-colors">
+                    <Video size={24} className="text-primary" />
+                    <span className="text-xs font-black uppercase text-muted">Nagraj video (max 6 sek)</span>
+                    <input ref={fileInputRef} type="file" accept="video/*" capture="environment" onChange={handleFallbackInput} className="hidden" />
+                </label>
             )}
         </div>
     );
