@@ -23,11 +23,7 @@ export function SummaryStep() {
     const intDamages = Array.isArray(data.interiorDamage) ? data.interiorDamage : [];
     const allDamages = [...extDamages, ...intDamages];
     
-    // Lock logic: if appraiser has signed, lock everything
-    const isLocked = !!summary.signatureAppraiser;
-
     const handleAbsentToggle = (val: boolean) => {
-        if (isLocked) return;
         updateStepData('finalSummary', { isAbsentRep: val });
         if (val) setSignature('signatureClient', ''); 
     };
@@ -70,13 +66,7 @@ export function SummaryStep() {
             </div>
 
             {/* ── Section: Representative Absence ────────── */}
-            <div className={cn("section-card border-l-4 border-amber-500 relative overflow-hidden", isLocked && "opacity-75 grayscale shadow-inner")}>
-                {isLocked && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1.5 px-2 py-1 bg-slate-900/10 rounded-lg backdrop-blur-sm">
-                        <ShieldCheck size={12} className="text-slate-500" />
-                        <span className="text-[10px] font-black text-slate-500 uppercase">Zablokowano</span>
-                    </div>
-                )}
+            <div className="section-card border-l-4 border-amber-500 relative overflow-hidden">
                 
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -85,13 +75,11 @@ export function SummaryStep() {
                     </div>
                     <button
                         onClick={() => handleAbsentToggle(!summary.isAbsentRep)}
-                        disabled={isLocked}
                         className={cn(
                             "px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
                             summary.isAbsentRep 
                                 ? "bg-accent border-accent text-white shadow-lg shadow-accent/20" 
-                                : "bg-surface-raised border-border text-muted",
-                            isLocked && "cursor-not-allowed opacity-50"
+                                : "bg-surface-raised border-border text-muted"
                         )}
                     >
                         {summary.isAbsentRep ? "NB: Nieobecny" : "Obecny"}
@@ -113,7 +101,7 @@ export function SummaryStep() {
                                 <MessageSquare size={14} className="absolute left-3 top-3 text-slate-400" />
                                 <textarea
                                     value={summary.absentRepComment}
-                                    disabled={isLocked}
+
                                     onChange={(e) => updateStepData('finalSummary', { absentRepComment: e.target.value })}
                                     className="w-full bg-background border-2 border-border rounded-2xl py-3 pl-10 pr-4 text-sm font-bold min-h-[80px]"
                                     placeholder="np. Pojazd pozostawiony na parkingu, kluczyki w skrzynce..."
@@ -148,7 +136,6 @@ export function SummaryStep() {
                             label="Podpis Dysponenta / Przedstawiciela"
                             value={summary.signatureClient}
                             onSave={(b64) => setSignature('signatureClient', b64)}
-                            disabled={isLocked}
                         />
                     </div>
                 )}
@@ -172,14 +159,12 @@ export function SummaryStep() {
                         label="Podpis Rzeczoznawcy"
                         value={summary.signatureAppraiser}
                         onSave={(b64) => setSignature('signatureAppraiser', b64)}
-                        disabled={isLocked && !!summary.signatureAppraiser}
                     />
                     
                     <SignaturePad
                         label="Podpis Przedstawiciela Placu (Opcjonalnie)"
                         value={summary.signatureYard}
                         onSave={(b64) => setSignature('signatureYard', b64)}
-                        disabled={isLocked && !!summary.signatureYard}
                     />
                 </div>
 
