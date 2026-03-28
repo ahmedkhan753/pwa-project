@@ -26,7 +26,10 @@ function VideoRecordSlot({
     const [countdown, setCountdown] = useState(6);
     const [recordedUrl, setRecordedUrl] = useState<string>('');
     const [supportsMediaRecorder] = useState(() =>
-        typeof window !== 'undefined' && !!navigator?.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined'
+        typeof window !== 'undefined'
+        && !!window.isSecureContext
+        && !!navigator?.mediaDevices?.getUserMedia
+        && typeof MediaRecorder !== 'undefined'
     );
 
     const stopStream = useCallback(() => {
@@ -79,7 +82,7 @@ function VideoRecordSlot({
             }, 1000);
         } catch (err) {
             console.error('Camera access error:', err);
-            alert('Nie udało się otworzyć kamery. Sprawdź uprawnienia.');
+            alert('Nie udało się otworzyć kamery. Upewnij się, że strona działa przez HTTPS i kamera ma uprawnienia.');
             stopStream();
             setState('idle');
         }
