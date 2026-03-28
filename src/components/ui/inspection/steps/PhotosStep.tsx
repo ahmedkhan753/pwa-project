@@ -211,11 +211,22 @@ export function PhotosStep() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            updatePhotoSlot(slotId, ev.target?.result as string);
+        const url = URL.createObjectURL(file);
+        const videoEl = document.createElement('video');
+        videoEl.src = url;
+        videoEl.onloadedmetadata = () => {
+            if (videoEl.duration > 6) {
+                alert('Film nie może być dłuższy niż 6 sekund. Nagraj krótszy film.');
+                URL.revokeObjectURL(url);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                updatePhotoSlot(slotId, ev.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+            URL.revokeObjectURL(url);
         };
-        reader.readAsDataURL(file);
     };
 
     return (
