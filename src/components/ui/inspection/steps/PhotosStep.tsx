@@ -214,17 +214,84 @@ export function PhotosStep() {
         const url = URL.createObjectURL(file);
         const videoEl = document.createElement('video');
         videoEl.src = url;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+
         videoEl.onloadedmetadata = () => {
-            if (videoEl.duration > 6) {
-                alert('Film nie może być dłuższy niż 6 sekund!');
+            if (videoEl.duration <= 6) {
+                // Video is 6 seconds or less — upload as-is
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    updatePhotoSlot(slotId, ev.target?.result as string);
+                };
+                reader.readAsDataURL(file);
                 URL.revokeObjectURL(url);
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                updatePhotoSlot(slotId, ev.target?.result as string);
-            };
-            reader.readAsDataURL(file);
+
+            // Video is longer than 6 seconds — auto-trim to first 6 seconds
+            // Use captureStream + MediaRecorder to re-record only the first 6s
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = videoEl.videoWidth || 1280;
+                canvas.height = videoEl.videoHeight || 720;
+                const ctx = canvas.getContext('2d')!;
+
+                const canvasStream = canvas.captureStream(30);
+
+                // Try to add audio from the video
+                try {
+                    const audioCtx = new AudioContext();
+                    const source = audioCtx.createMediaElementSource(videoEl);
+                    const dest = audioCtx.createMediaStreamDestination();
+                    source.connect(dest);
+                    source.connect(audioCtx.destination);
+                    dest.stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+                } catch { /* no audio — that's fine */ }
+
+                const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
+                    : typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
+                const recorder = new MediaRecorder(canvasStream, mimeType ? { mimeType } : undefined);
+                const chunks: Blob[] = [];
+
+                recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        updatePhotoSlot(slotId, ev.target?.result as string);
+                    };
+                    reader.readAsDataURL(blob);
+                    URL.revokeObjectURL(url);
+                    videoEl.pause();
+                };
+
+                // Draw video frames onto canvas
+                const drawFrame = () => {
+                    if (videoEl.paused || videoEl.ended) return;
+                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                    requestAnimationFrame(drawFrame);
+                };
+
+                videoEl.currentTime = 0;
+                videoEl.play();
+                drawFrame();
+                recorder.start();
+
+                // Stop after 6 seconds
+                setTimeout(() => {
+                    if (recorder.state === 'recording') recorder.stop();
+                    videoEl.pause();
+                }, 6000);
+            } catch {
+                // captureStream not supported — just upload original file
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    updatePhotoSlot(slotId, ev.target?.result as string);
+                };
+                reader.readAsDataURL(file);
+                URL.revokeObjectURL(url);
+            }
         };
     };
 
