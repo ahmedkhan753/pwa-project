@@ -170,6 +170,7 @@ async def get_deals(
                 "UF_CRM_1766057849818",   # vehicle model
                 "UF_CRM_1766057515315",   # plates
                 "UF_CRM_1772108256983",   # scheduled inspection date
+                "UF_CRM_1766057874704",   # client notes
             ],
             "order": {"DATE_CREATE": "DESC"}
         })
@@ -197,7 +198,7 @@ async def get_deals(
                 "vehicle_model": deal.get("UF_CRM_1766057849818") or "",
                 "registration_number": deal.get("UF_CRM_1766057515315") or "",
                 "scheduled_date": deal.get("UF_CRM_1772108256983") or "",
-                "notes": deal.get("COMMENTS") or "",
+                "notes": deal.get("UF_CRM_1766057874704") or deal.get("COMMENTS") or "",
                 
                 # Extras from Bitrix 
                 "CLOSEDATE": deal.get("CLOSEDATE"),
@@ -306,6 +307,7 @@ async def get_deal(request: Request, deal_id: int):
                     "UF_CRM_1772796562336",  # body type
                     "UF_CRM_1772796772039",  # gearbox type
                     "UF_CRM_1772534384484",  # drive type
+                    "UF_CRM_1766057874704",  # client notes
                 ]
             })
             deal["inspectionAddress"] = (raw_crm.get("UF_CRM_1766058194337")
@@ -331,6 +333,7 @@ async def get_deal(request: Request, deal_id: int):
             deal["body_type"] = raw_crm.get("UF_CRM_1772796562336") or deal.get("body_type") or ""
             deal["gearbox_type"] = raw_crm.get("UF_CRM_1772796772039") or deal.get("gearbox_type") or ""
             deal["drive_type"] = raw_crm.get("UF_CRM_1772534384484") or deal.get("drive_type") or ""
+            deal["notes"] = raw_crm.get("UF_CRM_1766057874704") or deal.get("COMMENTS") or ""
         except Exception:
             deal.setdefault("inspectionAddress", deal.get("planned_address") or deal.get("inspection_place") or "")
             deal.setdefault("contactPerson", deal.get("contact_person") or "")
