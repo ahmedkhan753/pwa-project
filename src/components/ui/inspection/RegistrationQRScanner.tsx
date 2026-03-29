@@ -237,11 +237,28 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     useEffect(() => {
         let alive = true;
         let sc: any = null;
+        let started = false;
 
         (async () => {
             try {
+                // Check HTTPS before even trying
+                const isSecure =
+                    typeof window !== "undefined" &&
+                    (window.location.protocol === "https:" ||
+                        window.location.hostname === "localhost" ||
+                        window.location.hostname === "127.0.0.1");
+
+                if (!isSecure) {
+                    throw Object.assign(new Error("HTTPS required"), { _httpsError: true });
+                }
+
                 const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
                 if (!alive) return;
+
+                // Verify DOM element exists
+                if (!document.getElementById(idRef.current)) {
+                    throw new Error("Scanner container not found in DOM");
+                }
 
                 sc = new Html5Qrcode(idRef.current, {
                     formatsToSupport: [
@@ -259,18 +276,32 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     handleSuccess,
                     () => {},          // continuous scan-failure is expected
                 );
-            } catch (err) {
+                started = true;
+            } catch (err: any) {
                 console.error("[QR] camera error", err);
                 if (alive) {
                     setStatus("error");
-                    setMessage("Nie można uruchomić kamery. Sprawdź uprawnienia.");
+                    if (err?._httpsError) {
+                        setMessage("Kamera wymaga połączenia HTTPS. Skontaktuj się z administratorem.");
+                    } else {
+                        setMessage("Nie można uruchomić kamery. Sprawdź uprawnienia.");
+                    }
                 }
             }
         })();
 
         return () => {
             alive = false;
-            sc?.stop().catch(() => {});
+            if (sc) {
+                try {
+                    if (started) {
+                        sc.stop().catch(() => {});
+                    }
+                    sc.clear();
+                } catch {
+                    // scanner cleanup failed — safe to ignore
+                }
+            }
         };
     }, [handleSuccess]);
 
