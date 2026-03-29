@@ -1,9 +1,10 @@
 "use client";
 
 import { useInspectionStore } from "@/store/useInspectionStore";
-import { ScanLine, Car, User, Building2, MapPin, Calendar, UserCheck, Loader2 } from "lucide-react";
+import { ScanLine, Car, User, Building2, MapPin, Calendar, UserCheck, Loader2, QrCode } from "lucide-react";
 import { useState, useEffect } from "react";
 import { VinScanner } from "../VinScanner";
+import { RegistrationQRScanner, type DecodedVehicleData } from "../RegistrationQRScanner";
 import { SmartDropdown } from "../SmartDropdown";
 import { api as apiClient } from "@/lib/api";
 import { cn, formatLocaleDate } from "@/lib/utils";
@@ -65,6 +66,7 @@ export function VehicleDataStep() {
     const v = data.vehicleData;
     const bi = v.basicInfo;
     const [showScanner, setShowScanner] = useState(false);
+    const [showQRScanner, setShowQRScanner] = useState(false);
     const [metadata, setMetadata] = useState<any>({});
     const [isLoading, setIsLoading] = useState(true);
 
@@ -85,6 +87,21 @@ export function VehicleDataStep() {
 
     const handleChange = (field: string, value: string) => {
         updateField('vehicleData', field, value);
+    };
+
+    const handleQRData = (data: DecodedVehicleData) => {
+        if (data.vin) updateField('vehicleData', 'vin', data.vin);
+        if (data.registrationPlates) updateField('vehicleData', 'registrationPlates', data.registrationPlates);
+        if (data.make) updateField('vehicleData', 'make', data.make);
+        if (data.model) updateField('vehicleData', 'model', data.model);
+        if (data.year) updateField('vehicleData', 'year', data.year);
+        if (data.engineCapacity) updateField('vehicleData', 'engineCapacity', data.engineCapacity);
+        if (data.enginePower) updateField('vehicleData', 'enginePower', data.enginePower);
+        if (data.fuelType) updateField('vehicleData', 'fuelType', data.fuelType);
+        if (data.ownWeight) updateField('vehicleData', 'ownWeight', data.ownWeight);
+        if (data.totalWeight) updateField('vehicleData', 'totalWeight', data.totalWeight);
+        if (data.seatsCount) updateField('vehicleData', 'seatsCount', data.seatsCount);
+        if (data.firstRegistration) updateField('vehicleData', 'firstRegistration', data.firstRegistration);
     };
 
     if (isLoading) {
@@ -149,6 +166,14 @@ export function VehicleDataStep() {
                             <span>Skanuj VIN (OCR)</span>
                         </button>
                     </div>
+                    <button
+                        onClick={() => setShowQRScanner(true)}
+                        className="w-full px-6 py-4 bg-accent text-white rounded-2xl flex items-center justify-center gap-2 font-black text-sm uppercase shadow-lg shadow-accent/20 active:scale-95 transition-all"
+                        aria-label="Scan registration document QR code"
+                    >
+                        <QrCode size={20} />
+                        <span>Skanuj Dowód Rejestracyjny (QR)</span>
+                    </button>
                     {v.vin && v.vin.length !== 17 && (
                         <p className="text-xs text-danger mt-2 font-black uppercase tracking-tight">VIN musi mieć 17 znaków ({v.vin.length}/17)</p>
                     )}
@@ -158,6 +183,13 @@ export function VehicleDataStep() {
                     <VinScanner
                         onScan={(vin) => updateField('vehicleData', 'vin', vin)}
                         onClose={() => setShowScanner(false)}
+                    />
+                )}
+
+                {showQRScanner && (
+                    <RegistrationQRScanner
+                        onData={handleQRData}
+                        onClose={() => setShowQRScanner(false)}
                     />
                 )}
 
