@@ -118,6 +118,8 @@ export interface DecodedVehicleData {
     totalWeight?: string;
     seatsCount?: string;
     firstRegistration?: string;
+    /** Raw QR text — set when the QR was decoded but no structured fields could be extracted */
+    rawText?: string;
 }
 
 /**
@@ -234,56 +236,50 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             if (doneRef.current) return;
             doneRef.current = true;
 
+            // Log raw content immediately for debugging
+            console.log("[QR] handleSuccess — raw text:", JSON.stringify(decodedText));
+
+            let data: DecodedVehicleData | null = null;
+
+            // Path 1: Polish registration Aztec (NRV2E-compressed binary)
             try {
-                let data: DecodedVehicleData | null = null;
-
-                // Path 1: Polish registration Aztec (NRV2E-compressed binary)
-                try {
-                    const bytes = new Uint8Array(decodedText.length);
-                    for (let i = 0; i < decodedText.length; i++) {
-                        bytes[i] = decodedText.charCodeAt(i) & 0xff;
-                    }
-                    const aztecData = decodeRegistrationBytes(bytes);
-                    if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
-                        data = aztecData;
-                        console.log("[QR] Decoded as Aztec NRV2E", data);
-                    }
-                } catch {
-                    // not an Aztec registration code — try plain text
+                const bytes = new Uint8Array(decodedText.length);
+                for (let i = 0; i < decodedText.length; i++) {
+                    bytes[i] = decodedText.charCodeAt(i) & 0xff;
                 }
-
-                // Path 2: Plain text QR (VIN, JSON, etc.)
-                if (!data) {
-                    const plainData = parsePlainTextQR(decodedText);
-                    if (plainData.vin || plainData.make || plainData.registrationPlates) {
-                        data = plainData;
-                        console.log("[QR] Decoded as plain text", data);
-                    }
+                const aztecData = decodeRegistrationBytes(bytes);
+                if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
+                    data = aztecData;
+                    console.log("[QR] Decoded as Aztec NRV2E", data);
                 }
-
-                if (!data) {
-                    throw new Error("No useful data extracted");
-                }
-
-                setDecoded(data);
-                setStatus("success");
-                setMessage("Dane odczytane pomyślnie!");
-
-                // stop camera
-                try { await scannerRef.current?.stop(); } catch { /* ok */ }
-
-                // auto-apply after short preview
-                setTimeout(() => { onData(data!); onClose(); }, 1800);
-            } catch (err) {
-                console.warn("[QR] decode failed, retrying…", err);
-                doneRef.current = false;
-                setStatus("error");
-                setMessage("Nie udało się odczytać danych. Spróbuj ponownie.");
-                setTimeout(() => {
-                    setStatus("scanning");
-                    setMessage("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
-                }, 2500);
+            } catch {
+                // not an Aztec registration code — try plain text
             }
+
+            // Path 2: Plain text QR (VIN, JSON, etc.)
+            if (!data) {
+                const plainData = parsePlainTextQR(decodedText);
+                if (plainData.vin || plainData.make || plainData.registrationPlates) {
+                    data = plainData;
+                    console.log("[QR] Decoded as plain text", data);
+                }
+            }
+
+            // Path 3: Unknown format — accept raw text so user sees it was scanned
+            if (!data) {
+                console.log("[QR] No structured data — passing raw text");
+                data = { rawText: decodedText.slice(0, 200) };
+            }
+
+            setDecoded(data);
+            setStatus("success");
+            setMessage(data.rawText && !data.vin && !data.make ? "Zeskanowano — sprawdź dane poniżej" : "Dane odczytane pomyślnie!");
+
+            // stop camera
+            try { await scannerRef.current?.stop(); } catch { /* ok */ }
+
+            // auto-apply after short preview
+            setTimeout(() => { onData(data!); onClose(); }, 2500);
         },
         [onData, onClose],
     );
@@ -327,7 +323,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
                 await sc.start(
                     { facingMode: "environment" },
-                    { fps: 15, qrbox: { width: 320, height: 320 }, aspectRatio: 1.0 },
+                    { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
                     handleSuccess,
                     () => {},          // continuous scan-failure is expected
                 );
@@ -411,6 +407,12 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                         {decoded.model && <Row label="Model" value={decoded.model} />}
                         {decoded.year && <Row label="Rok" value={decoded.year} />}
                         {decoded.fuelType && <Row label="Paliwo" value={decoded.fuelType} />}
+                        {decoded.rawText && (
+                            <div className="pt-1 border-t border-white/10">
+                                <span className="text-[10px] font-black text-white/50 uppercase block mb-1">Treść kodu QR</span>
+                                <span className="text-xs font-mono text-white/80 break-all">{decoded.rawText}</span>
+                            </div>
+                        )}
                     </div>
                 )}
 

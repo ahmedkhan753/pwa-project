@@ -90,6 +90,7 @@ export function VehicleDataStep() {
     };
 
     const handleQRData = (data: DecodedVehicleData) => {
+        // Structured fields from Aztec / plain-text QR
         if (data.vin) updateField('vehicleData', 'vin', data.vin);
         if (data.registrationPlates) updateField('vehicleData', 'registrationPlates', data.registrationPlates);
         if (data.make) updateField('vehicleData', 'make', data.make);
@@ -102,6 +103,12 @@ export function VehicleDataStep() {
         if (data.totalWeight) updateField('vehicleData', 'totalWeight', data.totalWeight);
         if (data.seatsCount) updateField('vehicleData', 'seatsCount', data.seatsCount);
         if (data.firstRegistration) updateField('vehicleData', 'firstRegistration', data.firstRegistration);
+
+        // Fallback: extract VIN from raw text if no structured VIN found
+        if (!data.vin && data.rawText) {
+            const m = data.rawText.match(/[A-HJ-NPR-Z0-9]{17}/i);
+            if (m) updateField('vehicleData', 'vin', m[0].toUpperCase());
+        }
     };
 
     if (isLoading) {
