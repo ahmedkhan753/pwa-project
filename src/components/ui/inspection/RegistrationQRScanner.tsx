@@ -121,6 +121,43 @@ export interface DecodedVehicleData {
 }
 
 /**
+ * Try to extract vehicle data from a plain-text QR code.
+ * Handles JSON payloads and raw text with VIN / plate patterns.
+ */
+function parsePlainTextQR(text: string): DecodedVehicleData {
+    const result: DecodedVehicleData = {};
+
+    // 1. Try JSON
+    try {
+        const json = JSON.parse(text);
+        if (json.vin) result.vin = String(json.vin).toUpperCase();
+        if (json.make || json.brand) result.make = String(json.make || json.brand).toUpperCase();
+        if (json.model) result.model = String(json.model).toUpperCase();
+        const plates = json.registration || json.plates || json.registrationPlates;
+        if (plates) result.registrationPlates = String(plates).toUpperCase();
+        if (json.year) result.year = String(json.year);
+        const fuel = json.fuel || json.fuelType;
+        if (fuel) result.fuelType = String(fuel).toUpperCase();
+    } catch {
+        // not JSON — fall through to regex
+    }
+
+    // 2. VIN: 17 chars, no I / O / Q
+    if (!result.vin) {
+        const m = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
+        if (m) result.vin = m[1].toUpperCase();
+    }
+
+    // 3. Polish registration plate  e.g. "WA12345" or "KR 1234X"
+    if (!result.registrationPlates) {
+        const m = text.match(/\b([A-Z]{2,3}[\s]?[A-Z0-9]{4,5})\b/i);
+        if (m) result.registrationPlates = m[1].toUpperCase().replace(/\s+/g, "");
+    }
+
+    return result;
+}
+
+/**
  * Decode raw Aztec barcode bytes from a Polish registration certificate.
  * Supports both new (XX…) and old format documents.
  */
@@ -185,7 +222,7 @@ interface RegistrationQRScannerProps {
 
 export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScannerProps) {
     const [status, setStatus] = useState<"scanning" | "success" | "error">("scanning");
-    const [message, setMessage] = useState("Nakieruj kamerę na kod Aztec z dowodu rejestracyjnego");
+    const [message, setMessage] = useState("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
     const [decoded, setDecoded] = useState<DecodedVehicleData | null>(null);
     const scannerRef = useRef<any>(null);
     const idRef = useRef(`qr-reader-${Date.now()}`);
@@ -198,16 +235,34 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             doneRef.current = true;
 
             try {
-                // ISO-8859-1 string → raw bytes
-                const bytes = new Uint8Array(decodedText.length);
-                for (let i = 0; i < decodedText.length; i++) {
-                    bytes[i] = decodedText.charCodeAt(i) & 0xff;
+                let data: DecodedVehicleData | null = null;
+
+                // Path 1: Polish registration Aztec (NRV2E-compressed binary)
+                try {
+                    const bytes = new Uint8Array(decodedText.length);
+                    for (let i = 0; i < decodedText.length; i++) {
+                        bytes[i] = decodedText.charCodeAt(i) & 0xff;
+                    }
+                    const aztecData = decodeRegistrationBytes(bytes);
+                    if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
+                        data = aztecData;
+                        console.log("[QR] Decoded as Aztec NRV2E", data);
+                    }
+                } catch {
+                    // not an Aztec registration code — try plain text
                 }
 
-                const data = decodeRegistrationBytes(bytes);
+                // Path 2: Plain text QR (VIN, JSON, etc.)
+                if (!data) {
+                    const plainData = parsePlainTextQR(decodedText);
+                    if (plainData.vin || plainData.make || plainData.registrationPlates) {
+                        data = plainData;
+                        console.log("[QR] Decoded as plain text", data);
+                    }
+                }
 
-                if (!data.vin && !data.make && !data.registrationPlates) {
-                    throw new Error("No useful data");
+                if (!data) {
+                    throw new Error("No useful data extracted");
                 }
 
                 setDecoded(data);
@@ -218,7 +273,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 try { await scannerRef.current?.stop(); } catch { /* ok */ }
 
                 // auto-apply after short preview
-                setTimeout(() => { onData(data); onClose(); }, 1800);
+                setTimeout(() => { onData(data!); onClose(); }, 1800);
             } catch (err) {
                 console.warn("[QR] decode failed, retrying…", err);
                 doneRef.current = false;
@@ -226,7 +281,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 setMessage("Nie udało się odczytać danych. Spróbuj ponownie.");
                 setTimeout(() => {
                     setStatus("scanning");
-                    setMessage("Nakieruj kamerę na kod Aztec z dowodu rejestracyjnego");
+                    setMessage("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
                 }, 2500);
             }
         },
@@ -272,7 +327,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
                 await sc.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 },
+                    { fps: 15, qrbox: { width: 320, height: 320 }, aspectRatio: 1.0 },
                     handleSuccess,
                     () => {},          // continuous scan-failure is expected
                 );
@@ -361,7 +416,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
                 {status === "scanning" && (
                     <p className="mt-4 text-[10px] text-white/40 font-bold uppercase tracking-widest text-center max-w-[280px]">
-                        Kod Aztec znajduje się na odwrocie dowodu rejestracyjnego
+                        Kod Aztec (odwrót dowodu rej.) lub zwykły kod QR z numerem VIN
                     </p>
                 )}
             </div>
