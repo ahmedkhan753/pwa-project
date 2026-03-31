@@ -48,6 +48,12 @@ class UpdatePinRequest(BaseModel):
     pin: str
 
 
+class UpdateInspectorRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    pin: Optional[str] = None
+
+
 class NotifyRequest(BaseModel):
     phone: str
     order_title: str
@@ -191,6 +197,55 @@ async def _sync_inspector_to_bitrix(
         return None
 
 
+async def _update_bitrix_inspector_name(
+    gateway,
+    bitrix_list_id: str,
+    new_name: str,
+    phone: str,
+) -> bool:
+    """Update the VALUE of an existing Bitrix inspector dropdown entry in-place.
+    Keeps the same item ID so existing deal assignments are unaffected."""
+    try:
+        field_list = await gateway.call("crm.deal.userfield.list", {
+            "filter": {"FIELD_NAME": INSPECTOR_FIELD}
+        })
+        if not field_list:
+            return False
+        field_id = field_list[0]["ID"]
+
+        fields = await gateway.call("crm.deal.fields", {})
+        current_items = fields.get(INSPECTOR_FIELD, {}).get("items",
+                        fields.get(INSPECTOR_FIELD, {}).get("ITEMS", []))
+
+        new_display = f"{new_name} - {phone}"
+        updated_list = []
+        found = False
+        for item in current_items:
+            if str(item.get("ID", "")) == str(bitrix_list_id):
+                updated_list.append({"ID": str(item["ID"]), "VALUE": new_display})
+                found = True
+            else:
+                updated_list.append({"ID": str(item["ID"]), "VALUE": str(item.get("VALUE", ""))})
+
+        if not found:
+            logger.warning(f"Bitrix rename: item {bitrix_list_id} not found in dropdown")
+            return False
+
+        await gateway.call("crm.deal.userfield.update", {
+            "id": int(field_id),
+            "fields": {"LIST": updated_list},
+        })
+
+        from routers.deals import invalidate_inspector_cache
+        invalidate_inspector_cache()
+
+        logger.info(f"✅ Bitrix: renamed item {bitrix_list_id} → '{new_display}'")
+        return True
+    except Exception as e:
+        logger.error(f"Bitrix rename error: {e}", exc_info=True)
+        return False
+
+
 # ── Inspector CRUD ──────────────────────────────────
 
 @router.post("/admin/inspectors")
@@ -200,37 +255,65 @@ async def create_inspector(
     db: Session = Depends(get_db),
     _=Depends(require_admin),
 ):
-    """Create a new inspector account and sync to Bitrix24 dropdown."""
+    """Create a new inspector account and sync to Bitrix24 dropdown.
+    If the phone already exists but is deactivated, reactivates and updates details.
+    """
     existing = db.query(Inspector).filter(Inspector.phone == data.phone).first()
+
     if existing:
-        raise HTTPException(status_code=400, detail="Phone number already registered")
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail="Phone number already registered")
 
-    inspector = Inspector(
-        name=data.name,
-        phone=data.phone,
-        pin_hash=pwd_context.hash(str(data.pin)),
-        email=data.email,
-    )
-    db.add(inspector)
-    db.commit()
-    db.refresh(inspector)
-    logger.info(f"✅ Inspector created in DB: {inspector.name} ({inspector.phone})")
+        # Deactivated record — reactivate and update all supplied details
+        logger.info(f"Reactivating deactivated inspector {existing.name} ({existing.phone})")
+        name_changed = data.name.strip() != existing.name
+        existing.name = data.name.strip()
+        existing.email = data.email
+        existing.pin_hash = pwd_context.hash(str(data.pin))
+        existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        inspector = existing
+        reactivated = True
+    else:
+        inspector = Inspector(
+            name=data.name,
+            phone=data.phone,
+            pin_hash=pwd_context.hash(str(data.pin)),
+            email=data.email,
+        )
+        db.add(inspector)
+        db.commit()
+        db.refresh(inspector)
+        name_changed = False
+        reactivated = False
 
-    # Sync to Bitrix (best-effort — DB record is always created)
+    logger.info(f"✅ Inspector {'reactivated' if reactivated else 'created'}: {inspector.name} ({inspector.phone})")
+
+    # Sync to Bitrix (best-effort)
     bitrix_synced = False
     gateway = req.app.state.gateway
     bitrix_ready = getattr(req.app.state, "bitrix_ready", False)
 
     if bitrix_ready:
-        new_list_id = await _sync_inspector_to_bitrix(gateway, "add", data.name, data.phone)
-        if new_list_id:
-            inspector.bitrix_list_id = new_list_id
-            db.commit()
+        if reactivated and inspector.bitrix_list_id and name_changed:
+            # Name changed on reactivation — update in-place
+            await _update_bitrix_inspector_name(gateway, inspector.bitrix_list_id, inspector.name, inspector.phone)
             bitrix_synced = True
+        elif reactivated and inspector.bitrix_list_id:
+            # Already in Bitrix — nothing to add
+            bitrix_synced = True
+        else:
+            # Fresh add (or reactivated without a stored bitrix_list_id)
+            new_list_id = await _sync_inspector_to_bitrix(gateway, "add", inspector.name, inspector.phone)
+            if new_list_id:
+                inspector.bitrix_list_id = new_list_id
+                db.commit()
+                bitrix_synced = True
     else:
-        logger.warning(f"Bitrix not ready — {data.name} not synced to Bitrix dropdown")
+        logger.warning(f"Bitrix not ready — {inspector.name} not synced to Bitrix dropdown")
 
-    return {"success": True, "id": inspector.id, "bitrix_synced": bitrix_synced}
+    return {"success": True, "id": inspector.id, "bitrix_synced": bitrix_synced, "reactivated": reactivated}
 
 
 @router.get("/admin/inspectors")
@@ -251,6 +334,52 @@ async def list_inspectors(
         }
         for i in inspectors
     ]
+
+
+@router.put("/admin/inspectors/{inspector_id}")
+async def update_inspector(
+    inspector_id: int,
+    data: UpdateInspectorRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """Update inspector name, email, and/or PIN. Phone cannot be changed."""
+    inspector = db.query(Inspector).filter(Inspector.id == inspector_id).first()
+    if not inspector:
+        raise HTTPException(status_code=404, detail="Inspector not found")
+
+    name_changed = bool(data.name and data.name.strip() != inspector.name)
+    old_name = inspector.name
+
+    if data.name and data.name.strip():
+        inspector.name = data.name.strip()
+    if data.email is not None:
+        inspector.email = data.email
+    if data.pin and data.pin.strip():
+        inspector.pin_hash = pwd_context.hash(str(data.pin))
+
+    db.commit()
+    db.refresh(inspector)
+    logger.info(f"✅ Inspector updated: {inspector.name} ({inspector.phone})")
+
+    # If name changed and inspector is in Bitrix, update the dropdown entry in-place
+    bitrix_updated = False
+    if name_changed and inspector.bitrix_list_id:
+        gateway = req.app.state.gateway
+        bitrix_ready = getattr(req.app.state, "bitrix_ready", False)
+        if bitrix_ready:
+            bitrix_updated = await _update_bitrix_inspector_name(
+                gateway, inspector.bitrix_list_id, inspector.name, inspector.phone
+            )
+
+    return {
+        "success": True,
+        "id": inspector.id,
+        "name": inspector.name,
+        "email": inspector.email,
+        "bitrix_updated": bitrix_updated,
+    }
 
 
 # ── Inspector Orders ────────────────────────────────

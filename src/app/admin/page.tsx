@@ -37,6 +37,8 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const [showInspectorList, setShowInspectorList] = useState(true)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState({ name: "", email: "", pin: "" })
 
   // Check for existing admin session
   useEffect(() => {
@@ -211,6 +213,56 @@ export default function AdminPanel() {
     } catch {
       setMessage("❌ Błąd wysyłki emaila")
     }
+  }
+
+  const startEdit = (inspector: Inspector, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingId(inspector.id)
+    setEditForm({ name: inspector.name, email: inspector.email || "", pin: "" })
+  }
+
+  const cancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingId(null)
+    setEditForm({ name: "", email: "", pin: "" })
+  }
+
+  const saveEdit = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!editForm.name.trim()) {
+      setMessage("❌ Imię i nazwisko nie może być puste")
+      return
+    }
+    setLoading(true)
+    try {
+      const body: Record<string, string> = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+      }
+      if (editForm.pin.length === 4) body.pin = editForm.pin
+
+      const res = await fetch(`${API_BASE}/admin/inspectors/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify(body)
+      })
+      if (res.ok) {
+        const result = await res.json()
+        const bitrixNote = result.bitrix_updated ? " i zaktualizowany w Bitrix" : ""
+        setMessage(`✅ Dane inspektora zaktualizowane${bitrixNote}`)
+        setEditingId(null)
+        fetchInspectors(adminToken)
+      } else {
+        const err = await res.json()
+        setMessage(`❌ ${err.detail || "Błąd aktualizacji"}`)
+      }
+    } catch {
+      setMessage("❌ Błąd połączenia")
+    }
+    setLoading(false)
   }
 
   const selectInspector = (inspector: Inspector) => {
@@ -429,7 +481,13 @@ export default function AdminPanel() {
                         </span>
                       </div>
                     </div>
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      <button
+                        onClick={e => startEdit(inspector, e)}
+                        className="text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-lg font-bold transition-colors min-h-[32px]"
+                      >
+                        Edytuj
+                      </button>
                       <button
                         onClick={e => { e.stopPropagation(); resetPin(inspector.id) }}
                         className="text-[10px] bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-3 py-1.5 rounded-lg font-bold transition-colors min-h-[32px]"
@@ -447,6 +505,59 @@ export default function AdminPanel() {
                         {inspector.is_active ? "Dezaktywuj" : "Aktywuj"}
                       </button>
                     </div>
+
+                    {/* Inline edit form */}
+                    {editingId === inspector.id && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        className="mt-3 pt-3 border-t border-gray-200 space-y-2"
+                      >
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-gray-400 tracking-wider">Imię i nazwisko</label>
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium focus:border-blue-500 outline-none mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-gray-400 tracking-wider">Email</label>
+                          <input
+                            type="email"
+                            value={editForm.email}
+                            onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium focus:border-blue-500 outline-none mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-gray-400 tracking-wider">Nowy PIN (opcjonalnie)</label>
+                          <input
+                            type="text"
+                            value={editForm.pin}
+                            onChange={e => setEditForm({ ...editForm, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                            placeholder="zostaw puste aby nie zmieniać"
+                            maxLength={4}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium focus:border-blue-500 outline-none mt-0.5"
+                          />
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={e => saveEdit(inspector.id, e)}
+                            disabled={loading}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
+                          >
+                            {loading ? "Zapisywanie..." : "Zapisz"}
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Anuluj
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
