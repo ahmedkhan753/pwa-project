@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, QrCode, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { X, QrCode, Loader2, CheckCircle2, AlertCircle, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -226,6 +226,8 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     const [status, setStatus] = useState<"scanning" | "success" | "error">("scanning");
     const [message, setMessage] = useState("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
     const [decoded, setDecoded] = useState<DecodedVehicleData | null>(null);
+    const [showManual, setShowManual] = useState(false);
+    const [manualText, setManualText] = useState("");
     const scannerRef = useRef<any>(null);
     const idRef = useRef(`qr-reader-${Date.now()}`);
     const doneRef = useRef(false);
@@ -284,6 +286,13 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
         [onData, onClose],
     );
 
+    /* ── manual text submit ── */
+    const handleManualSubmit = useCallback(() => {
+        const text = manualText.trim();
+        if (!text) return;
+        handleSuccess(text);
+    }, [manualText, handleSuccess]);
+
     /* ── mount / unmount scanner ── */
     useEffect(() => {
         let alive = true;
@@ -303,7 +312,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     throw Object.assign(new Error("HTTPS required"), { _httpsError: true });
                 }
 
-                const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+                const { Html5Qrcode } = await import("html5-qrcode");
                 if (!alive) return;
 
                 // Verify DOM element exists
@@ -311,19 +320,15 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     throw new Error("Scanner container not found in DOM");
                 }
 
-                sc = new Html5Qrcode(idRef.current, {
-                    formatsToSupport: [
-                        Html5QrcodeSupportedFormats.AZTEC,
-                        Html5QrcodeSupportedFormats.QR_CODE,
-                        Html5QrcodeSupportedFormats.DATA_MATRIX,
-                    ],
-                    verbose: false,
-                });
+                // No formatsToSupport restriction — let the library detect everything.
+                // Restricting to AZTEC/QR_CODE/DATA_MATRIX was silently preventing detection.
+                sc = new Html5Qrcode(idRef.current, { verbose: false });
                 scannerRef.current = sc;
 
                 await sc.start(
                     { facingMode: "environment" },
-                    { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+                    // No aspectRatio — forcing 1:1 breaks focus on many mobile cameras
+                    { fps: 15, qrbox: { width: 250, height: 250 } },
                     handleSuccess,
                     () => {},          // continuous scan-failure is expected
                 );
@@ -420,6 +425,38 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     <p className="mt-4 text-[10px] text-white/40 font-bold uppercase tracking-widest text-center max-w-[280px]">
                         Kod Aztec (odwrót dowodu rej.) lub zwykły kod QR z numerem VIN
                     </p>
+                )}
+
+                {/* manual fallback */}
+                {status === "scanning" && !showManual && (
+                    <button
+                        onClick={() => setShowManual(true)}
+                        className="mt-5 flex items-center gap-2 text-xs text-white/40 hover:text-white/70 transition-colors"
+                    >
+                        <Keyboard size={14} />
+                        Wpisz VIN ręcznie
+                    </button>
+                )}
+
+                {showManual && status === "scanning" && (
+                    <div className="mt-4 w-full max-w-[350px] flex gap-2">
+                        <input
+                            type="text"
+                            value={manualText}
+                            onChange={e => setManualText(e.target.value.toUpperCase())}
+                            onKeyDown={e => e.key === "Enter" && handleManualSubmit()}
+                            placeholder="Wklej lub wpisz VIN / treść kodu QR"
+                            className="flex-1 bg-white/10 text-white text-xs font-mono px-3 py-2.5 rounded-xl border border-white/20 placeholder:text-white/30 focus:outline-none focus:border-primary/60"
+                            autoFocus
+                        />
+                        <button
+                            onClick={handleManualSubmit}
+                            disabled={!manualText.trim()}
+                            className="px-4 py-2.5 bg-primary text-black text-xs font-black rounded-xl disabled:opacity-40 active:scale-95 transition-all"
+                        >
+                            OK
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
