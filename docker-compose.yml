@@ -3,9 +3,13 @@ services:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-pwa_db}
+      # ⚠️  NEVER change these three values once the volume is created.
+      # Changing them causes auth failure on restart because postgres bakes
+      # the password into the volume on first init and never re-reads it.
+      # Use safe_deploy.sh / safe_restart alias — never `docker-compose down -v`.
+      POSTGRES_USER: inspection_user
+      POSTGRES_PASSWORD: inspection_pass
+      POSTGRES_DB: inspection_db
     ports:
       - "5432:5432"
     volumes:
@@ -14,7 +18,7 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d pwa_db"]
+      test: ["CMD-SHELL", "pg_isready -U inspection_user -d inspection_db"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,7 +34,7 @@ services:
       BITRIX_STORAGE_ID: ${BITRIX_STORAGE_ID:-1}
       SECRET_KEY: ${SECRET_KEY:-supersecretkey123}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin2025!}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/pwa_db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://inspection_user:inspection_pass@db:5432/inspection_db}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER}
