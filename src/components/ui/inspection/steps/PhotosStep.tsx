@@ -20,24 +20,37 @@ function VideoRecordSlot({
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const chunksRef = useRef<Blob[]>([]);
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [state, setState] = useState<'idle' | 'recording' | 'preview' | 'fallback'>('idle');
     const [countdown, setCountdown] = useState(6);
     const [recordedUrl, setRecordedUrl] = useState<string>('');
 
-    const stopStream = useCallback(() => {
+    const stopAll = useCallback(() => {
+        if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
+        if (stopTimerRef.current) { clearTimeout(stopTimerRef.current); stopTimerRef.current = null; }
         streamRef.current?.getTracks().forEach(t => t.stop());
         streamRef.current = null;
-        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }, []);
 
+    // FIX 1: Black screen — video element doesn't exist until state='recording'.
+    // Set srcObject here, after React has rendered the <video ref={videoRef}>.
+    useEffect(() => {
+        if (state === 'recording' && videoRef.current && streamRef.current) {
+            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.play().catch(() => {});
+        }
+    }, [state]);
+
     // Cleanup on unmount
-    useEffect(() => () => { stopStream(); if (recordedUrl) URL.revokeObjectURL(recordedUrl); }, [stopStream, recordedUrl]);
+    useEffect(() => () => {
+        stopAll();
+        if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    }, [stopAll, recordedUrl]);
 
     const startRecording = async () => {
-        // Always try MediaRecorder first — works on HTTPS and some HTTP
         try {
             if (!navigator?.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported');
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -45,44 +58,51 @@ function VideoRecordSlot({
                 audio: true,
             });
             streamRef.current = stream;
-            if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+            // Do NOT touch videoRef here — element not in DOM yet (renders on state change below)
 
             chunksRef.current = [];
-            const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus'
-                : typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
-                : typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
+            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus'
+                : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
+                : MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
             const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
             mediaRecorderRef.current = recorder;
 
+            // FIX 2: timeslice=100ms ensures ondataavailable fires regularly,
+            // not only on stop() — prevents empty blob on some browsers/devices.
             recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
             recorder.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
                 const url = URL.createObjectURL(blob);
                 setRecordedUrl(url);
                 setState('preview');
-                stopStream();
+                stopAll();
             };
 
-            recorder.start();
-            setCountdown(6);
+            recorder.start(100);
             setState('recording');
+            setCountdown(6);
 
+            // FIX 3: Hard stop via setTimeout — not subject to setInterval drift.
+            // This guarantees exactly 6 s of recording regardless of JS timer jitter.
+            stopTimerRef.current = setTimeout(() => {
+                if (recorder.state === 'recording') recorder.stop();
+            }, 6000);
+
+            // Countdown display only — does NOT control when recording stops.
             let remaining = 6;
-            timerRef.current = setInterval(() => {
+            countdownTimerRef.current = setInterval(() => {
                 remaining--;
                 setCountdown(remaining);
                 if (remaining <= 0) {
-                    clearInterval(timerRef.current!);
-                    timerRef.current = null;
-                    if (recorder.state === 'recording') recorder.stop();
+                    clearInterval(countdownTimerRef.current!);
+                    countdownTimerRef.current = null;
                 }
             }, 1000);
+
         } catch (err) {
-            // MediaRecorder/getUserMedia failed → fall back to native file input
             console.warn('MediaRecorder unavailable, falling back to file input:', err);
-            stopStream();
+            stopAll();
             setState('fallback');
-            // Auto-trigger the file input
             setTimeout(() => fileInputRef.current?.click(), 100);
         }
     };
@@ -116,7 +136,7 @@ function VideoRecordSlot({
             <div className="flex flex-col gap-2 col-span-2">
                 <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
                 <div className="relative rounded-2xl overflow-hidden border-2 border-success bg-black">
-                    <video src={slot.base64} controls className="w-full rounded-xl" style={{ maxHeight: '200px' }} />
+                    <video src={slot.base64} controls playsInline className="w-full rounded-xl" style={{ maxHeight: '200px' }} />
                     <button
                         onClick={(e) => { e.stopPropagation(); onClear(); }}
                         className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg"
@@ -145,7 +165,7 @@ function VideoRecordSlot({
             )}
 
             {state === 'recording' && (
-                <div className="relative rounded-2xl overflow-hidden border-2 border-red-500 bg-black animate-pulse-soft">
+                <div className="relative rounded-2xl overflow-hidden border-2 border-red-500 bg-black">
                     <video ref={videoRef} muted playsInline autoPlay className="w-full" style={{ maxHeight: '240px' }} />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-20 h-20 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border-4 border-white/50">
@@ -162,7 +182,8 @@ function VideoRecordSlot({
             {state === 'preview' && recordedUrl && (
                 <div className="space-y-2">
                     <div className="relative rounded-2xl overflow-hidden border-2 border-primary bg-black">
-                        <video src={recordedUrl} controls className="w-full" style={{ maxHeight: '240px' }} />
+                        {/* playsInline required on iOS for inline playback */}
+                        <video src={recordedUrl} controls playsInline className="w-full" style={{ maxHeight: '240px' }} />
                     </div>
                     <div className="flex gap-2">
                         <button
