@@ -366,6 +366,40 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 );
                 started = true;
                 dbg("start() OK — scanning");
+
+                // ── Parallel native BarcodeDetector loop ──────────────────────
+                // ZXing (html5-qrcode default) often fails on real-world codes.
+                // Chrome/Android's native BarcodeDetector is much more reliable.
+                // Run it in parallel: whichever detects first calls handleSuccess.
+                const BDClass = (window as any).BarcodeDetector as any;
+                if (typeof BDClass !== "undefined") {
+                    dbg("BarcodeDetector: available — starting parallel loop");
+                    const bd = new BDClass({ formats: ["qr_code", "aztec", "data_matrix", "code_128", "code_39", "ean_13"] });
+                    const getVideo = () => document.querySelector(`#${idRef.current} video`) as HTMLVideoElement | null;
+
+                    const bdLoop = async () => {
+                        if (!alive || doneRef.current) return;
+                        const video = getVideo();
+                        if (video && video.readyState >= 2) {
+                            try {
+                                const codes = await bd.detect(video);
+                                if (codes.length > 0 && codes[0].rawValue) {
+                                    dbg(`BarcodeDetector: found "${codes[0].rawValue.slice(0, 40)}"`);
+                                    handleSuccess(codes[0].rawValue);
+                                    return;
+                                }
+                            } catch (e: any) {
+                                // detect() throws when no code found — normal, ignore
+                            }
+                        }
+                        if (alive && !doneRef.current) {
+                            setTimeout(bdLoop, 200); // ~5 fps is enough
+                        }
+                    };
+                    setTimeout(bdLoop, 500); // give camera 500ms to warm up
+                } else {
+                    dbg("BarcodeDetector: NOT available — ZXing only");
+                }
             } catch (err: any) {
                 const msg = err?.message || String(err);
                 dbg(`ERROR: ${msg}`);
