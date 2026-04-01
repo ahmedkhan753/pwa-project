@@ -39,6 +39,7 @@ export default function AdminPanel() {
   const [showInspectorList, setShowInspectorList] = useState(true)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState({ name: "", email: "", pin: "" })
+  const [sortBy, setSortBy] = useState<'name' | 'status' | 'bitrix'>('name')
 
   // Check for existing admin session
   useEffect(() => {
@@ -439,14 +440,40 @@ export default function AdminPanel() {
           <div className={`col-span-1 bg-white rounded-2xl shadow-sm p-3 sm:p-4 border border-gray-100 ${
             !showInspectorList && selectedInspector ? "hidden lg:block" : ""
           }`}>
-            <h2 className="font-bold text-sm sm:text-base mb-3 sm:mb-4 text-gray-900">
+            <h2 className="font-bold text-sm sm:text-base mb-2 text-gray-900">
               Inspektorzy ({inspectors.length})
             </h2>
+
+            {/* Sort controls */}
+            <div className="flex items-center gap-1 mb-3">
+              <span className="text-[10px] font-bold uppercase text-gray-400 mr-1">Sortuj:</span>
+              {(['name', 'status', 'bitrix'] as const).map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setSortBy(opt)}
+                  className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                    sortBy === opt ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {opt === 'name' ? 'A–Z' : opt === 'status' ? 'Status' : 'Bitrix'}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-2 sm:space-y-3">
               {inspectors.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-8">Brak inspektorów</p>
               ) : (
-                inspectors.map(inspector => (
+                [...inspectors]
+                  .sort((a, b) => {
+                    if (sortBy === 'status') {
+                      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
+                    } else if (sortBy === 'bitrix') {
+                      if (a.bitrix_synced !== b.bitrix_synced) return a.bitrix_synced ? -1 : 1
+                    }
+                    return a.name.localeCompare(b.name, 'pl')
+                  })
+                  .map(inspector => (
                   <div
                     key={inspector.id}
                     onClick={() => selectInspector(inspector)}
@@ -559,7 +586,7 @@ export default function AdminPanel() {
                       </div>
                     )}
                   </div>
-                ))
+                  ))
               )}
             </div>
           </div>

@@ -411,7 +411,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             <div className="flex-1 flex flex-col items-center justify-center px-4 overflow-auto">
                 <div
                     id={idRef.current}
-                    className="w-full max-w-[350px] rounded-2xl overflow-hidden border-2 border-primary/40"
+                    className="w-full rounded-2xl overflow-hidden border-2 border-primary/40"
                 />
 
                 {/* status pill */}
