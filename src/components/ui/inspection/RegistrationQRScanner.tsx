@@ -229,17 +229,26 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     const [showManual, setShowManual] = useState(false);
     const [manualText, setManualText] = useState("");
     const [attempts, setAttempts] = useState(0);
+    const [debugLines, setDebugLines] = useState<string[]>([]);
+    const [lastFailReason, setLastFailReason] = useState("");
     const scannerRef = useRef<any>(null);
     const idRef = useRef(`qr-reader-${Date.now()}`);
     const doneRef = useRef(false);
 
+    const dbg = useCallback((line: string) => {
+        console.log("[QR-DBG]", line);
+        setDebugLines(prev => [...prev.slice(-6), line]);
+    }, []);
+
     /* ── scan callback ── */
     const handleSuccess = useCallback(
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         async (decodedText: string) => {
             if (doneRef.current) return;
             doneRef.current = true;
 
-            // Log raw content immediately for debugging
+            const preview = JSON.stringify(decodedText.slice(0, 60));
+            dbg(`Detected! len=${decodedText.length} text=${preview}`);
             console.log("[QR] handleSuccess — raw text:", JSON.stringify(decodedText));
 
             let data: DecodedVehicleData | null = null;
@@ -284,7 +293,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             // auto-apply after short preview
             setTimeout(() => { onData(data!); onClose(); }, 2500);
         },
-        [onData, onClose],
+        [onData, onClose, dbg],
     );
 
     /* ── manual text submit ── */
@@ -302,46 +311,56 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
         (async () => {
             try {
-                // Check HTTPS before even trying
-                const isSecure =
-                    typeof window !== "undefined" &&
-                    (window.location.protocol === "https:" ||
-                        window.location.hostname === "localhost" ||
-                        window.location.hostname === "127.0.0.1");
+                // 1. HTTPS check
+                const proto = typeof window !== "undefined" ? window.location.protocol : "?";
+                const host  = typeof window !== "undefined" ? window.location.hostname  : "?";
+                const isSecure = proto === "https:" || host === "localhost" || host === "127.0.0.1";
+                dbg(`HTTPS: ${proto}//${host} → ${isSecure ? "OK" : "FAIL"}`);
 
                 if (!isSecure) {
                     throw Object.assign(new Error("HTTPS required"), { _httpsError: true });
                 }
 
+                // 2. Load library
+                dbg("Loading html5-qrcode…");
                 const { Html5Qrcode } = await import("html5-qrcode");
                 if (!alive) return;
+                dbg("Library loaded");
 
-                // Verify DOM element exists
-                if (!document.getElementById(idRef.current)) {
-                    throw new Error("Scanner container not found in DOM");
-                }
+                // 3. DOM element
+                const el = document.getElementById(idRef.current);
+                dbg(`DOM element: ${el ? "found" : "MISSING"}`);
+                if (!el) throw new Error("Scanner container not found in DOM");
 
-                // Default config — BarcodeDetector (Chrome/Android) or ZXing fallback.
-                // Do NOT disable BarcodeDetector: it is what actually detects the code.
-                // The previous bug was in parsing (always tried Aztec), not detection.
+                // 4. Construct scanner
+                dbg("Constructing scanner…");
                 sc = new Html5Qrcode(idRef.current, { verbose: false });
                 scannerRef.current = sc;
+                dbg("Scanner constructed");
 
+                // 5. Start
+                dbg("Calling start()…");
                 await sc.start(
                     { facingMode: "environment" },
                     { fps: 10, qrbox: { width: 250, height: 250 } },
                     handleSuccess,
-                    () => { setAttempts(n => n + 1); },
+                    (errMsg: string) => {
+                        setAttempts(n => n + 1);
+                        setLastFailReason(errMsg);
+                    },
                 );
                 started = true;
+                dbg("start() OK — scanning");
             } catch (err: any) {
+                const msg = err?.message || String(err);
+                dbg(`ERROR: ${msg}`);
                 console.error("[QR] camera error", err);
                 if (alive) {
                     setStatus("error");
                     if (err?._httpsError) {
                         setMessage("Kamera wymaga połączenia HTTPS. Skontaktuj się z administratorem.");
                     } else {
-                        setMessage("Nie można uruchomić kamery. Sprawdź uprawnienia.");
+                        setMessage(`Błąd: ${msg}`);
                     }
                 }
             }
@@ -360,7 +379,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 }
             }
         };
-    }, [handleSuccess]);
+    }, [handleSuccess, dbg]);
 
     /* ── UI ── */
     return (
@@ -428,12 +447,21 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     </p>
                 )}
 
-                {/* Scan attempt counter — confirms camera is actively scanning */}
-                {status === "scanning" && attempts > 0 && (
-                    <p className="mt-1 text-[10px] text-white/25 text-center">
-                        Próby odczytu: {attempts}
-                    </p>
-                )}
+                {/* ── debug panel ── */}
+                <div className="mt-3 w-full max-w-[350px] bg-black/60 border border-white/10 rounded-xl p-3 space-y-1">
+                    {debugLines.map((l, i) => (
+                        <p key={i} className="text-[10px] font-mono text-white/60 break-all">{l}</p>
+                    ))}
+                    {attempts > 0 && (
+                        <p className="text-[10px] font-mono text-white/40">
+                            Frames scanned: {attempts}
+                            {lastFailReason ? ` | last fail: ${lastFailReason.slice(0, 40)}` : ""}
+                        </p>
+                    )}
+                    {debugLines.length === 0 && attempts === 0 && (
+                        <p className="text-[10px] font-mono text-white/30 italic">Initializing…</p>
+                    )}
+                </div>
 
                 {/* manual fallback */}
                 {status === "scanning" && !showManual && (
