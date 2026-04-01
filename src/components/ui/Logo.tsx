@@ -28,22 +28,25 @@ export const Logo: React.FC<LogoProps> = ({
         lg: variant === 'icon' ? { height: 48, width: 48 } : { width: 220, height: 88 },
     }[size];
 
+    // The logo PNG is black + red on white — always render on a white background
+    // so the black "Z" and text remain visible on any page background (dark or light).
     return (
-        <div 
+        <div
             className={cn(
-                "relative flex items-center justify-center mx-auto overflow-visible", // Added overflow-visible
-                onLightBackground && "bg-black rounded-lg p-1.5",
+                "relative flex items-center justify-center mx-auto overflow-visible",
                 className
             )}
-            style={{ 
+            style={{
                 height: variant === 'icon' ? dimensions.height : 'auto',
                 width: variant === 'icon' ? dimensions.width : dimensions.width
             }}
         >
-            <div 
-                className="relative w-full h-full overflow-visible"
-                style={{ 
-                    aspectRatio: variant === 'icon' ? '1/1' : '2.5/1', // Approximate aspect ratio from the logo image
+            <div
+                className="relative w-full h-full overflow-visible rounded-xl"
+                style={{
+                    aspectRatio: variant === 'icon' ? '1/1' : '2.5/1',
+                    backgroundColor: '#ffffff',
+                    padding: variant === 'icon' ? '2px' : '4px',
                 }}
             >
                 <Image
@@ -55,14 +58,9 @@ export const Logo: React.FC<LogoProps> = ({
                         "object-contain w-full h-full",
                         variant === 'icon' ? "object-left" : "object-center"
                     )}
-                    // Crop logic for 'icon' variant:
-                    // The "R" is on the left. We can use object-fit and absolute positioning
-                    // to show only the "R" part if we want to avoid multiple files.
-                    // But for a cleaner look, full logo is easier.
-                    // Since it's a PNG on black, object-left with fixed width works for "R" icon.
                     style={variant === 'icon' ? {
                         objectPosition: '0% 50%',
-                        transform: 'scale(1.8)', // Zoom into the 'R'
+                        transform: 'scale(1.8)',
                         transformOrigin: 'left center'
                     } : {}}
                 />

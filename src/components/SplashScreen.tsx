@@ -28,14 +28,19 @@ export const SplashScreen: React.FC = () => {
     if (!shouldRender) return null;
 
     return (
-        <div 
+        <div
             className={cn(
                 "fixed inset-0 z-[100] bg-black flex items-center justify-center transition-opacity duration-500 ease-in-out",
                 isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
         >
-            <div className="animate-fade-in">
-                <Logo variant="full" size="lg" className="scale-125" />
+            <div className="animate-fade-in flex items-center justify-center" style={{
+                backgroundColor: '#ffffff',
+                borderRadius: '24px',
+                padding: '28px 36px',
+                boxShadow: '0 0 60px rgba(255,255,255,0.15)',
+            }}>
+                <Logo variant="full" size="lg" />
             </div>
         </div>
     );

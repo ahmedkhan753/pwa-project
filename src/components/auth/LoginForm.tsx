@@ -85,6 +85,9 @@ export const LoginForm: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        backgroundColor: '#ffffff',
+                        borderRadius: '16px',
+                        padding: '8px 12px',
                     }}>
                         <img
                             src="/images/logo.png"

@@ -127,7 +127,7 @@ export const Dashboard: React.FC = () => {
                             width: '44px', height: '44px', borderRadius: '10px',
                             overflow: 'visible', flexShrink: 0, display: 'flex',
                             alignItems: 'center', justifyContent: 'center',
-                            backgroundColor: '#000000', padding: '2px'
+                            backgroundColor: '#ffffff', padding: '2px'
                         }}>
                             <img src="/images/logo.png" alt="R" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
                         </div>
