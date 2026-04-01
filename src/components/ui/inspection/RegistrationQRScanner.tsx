@@ -345,10 +345,11 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     {
                         fps: 10,
                         qrbox: (w: number, h: number) => {
-                            // Use 90% of the smaller dimension so the scan area is
-                            // large, square, and fills most of the camera frame.
-                            // Aztec codes on registration certificates need generous coverage.
-                            const side = Math.floor(Math.min(w, h) * 0.9);
+                            // Base the square on the viewfinder WIDTH (not the smaller
+                            // dimension). On landscape camera feeds h < w, so min(w,h)
+                            // produced a box constrained by height — appearing narrow.
+                            // Cap at (h - 16) so the square never overflows vertically.
+                            const side = Math.floor(Math.min(w * 0.85, h - 16));
                             return { width: side, height: side };
                         },
                     },
