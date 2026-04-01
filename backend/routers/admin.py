@@ -52,6 +52,7 @@ class UpdateInspectorRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     pin: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class NotifyRequest(BaseModel):
@@ -344,13 +345,22 @@ async def update_inspector(
     db: Session = Depends(get_db),
     _=Depends(require_admin),
 ):
-    """Update inspector name, email, and/or PIN. Phone cannot be changed."""
+    """Update inspector name, email, PIN, and/or phone."""
     inspector = db.query(Inspector).filter(Inspector.id == inspector_id).first()
     if not inspector:
         raise HTTPException(status_code=404, detail="Inspector not found")
 
+    # Validate new phone doesn't conflict with another inspector
+    if data.phone and data.phone.strip() and data.phone.strip() != inspector.phone:
+        conflict = db.query(Inspector).filter(
+            Inspector.phone == data.phone.strip(),
+            Inspector.id != inspector_id,
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Numer telefonu jest już zajęty przez innego inspektora")
+
     name_changed = bool(data.name and data.name.strip() != inspector.name)
-    old_name = inspector.name
+    phone_changed = bool(data.phone and data.phone.strip() and data.phone.strip() != inspector.phone)
 
     if data.name and data.name.strip():
         inspector.name = data.name.strip()
@@ -358,14 +368,16 @@ async def update_inspector(
         inspector.email = data.email
     if data.pin and data.pin.strip():
         inspector.pin_hash = pwd_context.hash(str(data.pin))
+    if phone_changed:
+        inspector.phone = data.phone.strip()
 
     db.commit()
     db.refresh(inspector)
     logger.info(f"✅ Inspector updated: {inspector.name} ({inspector.phone})")
 
-    # If name changed and inspector is in Bitrix, update the dropdown entry in-place
+    # If name or phone changed and inspector is in Bitrix, update the dropdown entry in-place
     bitrix_updated = False
-    if name_changed and inspector.bitrix_list_id:
+    if (name_changed or phone_changed) and inspector.bitrix_list_id:
         gateway = req.app.state.gateway
         bitrix_ready = getattr(req.app.state, "bitrix_ready", False)
         if bitrix_ready:

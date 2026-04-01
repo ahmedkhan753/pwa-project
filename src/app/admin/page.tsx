@@ -38,7 +38,7 @@ export default function AdminPanel() {
   const [message, setMessage] = useState("")
   const [showInspectorList, setShowInspectorList] = useState(true)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState({ name: "", email: "", pin: "" })
+  const [editForm, setEditForm] = useState({ name: "", phone: "", email: "", pin: "" })
   const [sortBy, setSortBy] = useState<'name' | 'status' | 'bitrix'>('name')
 
   // Check for existing admin session
@@ -219,13 +219,13 @@ export default function AdminPanel() {
   const startEdit = (inspector: Inspector, e: React.MouseEvent) => {
     e.stopPropagation()
     setEditingId(inspector.id)
-    setEditForm({ name: inspector.name, email: inspector.email || "", pin: "" })
+    setEditForm({ name: inspector.name, phone: inspector.phone, email: inspector.email || "", pin: "" })
   }
 
   const cancelEdit = (e: React.MouseEvent) => {
     e.stopPropagation()
     setEditingId(null)
-    setEditForm({ name: "", email: "", pin: "" })
+    setEditForm({ name: "", phone: "", email: "", pin: "" })
   }
 
   const saveEdit = async (id: number, e: React.MouseEvent) => {
@@ -239,6 +239,7 @@ export default function AdminPanel() {
       const body: Record<string, string> = {
         name: editForm.name.trim(),
         email: editForm.email.trim(),
+        phone: editForm.phone.trim(),
       }
       if (editForm.pin.length === 4) body.pin = editForm.pin
 
@@ -546,6 +547,15 @@ export default function AdminPanel() {
                             value={editForm.name}
                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium focus:border-blue-500 outline-none mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-gray-400 tracking-wider">Numer telefonu</label>
+                          <input
+                            type="tel"
+                            value={editForm.phone}
+                            onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono font-medium focus:border-blue-500 outline-none mt-0.5"
                           />
                         </div>
                         <div>
