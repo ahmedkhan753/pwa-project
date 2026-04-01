@@ -345,7 +345,10 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     {
                         fps: 10,
                         qrbox: (w: number, h: number) => {
-                            const side = Math.floor(Math.min(w, h) * 0.8);
+                            // Use 90% of the smaller dimension so the scan area is
+                            // large, square, and fills most of the camera frame.
+                            // Aztec codes on registration certificates need generous coverage.
+                            const side = Math.floor(Math.min(w, h) * 0.9);
                             return { width: side, height: side };
                         },
                     },
