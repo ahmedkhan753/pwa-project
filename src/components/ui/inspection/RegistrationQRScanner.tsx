@@ -315,6 +315,27 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             setStatus("success");
             setMessage(data.rawText && !data.vin && !data.make ? "Zeskanowano — sprawdź dane poniżej" : "Dane odczytane pomyślnie!");
 
+            // ── Send decode diagnostics to backend for server-side logging ──
+            try {
+                const latin1Bytes = Array.from({ length: Math.min(30, decodedText.length) }, (_, i) => decodedText.charCodeAt(i) & 0xff);
+                const utf8Bytes = Array.from(new TextEncoder().encode(decodedText).slice(0, 30));
+                const pathTaken = data.vin || data.make ? (decodedText.length > 20 && decodedText.charCodeAt(0) < 32 ? "aztec" : "plain") : "rawtext";
+                const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                fetch(`${BASE_URL}/debug/qr`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        raw_length: decodedText.length,
+                        first_bytes_latin1: latin1Bytes,
+                        first_bytes_utf8: utf8Bytes,
+                        path_taken: pathTaken,
+                        vin_found: data.vin ?? "",
+                        make_found: data.make ?? "",
+                        raw_preview: decodedText.slice(0, 80),
+                    }),
+                }).catch(() => {});
+            } catch { /* non-critical */ }
+
             // stop camera
             try { await scannerRef.current?.stop(); } catch { /* ok */ }
 

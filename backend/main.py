@@ -276,6 +276,37 @@ app.include_router(admin_router.router)
 app.include_router(webhook_router.router)
 
 
+# ─── QR Debug Endpoint ────────────────────────────────────────
+import logging as _logging
+_qr_dbg_log = _logging.getLogger("qr_debug")
+
+class QRDebugPayload(BaseModel):
+    raw_length: int
+    first_bytes_latin1: list  # first 30 charCodes (latin-1 view)
+    first_bytes_utf8: list    # first 30 bytes of TextEncoder output
+    path_taken: str           # "aztec_latin1" | "aztec_utf8" | "plain" | "rawtext" | "none"
+    vin_found: str
+    make_found: str
+    raw_preview: str          # first 80 chars of rawValue (as JSON-escaped)
+
+@app.post("/debug/qr")
+async def debug_qr(payload: QRDebugPayload):
+    _qr_dbg_log.info(
+        f"[QR-DBG] len={payload.raw_length} path={payload.path_taken} "
+        f"VIN='{payload.vin_found}' make='{payload.make_found}'"
+    )
+    _qr_dbg_log.info(
+        f"[QR-DBG] latin1_bytes={payload.first_bytes_latin1}"
+    )
+    _qr_dbg_log.info(
+        f"[QR-DBG] utf8_bytes={payload.first_bytes_utf8}"
+    )
+    _qr_dbg_log.info(
+        f"[QR-DBG] raw_preview={payload.raw_preview!r}"
+    )
+    return {"ok": True}
+
+
 # ─── Pydantic Models ─────────────────────────────────────────
 class InspectionSubmission(BaseModel):
     """Full inspection data from the Zustand store + base64 images."""
