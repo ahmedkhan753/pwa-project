@@ -409,6 +409,50 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
         } catch (err: any) {
             const msg = err?.message ?? String(err);
             dbg(`ZXing scanFile error: ${msg}`);
+            // Both JS decoders failed — try server-side pyzbar (handles compressed/rotated images)
+            dbg("Trying server-side pyzbar decode…");
+            try {
+                const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const form = new FormData();
+                form.append("file", file, file.name);
+                const res = await fetch(`${BASE_URL}/decode-barcode`, { method: "POST", body: form });
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.found && json.raw_bytes_b64) {
+                        dbg(`Server pyzbar OK: type=${json.type} bytes=${json.raw_bytes_b64.length}`);
+                        // Decode base64 → Uint8Array and pass directly to NRV2E decoder
+                        const binaryStr = atob(json.raw_bytes_b64);
+                        const rawBytes = new Uint8Array(binaryStr.length);
+                        for (let i = 0; i < binaryStr.length; i++) rawBytes[i] = binaryStr.charCodeAt(i);
+                        // Try Aztec NRV2E decode first, then fall back to string
+                        let decodedStr = json.raw_string ?? "";
+                        try {
+                            const aztecData = decodeRegistrationBytes(rawBytes);
+                            if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
+                                dbg(`Server Aztec OK — VIN:${aztecData.vin ?? "?"} make:${aztecData.make ?? "?"}`);
+                                setFileScanning(false);
+                                // Apply data directly without going through handleSuccess string path
+                                setDecoded(aztecData);
+                                setStatus("success");
+                                setMessage("Dane odczytane pomyślnie!");
+                                try { await scannerRef.current?.stop(); } catch { /* ok */ }
+                                setTimeout(() => { onData(aztecData); onClose(); }, 6000);
+                                return;
+                            }
+                        } catch { /* not Aztec NRV2E — use raw_string path */ }
+                        // Fall back to handleSuccess with the raw string
+                        setFileScanning(false);
+                        doneRef.current = false;
+                        handleSuccess(decodedStr);
+                        return;
+                    }
+                    dbg("Server pyzbar: no barcode found in image");
+                } else {
+                    dbg(`Server pyzbar HTTP error: ${res.status}`);
+                }
+            } catch (serverErr: any) {
+                dbg(`Server pyzbar error: ${serverErr?.message ?? serverErr}`);
+            }
             setFileScanning(false);
             setStatus("error");
             setMessage(`Nie udało się odczytać kodu z obrazu. Spróbuj wyraźniejsze zdjęcie.`);
@@ -417,7 +461,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 setMessage("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
             }, 3000);
         }
-    }, [dbg, handleSuccess]);
+    }, [dbg, handleSuccess, onData, onClose]);
 
     /* ── mount / unmount scanner ── */
     useEffect(() => {

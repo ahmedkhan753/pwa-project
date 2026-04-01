@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", ".*error reading bcrypt version.*")
 warnings.filterwarnings("ignore", ".*trapped error reading bcrypt version.*")
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -305,6 +305,50 @@ async def debug_qr(payload: QRDebugPayload):
         f"[QR-DBG] raw_preview={payload.raw_preview!r}"
     )
     return {"ok": True}
+
+
+# ─── Server-side barcode decode (pyzbar fallback) ─────────────
+import base64 as _base64
+import io as _io
+
+@app.post("/decode-barcode")
+async def decode_barcode_server(file: UploadFile):
+    """
+    Decode a barcode/QR/Aztec from an uploaded image using pyzbar (libzbar).
+    Returns raw bytes as base64 so the frontend NRV2E decoder can use them directly,
+    bypassing all JS string-encoding issues.
+    """
+    try:
+        from PIL import Image
+        from pyzbar.pyzbar import decode as pyzbar_decode
+    except ImportError:
+        raise HTTPException(status_code=501, detail="pyzbar not installed")
+
+    content = await file.read()
+    try:
+        img = Image.open(_io.BytesIO(content))
+        img = img.convert("RGB")  # ensure consistent mode
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot open image: {e}")
+
+    codes = pyzbar_decode(img)
+    if not codes:
+        _qr_dbg_log.info(f"[PYZBAR] No barcode found in {file.filename} ({len(content)//1024} KB)")
+        return {"found": False}
+
+    code = codes[0]
+    raw_bytes = code.data
+    raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
+    _qr_dbg_log.info(
+        f"[PYZBAR] Found {code.type} in {file.filename}: "
+        f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
+    )
+    return {
+        "found": True,
+        "type": code.type,           # "AZTEC", "QRCODE", "CODE128", etc.
+        "raw_bytes_b64": raw_b64,    # base64-encoded raw bytes — use directly in NRV2E decoder
+        "raw_string": raw_bytes.decode("latin-1"),  # best-effort text fallback
+    }
 
 
 # ─── Pydantic Models ─────────────────────────────────────────
