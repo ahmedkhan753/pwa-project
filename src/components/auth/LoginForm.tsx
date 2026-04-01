@@ -84,7 +84,7 @@ export const LoginForm: React.FC = () => {
                         <Logo variant="full" size="lg" />
                     </div>
                     <p className="text-muted text-[10px] font-black uppercase tracking-[0.3em] text-center opacity-80">
-                        Vehicle Inspection System
+                        System Inspekcji Pojazdów
                     </p>
                 </div>
 
