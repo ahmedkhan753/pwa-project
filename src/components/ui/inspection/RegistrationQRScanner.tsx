@@ -321,20 +321,15 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     throw new Error("Scanner container not found in DOM");
                 }
 
-                // useBarCodeDetectorIfSupported: false  ← CRITICAL
-                // Chrome/Android's native BarcodeDetector API silently fails on many QR
-                // codes. Forcing ZXing (the JS fallback) fixes detection reliability.
-                sc = new Html5Qrcode(idRef.current, {
-                    verbose: false,
-                    useBarCodeDetectorIfSupported: false,
-                });
+                // Default config — BarcodeDetector (Chrome/Android) or ZXing fallback.
+                // Do NOT disable BarcodeDetector: it is what actually detects the code.
+                // The previous bug was in parsing (always tried Aztec), not detection.
+                sc = new Html5Qrcode(idRef.current, { verbose: false });
                 scannerRef.current = sc;
 
                 await sc.start(
                     { facingMode: "environment" },
-                    // No qrbox — scan the entire camera frame, not just a center box.
-                    // No aspectRatio — forcing 1:1 breaks autofocus on many phones.
-                    { fps: 10 },
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
                     handleSuccess,
                     () => { setAttempts(n => n + 1); },
                 );
