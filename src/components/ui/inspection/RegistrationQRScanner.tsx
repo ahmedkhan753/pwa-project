@@ -228,18 +228,14 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     const [decoded, setDecoded] = useState<DecodedVehicleData | null>(null);
     const [showManual, setShowManual] = useState(false);
     const [manualText, setManualText] = useState("");
-    const [attempts, setAttempts] = useState(0);
     const [fileScanning, setFileScanning] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [debugLines, setDebugLines] = useState<string[]>([]);
-    const [lastFailReason, setLastFailReason] = useState("");
     const scannerRef = useRef<any>(null);
     const idRef = useRef(`qr-reader-${Date.now()}`);
     const doneRef = useRef(false);
 
     const dbg = useCallback((line: string) => {
         console.log("[QR-DBG]", line);
-        setDebugLines(prev => [...prev.slice(-6), line]);
     }, []);
 
     /* ── scan callback ── */
@@ -339,8 +335,8 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             // stop camera
             try { await scannerRef.current?.stop(); } catch { /* ok */ }
 
-            // auto-apply after 6 s preview (enough time to read debug panel)
-            setTimeout(() => { onData(data!); onClose(); }, 6000);
+            // auto-apply after short preview
+            setTimeout(() => { onData(data!); onClose(); }, 2500);
         },
         [onData, onClose, dbg],
     );
@@ -511,18 +507,12 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                         // With a square frame the box fills ~85% of both dimensions.
                         aspectRatio: 1,
                         qrbox: (w: number, h: number) => {
-                            // Both w and h are now ~equal (square video).
-                            // Use 85% of the smaller just as a safe guard.
-                            const side = Math.floor(Math.min(w, h) * 0.85);
-                            dbg(`qrbox: viewfinder ${w}×${h} → box ${side}×${side}`);
+                            const side = Math.floor(Math.min(w, h) * 0.9);
                             return { width: side, height: side };
                         },
                     },
                     handleSuccess,
-                    (errMsg: string) => {
-                        setAttempts(n => n + 1);
-                        setLastFailReason(errMsg);
-                    },
+                    () => { /* per-frame scan miss — normal, ignore */ },
                 );
                 started = true;
                 dbg("start() OK — scanning");
@@ -592,12 +582,12 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
     /* ── UI ── */
     return (
-        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
             {/* header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-md border-b border-white/5">
+            <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-md border-b border-white/10 flex-shrink-0">
                 <div className="flex items-center gap-2">
                     <QrCode size={20} className="text-primary" />
-                    <span className="text-white font-black text-xs uppercase tracking-tight">
+                    <span className="text-white font-black text-sm uppercase tracking-tight">
                         Skan Dowodu Rejestracyjnego
                     </span>
                 </div>
@@ -610,22 +600,24 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 </button>
             </div>
 
-            {/* camera area */}
-            <div className="flex-1 flex flex-col items-center justify-center px-4 overflow-auto">
+            {/* camera — takes all available vertical space */}
+            <div className="flex-1 flex flex-col items-center justify-center min-h-0">
                 <div
                     id={idRef.current}
-                    className="w-full rounded-2xl overflow-hidden border-2 border-primary/40"
+                    className="w-full h-full"
+                    style={{ maxHeight: "calc(100vh - 180px)" }}
                 />
+            </div>
 
+            {/* bottom bar */}
+            <div className="flex-shrink-0 px-4 pb-6 pt-3 space-y-3 bg-black/80">
                 {/* status pill */}
-                <div
-                    className={cn(
-                        "mt-5 flex items-center gap-2.5 px-5 py-3 rounded-2xl text-sm font-bold transition-colors",
-                        status === "scanning" && "bg-white/10 text-white",
-                        status === "success" && "bg-emerald-500/20 text-emerald-400",
-                        status === "error" && "bg-red-500/20 text-red-400",
-                    )}
-                >
+                <div className={cn(
+                    "flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-2xl text-sm font-bold transition-colors",
+                    status === "scanning" && "bg-white/10 text-white",
+                    status === "success" && "bg-emerald-500/20 text-emerald-400",
+                    status === "error" && "bg-red-500/20 text-red-400",
+                )}>
                     {status === "scanning" && <Loader2 size={16} className="animate-spin" />}
                     {status === "success" && <CheckCircle2 size={16} />}
                     {status === "error" && <AlertCircle size={16} />}
@@ -634,93 +626,49 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
                 {/* decoded preview */}
                 {decoded && status === "success" && (
-                    <div className="mt-4 w-full max-w-[350px] bg-white/5 rounded-2xl p-4 space-y-2 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="w-full bg-white/5 rounded-2xl px-4 py-3 space-y-1.5 animate-in fade-in slide-in-from-bottom-4">
                         {decoded.vin && <Row label="VIN" value={decoded.vin} />}
                         {decoded.registrationPlates && <Row label="Nr rej." value={decoded.registrationPlates} />}
                         {decoded.make && <Row label="Marka" value={decoded.make} />}
                         {decoded.model && <Row label="Model" value={decoded.model} />}
                         {decoded.year && <Row label="Rok" value={decoded.year} />}
-                        {decoded.fuelType && <Row label="Paliwo" value={decoded.fuelType} />}
-                        {decoded.rawText && (
-                            <div className="pt-1 border-t border-white/10">
-                                <span className="text-[10px] font-black text-white/50 uppercase block mb-1">Treść kodu QR</span>
-                                <span className="text-xs font-mono text-white/80 break-all">{decoded.rawText}</span>
-                            </div>
-                        )}
                     </div>
                 )}
 
                 {status === "scanning" && (
-                    <p className="mt-3 text-[10px] text-white/40 font-bold uppercase tracking-widest text-center max-w-[280px]">
-                        Kod Aztec (odwrót dowodu rej.) lub zwykły kod QR z numerem VIN
-                    </p>
-                )}
-
-                {/* ── debug panel ── */}
-                <div className="mt-3 w-full bg-black/60 border border-white/10 rounded-xl p-3 space-y-1">
-                    {debugLines.map((l, i) => (
-                        <p key={i} className="text-[10px] font-mono text-white/60 break-all">{l}</p>
-                    ))}
-                    {attempts > 0 && (
-                        <p className="text-[10px] font-mono text-white/40">
-                            Frames: {attempts}
-                        </p>
-                    )}
-                    {lastFailReason && (
-                        <p className="text-[10px] font-mono text-red-400/80 break-all">
-                            Last error: {lastFailReason}
-                        </p>
-                    )}
-                    {debugLines.length === 0 && attempts === 0 && (
-                        <p className="text-[10px] font-mono text-white/30 italic">Initializing…</p>
-                    )}
-                </div>
-
-                {/* ── image upload — primary fallback for screen-displayed codes ── */}
-                {status === "scanning" && (
-                    <div className="mt-4 w-full">
-                        <p className="text-[10px] text-white/30 text-center mb-2 uppercase tracking-widest">
-                            Kod wyświetlony na ekranie? Wyślij zdjęcie na telefon i wybierz:
-                        </p>
+                    <div className="flex items-center gap-2">
+                        {/* image upload */}
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={fileScanning}
-                            className="w-full flex items-center justify-center gap-2 py-3 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl text-sm font-bold text-white active:scale-95 transition-all disabled:opacity-50"
+                            className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl text-xs font-bold text-white active:scale-95 transition-all disabled:opacity-50 flex-1"
                         >
                             {fileScanning
-                                ? <><Loader2 size={16} className="animate-spin" /> Odczytuję obraz…</>
-                                : <><ImagePlus size={16} /> Wybierz zdjęcie kodu QR / Aztec</>
+                                ? <><Loader2 size={14} className="animate-spin" /> Odczytuję…</>
+                                : <><ImagePlus size={14} /> Wybierz zdjęcie</>
                             }
                         </button>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleFileSelect}
-                        />
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+
+                        {/* manual VIN */}
+                        <button
+                            onClick={() => setShowManual(!showManual)}
+                            className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl text-xs font-bold text-white active:scale-95 transition-all flex-1"
+                        >
+                            <Keyboard size={14} />
+                            Wpisz VIN
+                        </button>
                     </div>
                 )}
 
-                {/* manual fallback */}
-                {status === "scanning" && !showManual && (
-                    <button
-                        onClick={() => setShowManual(true)}
-                        className="mt-3 flex items-center gap-2 text-xs text-white/30 hover:text-white/60 transition-colors"
-                    >
-                        <Keyboard size={14} />
-                        Wpisz VIN ręcznie
-                    </button>
-                )}
-
                 {showManual && status === "scanning" && (
-                    <div className="mt-4 w-full flex gap-2">
+                    <div className="flex gap-2">
                         <input
                             type="text"
                             value={manualText}
                             onChange={e => setManualText(e.target.value.toUpperCase())}
                             onKeyDown={e => e.key === "Enter" && handleManualSubmit()}
-                            placeholder="Wklej lub wpisz VIN / treść kodu QR"
+                            placeholder="Wpisz lub wklej VIN (17 znaków)"
                             className="flex-1 bg-white/10 text-white text-xs font-mono px-3 py-2.5 rounded-xl border border-white/20 placeholder:text-white/30 focus:outline-none focus:border-primary/60"
                             autoFocus
                         />
