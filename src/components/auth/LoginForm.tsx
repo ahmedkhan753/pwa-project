@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Phone, Lock, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Logo } from '@/components/ui/Logo';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -78,27 +79,9 @@ export const LoginForm: React.FC = () => {
             <div className="w-full max-w-md relative">
                 {/* Logo Section */}
                 <div className="flex flex-col items-center space-y-4 mb-8 overflow-visible">
-                    <div style={{
-                        width: '220px',
-                        height: 'auto',
-                        overflow: 'visible',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: '#ffffff',
-                        borderRadius: '16px',
-                        padding: '8px 12px',
-                    }}>
-                        <img
-                            src="/images/logo.png"
-                            alt="RZeczoznawcy"
-                            style={{
-                                width: '100%',
-                                height: 'auto',
-                                objectFit: 'contain',
-                                display: 'block'
-                            }}
-                        />
+                    {/* SVG logo inherits currentColor from text-foreground — adapts to dark/light */}
+                    <div className="text-foreground">
+                        <Logo variant="full" size="lg" />
                     </div>
                     <p className="text-muted text-[10px] font-black uppercase tracking-[0.3em] text-center opacity-80">
                         Vehicle Inspection System

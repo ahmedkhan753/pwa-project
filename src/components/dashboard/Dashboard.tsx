@@ -18,6 +18,7 @@ import { SkeletonCard } from './SkeletonCard';
 import { CalendarView } from './CalendarView';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { registerPushNotifications } from "@/lib/push-notifications";
+import { Logo } from '@/components/ui/Logo';
 
 const FINISHED = ['completed', 'in_valuation', 'closed', 'lost'];
 
@@ -123,13 +124,14 @@ export const Dashboard: React.FC = () => {
             <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-2xl border-b border-border transition-colors duration-300">
                 <div className="flex items-center justify-between max-w-2xl mx-auto w-full px-6 py-4">
                     <div className="flex items-center gap-4">
-                        <div style={{
+                        {/* Logo icon — SVG currentColor inherits text-foreground so Z adapts to theme */}
+                        <div className="text-foreground" style={{
                             width: '44px', height: '44px', borderRadius: '10px',
-                            overflow: 'visible', flexShrink: 0, display: 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                            backgroundColor: '#ffffff', padding: '2px'
+                            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)',
+                            overflow: 'hidden',
                         }}>
-                            <img src="/images/logo.png" alt="R" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                            <Logo variant="icon" size="sm" />
                         </div>
                         <div>
                             <h2 className="font-black text-lg tracking-tight leading-none mb-0.5">

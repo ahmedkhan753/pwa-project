@@ -1,70 +1,67 @@
 'use client';
 
 import React from 'react';
-import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 interface LogoProps {
     variant?: 'full' | 'icon';
     size?: 'sm' | 'md' | 'lg';
     className?: string;
-    onLightBackground?: boolean;
 }
 
+// Red used for "R" and "RZECZOZNAWCY" — always visible on any bg
+const RED = '#e53e3e';
+// Heavy condensed font stack — Impact is the closest widely-available match
+const FONT = "Impact, 'Arial Black', 'Helvetica Neue', sans-serif";
+
+/**
+ * Inline SVG logo — uses `currentColor` for Z / "ZAUFAJ" text so it
+ * adapts automatically to any background via CSS `color` on the parent:
+ *   dark bg  → set color:white  (text-white / style={{ color:'white' }})
+ *   light bg → set color:#0f172a (text-foreground)
+ * "R" and "RZECZOZNAWCY" are always red regardless.
+ */
 export const Logo: React.FC<LogoProps> = ({
     variant = 'full',
     size = 'md',
     className,
-    onLightBackground = false
 }) => {
-    // Size guide based on requirements:
-    // sm: icon=24px height, full=80px width
-    // md: icon=32px height, full=140px width
-    // lg: icon=48px height, full=220px width
-    
-    const dimensions = {
-        sm: variant === 'icon' ? { height: 24, width: 24 } : { width: 80, height: 32 },
-        md: variant === 'icon' ? { height: 32, width: 32 } : { width: 140, height: 56 },
-        lg: variant === 'icon' ? { height: 48, width: 48 } : { width: 220, height: 88 },
-    }[size];
-
-    // The logo PNG is black + red on white — always render on a white background
-    // so the black "Z" and text remain visible on any page background (dark or light).
-    return (
-        <div
-            className={cn(
-                "relative flex items-center justify-center mx-auto overflow-visible",
-                className
-            )}
-            style={{
-                height: variant === 'icon' ? dimensions.height : 'auto',
-                width: variant === 'icon' ? dimensions.width : dimensions.width
-            }}
-        >
-            <div
-                className="relative w-full h-full overflow-visible rounded-xl"
-                style={{
-                    aspectRatio: variant === 'icon' ? '1/1' : '2.5/1',
-                    backgroundColor: '#ffffff',
-                    padding: variant === 'icon' ? '2px' : '4px',
-                }}
+    if (variant === 'icon') {
+        const px = { sm: 30, md: 38, lg: 54 }[size];
+        return (
+            <svg
+                width={px}
+                height={px}
+                viewBox="0 0 115 100"
+                xmlns="http://www.w3.org/2000/svg"
+                className={cn('shrink-0', className)}
+                aria-label="Zaufaj Rzeczoznawcy"
             >
-                <Image
-                    src="/images/logo.png"
-                    alt="RZeczoznawcy Logo"
-                    width={variant === 'icon' ? 40 : 140}
-                    height={variant === 'icon' ? 40 : 56}
-                    className={cn(
-                        "object-contain w-full h-full",
-                        variant === 'icon' ? "object-left" : "object-center"
-                    )}
-                    style={variant === 'icon' ? {
-                        objectPosition: '0% 50%',
-                        transform: 'scale(1.8)',
-                        transformOrigin: 'left center'
-                    } : {}}
-                />
-            </div>
-        </div>
+                <text x="3" y="88" fontFamily={FONT} fontSize="85" fill="currentColor">Z</text>
+                <text x="57" y="88" fontFamily={FONT} fontSize="85" fill={RED}>R</text>
+            </svg>
+        );
+    }
+
+    const w = { sm: 120, md: 180, lg: 260 }[size];
+    const h = { sm: 38, md: 56, lg: 82 }[size];
+
+    return (
+        <svg
+            width={w}
+            height={h}
+            viewBox="0 0 320 100"
+            xmlns="http://www.w3.org/2000/svg"
+            className={cn('shrink-0', className)}
+            aria-label="Zaufaj Rzeczoznawcy"
+        >
+            {/* ZR monogram */}
+            <text x="5"  y="90" fontFamily={FONT} fontSize="90" fill="currentColor">Z</text>
+            <text x="62" y="90" fontFamily={FONT} fontSize="90" fill={RED}>R</text>
+
+            {/* Brand name — two lines right of the monogram */}
+            <text x="132" y="44" fontFamily={FONT} fontSize="36" fill="currentColor">ZAUFAJ</text>
+            <text x="132" y="92" fontFamily={FONT} fontSize="24" fill={RED}>RZECZOZNAWCY</text>
+        </svg>
     );
 };
