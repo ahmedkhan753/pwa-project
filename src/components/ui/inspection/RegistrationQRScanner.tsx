@@ -228,6 +228,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     const [decoded, setDecoded] = useState<DecodedVehicleData | null>(null);
     const [showManual, setShowManual] = useState(false);
     const [manualText, setManualText] = useState("");
+    const [attempts, setAttempts] = useState(0);
     const scannerRef = useRef<any>(null);
     const idRef = useRef(`qr-reader-${Date.now()}`);
     const doneRef = useRef(false);
@@ -320,17 +321,22 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     throw new Error("Scanner container not found in DOM");
                 }
 
-                // No formatsToSupport restriction — let the library detect everything.
-                // Restricting to AZTEC/QR_CODE/DATA_MATRIX was silently preventing detection.
-                sc = new Html5Qrcode(idRef.current, { verbose: false });
+                // useBarCodeDetectorIfSupported: false  ← CRITICAL
+                // Chrome/Android's native BarcodeDetector API silently fails on many QR
+                // codes. Forcing ZXing (the JS fallback) fixes detection reliability.
+                sc = new Html5Qrcode(idRef.current, {
+                    verbose: false,
+                    useBarCodeDetectorIfSupported: false,
+                });
                 scannerRef.current = sc;
 
                 await sc.start(
                     { facingMode: "environment" },
-                    // No aspectRatio — forcing 1:1 breaks focus on many mobile cameras
-                    { fps: 15, qrbox: { width: 250, height: 250 } },
+                    // No qrbox — scan the entire camera frame, not just a center box.
+                    // No aspectRatio — forcing 1:1 breaks autofocus on many phones.
+                    { fps: 10 },
                     handleSuccess,
-                    () => {},          // continuous scan-failure is expected
+                    () => { setAttempts(n => n + 1); },
                 );
                 started = true;
             } catch (err: any) {
@@ -422,8 +428,15 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 )}
 
                 {status === "scanning" && (
-                    <p className="mt-4 text-[10px] text-white/40 font-bold uppercase tracking-widest text-center max-w-[280px]">
+                    <p className="mt-3 text-[10px] text-white/40 font-bold uppercase tracking-widest text-center max-w-[280px]">
                         Kod Aztec (odwrót dowodu rej.) lub zwykły kod QR z numerem VIN
+                    </p>
+                )}
+
+                {/* Scan attempt counter — confirms camera is actively scanning */}
+                {status === "scanning" && attempts > 0 && (
+                    <p className="mt-1 text-[10px] text-white/25 text-center">
+                        Próby odczytu: {attempts}
                     </p>
                 )}
 
