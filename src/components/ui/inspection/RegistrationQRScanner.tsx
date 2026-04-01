@@ -344,12 +344,17 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     { facingMode: "environment" },
                     {
                         fps: 10,
+                        // aspectRatio:1 forces a SQUARE video frame.
+                        // Without it the camera is 16:9 landscape (~390×219 px).
+                        // Any square qrbox in a 390×219 frame looks narrow — the
+                        // box is constrained by height (219), not width (390).
+                        // With a square frame the box fills ~85% of both dimensions.
+                        aspectRatio: 1,
                         qrbox: (w: number, h: number) => {
-                            // Base the square on the viewfinder WIDTH (not the smaller
-                            // dimension). On landscape camera feeds h < w, so min(w,h)
-                            // produced a box constrained by height — appearing narrow.
-                            // Cap at (h - 16) so the square never overflows vertically.
-                            const side = Math.floor(Math.min(w * 0.85, h - 16));
+                            // Both w and h are now ~equal (square video).
+                            // Use 85% of the smaller just as a safe guard.
+                            const side = Math.floor(Math.min(w, h) * 0.85);
+                            dbg(`qrbox: viewfinder ${w}×${h} → box ${side}×${side}`);
                             return { width: side, height: side };
                         },
                     },
@@ -458,14 +463,18 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 )}
 
                 {/* ── debug panel ── */}
-                <div className="mt-3 w-full max-w-[350px] bg-black/60 border border-white/10 rounded-xl p-3 space-y-1">
+                <div className="mt-3 w-full bg-black/60 border border-white/10 rounded-xl p-3 space-y-1">
                     {debugLines.map((l, i) => (
                         <p key={i} className="text-[10px] font-mono text-white/60 break-all">{l}</p>
                     ))}
                     {attempts > 0 && (
                         <p className="text-[10px] font-mono text-white/40">
-                            Frames scanned: {attempts}
-                            {lastFailReason ? ` | last fail: ${lastFailReason.slice(0, 40)}` : ""}
+                            Frames: {attempts}
+                        </p>
+                    )}
+                    {lastFailReason && (
+                        <p className="text-[10px] font-mono text-red-400/80 break-all">
+                            Last error: {lastFailReason}
                         </p>
                     )}
                     {debugLines.length === 0 && attempts === 0 && (
@@ -485,7 +494,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 )}
 
                 {showManual && status === "scanning" && (
-                    <div className="mt-4 w-full max-w-[350px] flex gap-2">
+                    <div className="mt-4 w-full flex gap-2">
                         <input
                             type="text"
                             value={manualText}
