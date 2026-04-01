@@ -90,6 +90,7 @@ export function VehicleDataStep() {
     };
 
     const handleQRData = (data: DecodedVehicleData) => {
+        console.log("[QR→Form] handleQRData received:", JSON.stringify(data));
         // Structured fields from Aztec / plain-text QR
         if (data.vin) updateField('vehicleData', 'vin', data.vin);
         if (data.registrationPlates) updateField('vehicleData', 'registrationPlates', data.registrationPlates);

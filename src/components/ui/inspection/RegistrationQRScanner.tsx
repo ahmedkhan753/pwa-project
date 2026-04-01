@@ -264,10 +264,13 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 const aztecData = decodeRegistrationBytes(bytes);
                 if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
                     data = aztecData;
+                    dbg(`Path1 Aztec OK — VIN:${aztecData.vin ?? "?"} make:${aztecData.make ?? "?"}`);
                     console.log("[QR] Decoded as Aztec NRV2E", data);
+                } else {
+                    dbg("Path1 Aztec — decoded but no VIN/make/plates");
                 }
-            } catch {
-                // not an Aztec registration code — try plain text
+            } catch (e: any) {
+                dbg(`Path1 Aztec failed: ${e?.message ?? e}`);
             }
 
             // Path 2: Plain text QR (VIN, JSON, etc.)
@@ -275,12 +278,16 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 const plainData = parsePlainTextQR(decodedText);
                 if (plainData.vin || plainData.make || plainData.registrationPlates) {
                     data = plainData;
+                    dbg(`Path2 plain OK — VIN:${plainData.vin ?? "?"} plates:${plainData.registrationPlates ?? "?"}`);
                     console.log("[QR] Decoded as plain text", data);
+                } else {
+                    dbg(`Path2 plain — no VIN/make/plates in: "${decodedText.slice(0, 80)}"`);
                 }
             }
 
             // Path 3: Unknown format — accept raw text so user sees it was scanned
             if (!data) {
+                dbg(`Path3 rawText — "${decodedText.slice(0, 80)}"`);
                 console.log("[QR] No structured data — passing raw text");
                 data = { rawText: decodedText.slice(0, 200) };
             }
@@ -292,8 +299,8 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             // stop camera
             try { await scannerRef.current?.stop(); } catch { /* ok */ }
 
-            // auto-apply after short preview
-            setTimeout(() => { onData(data!); onClose(); }, 2500);
+            // auto-apply after 6 s preview (enough time to read debug panel)
+            setTimeout(() => { onData(data!); onClose(); }, 6000);
         },
         [onData, onClose, dbg],
     );
