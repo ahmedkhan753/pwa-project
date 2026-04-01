@@ -314,6 +314,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
         setFileScanning(true);
         dbg(`File: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)} KB)`);
+        dbg(`doneRef was: ${doneRef.current} — resetting for file decode`);
 
         // Path 1 — native BarcodeDetector on the image (most reliable)
         const BDClass = (window as any).BarcodeDetector as any;
@@ -324,9 +325,12 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 const codes = await bd.detect(bitmap);
                 bitmap.close();
                 if (codes.length > 0 && codes[0].rawValue) {
-                    dbg(`File BarcodeDetector: "${codes[0].rawValue.slice(0, 60)}"`);
+                    const raw = codes[0].rawValue;
+                    dbg(`File BarcodeDetector OK: len=${raw.length} "${raw.slice(0, 60)}"`);
+                    console.log("[QR-FILE] BarcodeDetector decoded:", JSON.stringify(raw));
                     setFileScanning(false);
-                    handleSuccess(codes[0].rawValue);
+                    doneRef.current = false; // reset so handleSuccess isn't blocked
+                    handleSuccess(raw);
                     return;
                 }
                 dbg("File BarcodeDetector: no code found — trying ZXing");
@@ -347,8 +351,10 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             try {
                 const tmpScanner = new Html5Qrcode(tmpId, { verbose: false });
                 const result = await tmpScanner.scanFile(file, false);
-                dbg(`ZXing scanFile: "${result.slice(0, 60)}"`);
+                dbg(`ZXing scanFile OK: len=${result.length} "${result.slice(0, 60)}"`);
+                console.log("[QR-FILE] ZXing decoded:", JSON.stringify(result));
                 setFileScanning(false);
+                doneRef.current = false; // reset so handleSuccess isn't blocked
                 handleSuccess(result);
             } finally {
                 document.body.removeChild(tmpDiv);
