@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, QrCode, Loader2, CheckCircle2, AlertCircle, Keyboard } from "lucide-react";
+import { X, QrCode, Loader2, CheckCircle2, AlertCircle, Keyboard, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -229,6 +229,8 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     const [showManual, setShowManual] = useState(false);
     const [manualText, setManualText] = useState("");
     const [attempts, setAttempts] = useState(0);
+    const [fileScanning, setFileScanning] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [debugLines, setDebugLines] = useState<string[]>([]);
     const [lastFailReason, setLastFailReason] = useState("");
     const scannerRef = useRef<any>(null);
@@ -302,6 +304,67 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
         if (!text) return;
         handleSuccess(text);
     }, [manualText, handleSuccess]);
+
+    /* ── scan from image file ── */
+    const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        // reset so the same file can be re-selected if needed
+        e.target.value = "";
+
+        setFileScanning(true);
+        dbg(`File: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)} KB)`);
+
+        // Path 1 — native BarcodeDetector on the image (most reliable)
+        const BDClass = (window as any).BarcodeDetector as any;
+        if (BDClass) {
+            try {
+                const bd = new BDClass({ formats: ["qr_code", "aztec", "data_matrix", "code_128", "code_39", "ean_13"] });
+                const bitmap = await createImageBitmap(file);
+                const codes = await bd.detect(bitmap);
+                bitmap.close();
+                if (codes.length > 0 && codes[0].rawValue) {
+                    dbg(`File BarcodeDetector: "${codes[0].rawValue.slice(0, 60)}"`);
+                    setFileScanning(false);
+                    handleSuccess(codes[0].rawValue);
+                    return;
+                }
+                dbg("File BarcodeDetector: no code found — trying ZXing");
+            } catch (err: any) {
+                dbg(`File BarcodeDetector error: ${err.message ?? err}`);
+            }
+        }
+
+        // Path 2 — ZXing via html5-qrcode scanFile
+        try {
+            dbg("ZXing scanFile…");
+            const { Html5Qrcode } = await import("html5-qrcode");
+            const tmpId = `qr-tmp-${Date.now()}`;
+            const tmpDiv = document.createElement("div");
+            tmpDiv.id = tmpId;
+            tmpDiv.style.display = "none";
+            document.body.appendChild(tmpDiv);
+            try {
+                const tmpScanner = new Html5Qrcode(tmpId, { verbose: false });
+                const result = await tmpScanner.scanFile(file, false);
+                dbg(`ZXing scanFile: "${result.slice(0, 60)}"`);
+                setFileScanning(false);
+                handleSuccess(result);
+            } finally {
+                document.body.removeChild(tmpDiv);
+            }
+        } catch (err: any) {
+            const msg = err?.message ?? String(err);
+            dbg(`ZXing scanFile error: ${msg}`);
+            setFileScanning(false);
+            setStatus("error");
+            setMessage(`Nie udało się odczytać kodu z obrazu. Spróbuj wyraźniejsze zdjęcie.`);
+            setTimeout(() => {
+                setStatus("scanning");
+                setMessage("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
+            }, 3000);
+        }
+    }, [dbg, handleSuccess]);
 
     /* ── mount / unmount scanner ── */
     useEffect(() => {
@@ -516,11 +579,37 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     )}
                 </div>
 
+                {/* ── image upload — primary fallback for screen-displayed codes ── */}
+                {status === "scanning" && (
+                    <div className="mt-4 w-full">
+                        <p className="text-[10px] text-white/30 text-center mb-2 uppercase tracking-widest">
+                            Kod wyświetlony na ekranie? Wyślij zdjęcie na telefon i wybierz:
+                        </p>
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={fileScanning}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl text-sm font-bold text-white active:scale-95 transition-all disabled:opacity-50"
+                        >
+                            {fileScanning
+                                ? <><Loader2 size={16} className="animate-spin" /> Odczytuję obraz…</>
+                                : <><ImagePlus size={16} /> Wybierz zdjęcie kodu QR / Aztec</>
+                            }
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleFileSelect}
+                        />
+                    </div>
+                )}
+
                 {/* manual fallback */}
                 {status === "scanning" && !showManual && (
                     <button
                         onClick={() => setShowManual(true)}
-                        className="mt-5 flex items-center gap-2 text-xs text-white/40 hover:text-white/70 transition-colors"
+                        className="mt-3 flex items-center gap-2 text-xs text-white/30 hover:text-white/60 transition-colors"
                     >
                         <Keyboard size={14} />
                         Wpisz VIN ręcznie
