@@ -256,21 +256,40 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             let data: DecodedVehicleData | null = null;
 
             // Path 1: Polish registration Aztec (NRV2E-compressed binary)
-            try {
-                const bytes = new Uint8Array(decodedText.length);
-                for (let i = 0; i < decodedText.length; i++) {
-                    bytes[i] = decodedText.charCodeAt(i) & 0xff;
+            // BarcodeDetector may encode binary bytes as Latin-1 OR UTF-8 when building the DOMString.
+            // Try both encodings so we recover the original Aztec bytes regardless.
+            const byteCandidates: [string, Uint8Array][] = [
+                [
+                    "latin1",
+                    // Latin-1: each char code IS the byte value (charCode 0-255)
+                    (() => {
+                        const b = new Uint8Array(decodedText.length);
+                        for (let i = 0; i < decodedText.length; i++) b[i] = decodedText.charCodeAt(i) & 0xff;
+                        return b;
+                    })(),
+                ],
+                [
+                    "utf8",
+                    // UTF-8: re-encode the DOMString back to UTF-8 bytes — recovers original bytes
+                    // if the browser converted the Aztec binary via UTF-8 when building rawValue.
+                    new TextEncoder().encode(decodedText),
+                ],
+            ];
+
+            for (const [enc, bytes] of byteCandidates) {
+                if (data) break;
+                try {
+                    const aztecData = decodeRegistrationBytes(bytes);
+                    if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
+                        data = aztecData;
+                        dbg(`Path1 Aztec OK (${enc}) — VIN:${aztecData.vin ?? "?"} make:${aztecData.make ?? "?"}`);
+                        console.log(`[QR] Decoded as Aztec NRV2E (${enc})`, data);
+                    } else {
+                        dbg(`Path1 Aztec (${enc}) — decoded but no VIN/make/plates`);
+                    }
+                } catch (e: any) {
+                    dbg(`Path1 Aztec (${enc}) failed: ${e?.message ?? e}`);
                 }
-                const aztecData = decodeRegistrationBytes(bytes);
-                if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
-                    data = aztecData;
-                    dbg(`Path1 Aztec OK — VIN:${aztecData.vin ?? "?"} make:${aztecData.make ?? "?"}`);
-                    console.log("[QR] Decoded as Aztec NRV2E", data);
-                } else {
-                    dbg("Path1 Aztec — decoded but no VIN/make/plates");
-                }
-            } catch (e: any) {
-                dbg(`Path1 Aztec failed: ${e?.message ?? e}`);
             }
 
             // Path 2: Plain text QR (VIN, JSON, etc.)

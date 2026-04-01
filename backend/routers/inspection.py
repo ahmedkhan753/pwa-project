@@ -544,6 +544,11 @@ async def save_step(
         if step_number == 1 and isinstance(step_fields, dict):
             vin_value = step_fields.get('vin', 'NOT_FOUND')
             logger.info(f"🔍 VIN received: '{vin_value}' type={type(vin_value).__name__}")
+            make_val = step_fields.get('make', '')
+            plates_val = step_fields.get('registrationPlates', '')
+            reg_cert = step_fields.get('registrationCertificate', '')
+            logger.info(f"🔍 make='{make_val}' plates='{plates_val}' regCert='{str(reg_cert)[:80]}'")
+
             try:
                 import os
                 overrides_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mapping_overrides.json")
