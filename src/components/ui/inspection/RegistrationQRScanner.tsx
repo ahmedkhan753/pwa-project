@@ -342,7 +342,13 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 dbg("Calling start()…");
                 await sc.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    {
+                        fps: 10,
+                        qrbox: (w: number, h: number) => {
+                            const side = Math.floor(Math.min(w, h) * 0.8);
+                            return { width: side, height: side };
+                        },
+                    },
                     handleSuccess,
                     (errMsg: string) => {
                         setAttempts(n => n + 1);
