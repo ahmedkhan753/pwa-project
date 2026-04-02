@@ -8,43 +8,48 @@ interface LogoProps {
     variant?: 'full' | 'icon';
     size?: 'sm' | 'md' | 'lg';
     className?: string;
+    /**
+     * Set to true when the logo sits on an always-dark background
+     * (e.g. splash screen). Applies the invert filter unconditionally
+     * instead of only in dark-mode.
+     */
+    darkBg?: boolean;
 }
 
 /**
- * Original brand logo (PNG) preserved exactly as designed.
- * The PNG is black + red on white, so we wrap it in a white
- * rounded container — this makes it visible on any background
- * (dark or light) without altering the brand mark at all.
+ * Original brand PNG, never modified.
+ * On dark backgrounds the CSS filter `invert(1) hue-rotate(180deg)`:
+ *   white bg  → black  (blends into dark surface, invisible)
+ *   black Z   → white  (fully visible)
+ *   red R     → red    (hue-rotate cancels the invert on reds)
+ * In light mode no filter is applied — the PNG shows exactly as designed.
  */
 export const Logo: React.FC<LogoProps> = ({
     variant = 'full',
     size = 'md',
     className,
+    darkBg = false,
 }) => {
-    const imgSizes = {
-        sm: variant === 'icon' ? { w: 28, h: 28 } : { w: 90,  h: 36  },
-        md: variant === 'icon' ? { w: 36, h: 36 } : { w: 150, h: 60  },
-        lg: variant === 'icon' ? { w: 52, h: 52 } : { w: 220, h: 88  },
+    const dims = {
+        sm: variant === 'icon' ? { w: 32,  h: 32  } : { w: 100, h: 40  },
+        md: variant === 'icon' ? { w: 40,  h: 40  } : { w: 150, h: 60  },
+        lg: variant === 'icon' ? { w: 52,  h: 52  } : { w: 220, h: 88  },
     }[size];
 
     return (
-        <div
-            className={cn('inline-flex items-center justify-center shrink-0', className)}
-            style={{
-                backgroundColor: '#ffffff',
-                borderRadius: variant === 'icon' ? '10px' : '14px',
-                padding: variant === 'icon' ? '4px' : '6px 10px',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
-            }}
-        >
-            <Image
-                src="/images/logo.png"
-                alt="Zaufaj Rzeczoznawcy"
-                width={imgSizes.w}
-                height={imgSizes.h}
-                style={{ objectFit: 'contain', display: 'block' }}
-                priority
-            />
-        </div>
+        <Image
+            src="/images/logo.png"
+            alt="Zaufaj Rzeczoznawcy"
+            width={dims.w}
+            height={dims.h}
+            priority
+            className={cn(
+                'object-contain block shrink-0',
+                // logo-img → filtered only inside .dark (theme-adaptive)
+                // logo-img-dark-bg → always filtered (splash / forced dark bg)
+                darkBg ? 'logo-img-dark-bg' : 'logo-img',
+                className,
+            )}
+        />
     );
 };

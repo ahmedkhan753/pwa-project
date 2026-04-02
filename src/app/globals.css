@@ -218,6 +218,17 @@ select:focus {
   animation: pulse-soft 2s ease-in-out infinite;
 }
 
+/* ─── Logo PNG — dark-mode & dark-background adaptation ──
+   invert(1) swaps black↔white, hue-rotate(180deg) brings red back.
+   Result: white bg → transparent-like black, black Z/text → white,
+   red R/RZECZOZNAWCY ≈ stays red. Original PNG unmodified.        */
+.dark .logo-img {
+  filter: invert(1) hue-rotate(180deg);
+}
+.logo-img-dark-bg {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 /* ─── High Contrast Outdoor Toggle ────────────────────── */
 .toggle-tak {
   background: var(--success);
