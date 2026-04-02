@@ -124,15 +124,7 @@ export const Dashboard: React.FC = () => {
             <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-2xl border-b border-border transition-colors duration-300">
                 <div className="flex items-center justify-between max-w-2xl mx-auto w-full px-6 py-4">
                     <div className="flex items-center gap-4">
-                        {/* Logo icon — SVG currentColor inherits text-foreground so Z adapts to theme */}
-                        <div className="text-foreground" style={{
-                            width: '44px', height: '44px', borderRadius: '10px',
-                            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)',
-                            overflow: 'hidden',
-                        }}>
-                            <Logo variant="icon" size="sm" />
-                        </div>
+                        <Logo variant="icon" size="sm" />
                         <div>
                             <h2 className="font-black text-lg tracking-tight leading-none mb-0.5">
                                 {auth.currentUserName || 'Rzeczoznawca'}

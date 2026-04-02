@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 interface LogoProps {
@@ -9,59 +10,41 @@ interface LogoProps {
     className?: string;
 }
 
-// Red used for "R" and "RZECZOZNAWCY" — always visible on any bg
-const RED = '#e53e3e';
-// Heavy condensed font stack — Impact is the closest widely-available match
-const FONT = "Impact, 'Arial Black', 'Helvetica Neue', sans-serif";
-
 /**
- * Inline SVG logo — uses `currentColor` for Z / "ZAUFAJ" text so it
- * adapts automatically to any background via CSS `color` on the parent:
- *   dark bg  → set color:white  (text-white / style={{ color:'white' }})
- *   light bg → set color:#0f172a (text-foreground)
- * "R" and "RZECZOZNAWCY" are always red regardless.
+ * Original brand logo (PNG) preserved exactly as designed.
+ * The PNG is black + red on white, so we wrap it in a white
+ * rounded container — this makes it visible on any background
+ * (dark or light) without altering the brand mark at all.
  */
 export const Logo: React.FC<LogoProps> = ({
     variant = 'full',
     size = 'md',
     className,
 }) => {
-    if (variant === 'icon') {
-        const px = { sm: 30, md: 38, lg: 54 }[size];
-        return (
-            <svg
-                width={px}
-                height={px}
-                viewBox="0 0 115 100"
-                xmlns="http://www.w3.org/2000/svg"
-                className={cn('shrink-0', className)}
-                aria-label="Zaufaj Rzeczoznawcy"
-            >
-                <text x="3" y="88" fontFamily={FONT} fontSize="85" fill="currentColor">Z</text>
-                <text x="57" y="88" fontFamily={FONT} fontSize="85" fill={RED}>R</text>
-            </svg>
-        );
-    }
-
-    const w = { sm: 120, md: 180, lg: 260 }[size];
-    const h = { sm: 38, md: 56, lg: 82 }[size];
+    const imgSizes = {
+        sm: variant === 'icon' ? { w: 28, h: 28 } : { w: 90,  h: 36  },
+        md: variant === 'icon' ? { w: 36, h: 36 } : { w: 150, h: 60  },
+        lg: variant === 'icon' ? { w: 52, h: 52 } : { w: 220, h: 88  },
+    }[size];
 
     return (
-        <svg
-            width={w}
-            height={h}
-            viewBox="0 0 320 100"
-            xmlns="http://www.w3.org/2000/svg"
-            className={cn('shrink-0', className)}
-            aria-label="Zaufaj Rzeczoznawcy"
+        <div
+            className={cn('inline-flex items-center justify-center shrink-0', className)}
+            style={{
+                backgroundColor: '#ffffff',
+                borderRadius: variant === 'icon' ? '10px' : '14px',
+                padding: variant === 'icon' ? '4px' : '6px 10px',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+            }}
         >
-            {/* ZR monogram */}
-            <text x="5"  y="90" fontFamily={FONT} fontSize="90" fill="currentColor">Z</text>
-            <text x="62" y="90" fontFamily={FONT} fontSize="90" fill={RED}>R</text>
-
-            {/* Brand name — two lines right of the monogram */}
-            <text x="132" y="44" fontFamily={FONT} fontSize="36" fill="currentColor">ZAUFAJ</text>
-            <text x="132" y="92" fontFamily={FONT} fontSize="24" fill={RED}>RZECZOZNAWCY</text>
-        </svg>
+            <Image
+                src="/images/logo.png"
+                alt="Zaufaj Rzeczoznawcy"
+                width={imgSizes.w}
+                height={imgSizes.h}
+                style={{ objectFit: 'contain', display: 'block' }}
+                priority
+            />
+        </div>
     );
 };

@@ -79,10 +79,7 @@ export const LoginForm: React.FC = () => {
             <div className="w-full max-w-md relative">
                 {/* Logo Section */}
                 <div className="flex flex-col items-center space-y-4 mb-8 overflow-visible">
-                    {/* SVG logo inherits currentColor from text-foreground — adapts to dark/light */}
-                    <div className="text-foreground">
-                        <Logo variant="full" size="lg" />
-                    </div>
+                    <Logo variant="full" size="lg" />
                     <p className="text-muted text-[10px] font-black uppercase tracking-[0.3em] text-center opacity-80">
                         System Inspekcji Pojazdów
                     </p>

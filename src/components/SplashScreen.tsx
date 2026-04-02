@@ -35,7 +35,7 @@ export const SplashScreen: React.FC = () => {
             )}
         >
             {/* Logo — white text on black, SVG currentColor inherits from text-white */}
-            <div className="animate-fade-in flex flex-col items-center gap-4" style={{ color: 'white' }}>
+            <div className="animate-fade-in flex flex-col items-center gap-5">
                 <Logo variant="full" size="lg" />
                 <p style={{
                     color: 'rgba(255,255,255,0.45)',

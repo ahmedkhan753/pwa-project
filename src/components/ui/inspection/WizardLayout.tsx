@@ -223,15 +223,7 @@ async function compressImage(base64: string): Promise<string> {
             <header className="sticky top-0 z-30 bg-surface dark:bg-background/80 backdrop-blur-lg text-foreground px-4 pt-3 pb-2 shadow-lg transition-colors border-b border-border/50">
                 <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-3 overflow-visible">
-                        {/* Logo icon — SVG currentColor inherits text-foreground so Z adapts to theme */}
-                        <div className="text-foreground" style={{
-                            width: '40px', height: '40px', borderRadius: '8px',
-                            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)',
-                            overflow: 'hidden',
-                        }}>
-                            <Logo variant="icon" size="sm" />
-                        </div>
+                        <Logo variant="icon" size="sm" />
                         <div>
                             <h2 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                                 {STEPS[currentStep - 1]?.label || 'Podsumowanie'}
