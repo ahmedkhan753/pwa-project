@@ -124,6 +124,14 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         })
         logger.info(f"[BG] PDF uploaded to Bitrix deal {deal_id}")
 
+        # 7. Write public report URL to Bitrix field UF_CRM_1775247032324
+        report_url = f"https://app.zaufajrzeczoznawcy.pl/report/{deal_id}"
+        await gateway.call("crm.deal.update", {
+            "ID": deal_id,
+            "fields": {"UF_CRM_1775247032324": report_url}
+        })
+        logger.info(f"[BG] Report URL saved to Bitrix deal {deal_id}: {report_url}")
+
         _update_status('done')
         logger.info(f"[BG] ✅ Background submission complete for deal {deal_id}")
 
