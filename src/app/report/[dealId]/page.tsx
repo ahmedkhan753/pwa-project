@@ -576,7 +576,29 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => {
+        // Normalize: guarantee all array fields exist regardless of what backend returns
+        const normalized: ReportData = {
+          ...d,
+          equipment:        Array.isArray(d.equipment)        ? d.equipment        : [],
+          documents_check:  Array.isArray(d.documents_check)  ? d.documents_check  : [],
+          tires:            Array.isArray(d.tires)            ? d.tires            : [],
+          paint_measurements: Array.isArray(d.paint_measurements) ? d.paint_measurements : [],
+          damages:          Array.isArray(d.damages)          ? d.damages          : [],
+          damage_summary:   d.damage_summary ?? { cosmetic: 0, structural: 0, bodywork: 0 },
+          quick_stats:      d.quick_stats    ?? {},
+          photos: {
+            standard:  Array.isArray(d.photos?.standard)  ? d.photos.standard  : [],
+            body:      Array.isArray(d.photos?.body)      ? d.photos.body      : [],
+            interior:  Array.isArray(d.photos?.interior)  ? d.photos.interior  : [],
+            engine:    Array.isArray(d.photos?.engine)    ? d.photos.engine    : [],
+            documents: Array.isArray(d.photos?.documents) ? d.photos.documents : [],
+            damages:   Array.isArray(d.photos?.damages)   ? d.photos.damages   : [],
+          },
+        };
+        setData(normalized);
+        setLoading(false);
+      })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [dealId]);
 
