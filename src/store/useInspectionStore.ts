@@ -979,6 +979,13 @@ export const useInspectionStore = create<InspectionState>()(
         const fieldName = stepKeys[stepNumber];
         if (!fieldName) return;
 
+        // Step 6 (photos) is skipped at the backend level — avoid sending MBs of
+        // base64 data over a mobile connection for no benefit.
+        if (stepNumber === 6) {
+          console.log('[Bitrix Sync] Skipping step 6 (photos) — handled via file upload endpoint');
+          return;
+        }
+
         const stepPayload = state.data[fieldName];
 
         try {
