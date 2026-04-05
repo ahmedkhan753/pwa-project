@@ -533,18 +533,19 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
         html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
         body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-          background:#F5F5F7;color:#1D1D1F;line-height:1.6;min-height:100vh;overflow-x:hidden;}
+          background:#F5F5F7;color:#1D1D1F;line-height:1.6;min-height:100vh;overflow-x:hidden;
+          max-width:100vw;}
         ::-webkit-scrollbar{width:7px;}
         ::-webkit-scrollbar-track{background:#F5F5F7;}
         ::-webkit-scrollbar-thumb{background:#AEAEB2;border-radius:10px;}
 
         /* ── Responsive grids ── */
-        .rg-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-        .rg-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-        .rg-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px;}
+        .rg-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+        .rg-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+        .rg-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:20px;}
         .rg-tire-paint{display:grid;grid-template-columns:45fr 55fr;gap:28px;align-items:start;}
-        .rg-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
-        .rg-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+        .rg-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+        .rg-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
 
         .summary-bar{display:flex;align-items:stretch;gap:24px;flex-wrap:wrap;}
         .summary-specs{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
@@ -552,30 +553,34 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         .summary-damages{display:flex;gap:12px;flex-shrink:0;align-items:stretch;flex-wrap:wrap;}
 
         @media(max-width:1024px){
-          .rg-4{grid-template-columns:repeat(3,1fr);}
+          .rg-4{grid-template-columns:repeat(3,minmax(0,1fr));}
           .rg-tire-paint{grid-template-columns:1fr;}
           .summary-specs{border-right:none;padding-right:0;padding-bottom:16px;border-bottom:1px solid #E8E8ED;}
           .summary-damages{justify-content:center;}
         }
         @media(max-width:768px){
-          .rg-4{grid-template-columns:repeat(2,1fr);gap:8px;}
+          .rg-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
           .rg-3{grid-template-columns:1fr;}
-          .rg-stats{grid-template-columns:repeat(2,1fr);gap:10px;}
-          .rg-photos{grid-template-columns:repeat(2,1fr);gap:10px;}
-          .rg-gallery{grid-template-columns:repeat(2,1fr);gap:10px;}
+          .rg-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+          .rg-photos{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+          .rg-gallery{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
           .rg-tire-paint{grid-template-columns:1fr;}
           .summary-bar{flex-direction:column;}
-          .summary-specs{border-right:none;padding-right:0;padding-bottom:12px;border-bottom:1px solid #E8E8ED;}
+          .summary-specs{border-right:none;padding-right:0;padding-bottom:12px;border-bottom:1px solid #E8E8ED;min-width:0;}
           .summary-damages{justify-content:center;}
           .damage-counter-mobile{min-width:90px!important;padding:10px 12px!important;}
           .damage-counter-val-mobile{font-size:22px!important;}
+          .section-header{padding:16px 16px!important;}
+          .sec-body-inner{padding:12px!important;}
         }
         @media(max-width:480px){
-          .rg-4{grid-template-columns:repeat(2,1fr);}
+          .rg-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
+          .rg-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
           .rg-photos,.rg-gallery{grid-template-columns:1fr;}
           .summary-damages{flex-direction:column;align-items:stretch;}
-          .sec-body-inner{padding:14px!important;}
-          .rg-4 .field-val{word-break:break-all;}
+          .sec-body-inner{padding:10px!important;}
+          .section-header{padding:14px 12px!important;}
+          .field-val{word-break:break-word;overflow-wrap:anywhere;font-size:14px!important;}
         }
 
         @media print {
@@ -584,9 +589,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           @page{size:A4;margin:12mm 10mm;}
           .section-body{display:grid!important;grid-template-rows:1fr!important;}
           body{background:#fff!important;}
-          .rg-4{grid-template-columns:repeat(4,1fr)!important;}
-          .rg-stats{grid-template-columns:repeat(4,1fr)!important;}
-          .rg-photos,.rg-gallery{grid-template-columns:repeat(3,1fr)!important;}
+          .rg-4{grid-template-columns:repeat(4,minmax(0,1fr))!important;}
+          .rg-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important;}
+          .rg-photos,.rg-gallery{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
           .rg-tire-paint{grid-template-columns:1fr 1fr!important;}
           .summary-bar{flex-direction:row!important;}
           .summary-specs{border-right:1px solid #E0E0E0!important;border-bottom:none!important;padding-right:16px!important;padding-bottom:0!important;}
@@ -608,7 +613,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
       </div>
 
       {/* ── MAIN ── */}
-      <main style={{ maxWidth:1200,margin:'0 auto',padding:'0 16px 60px' }} id="main-content">
+      <main style={{ maxWidth:1200,margin:'0 auto',padding:'0 12px 60px',overflow:'hidden',width:'100%' }} id="main-content">
 
         {/* PDF button */}
         <div className="no-print" style={{ display:'flex',justifyContent:'flex-end',marginBottom:-10,padding:'8px 0' }}>
@@ -804,26 +809,26 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               { icon:'fas fa-check-circle',  label:'Stan ogólny',         value: v.overall_condition, highlight: true, fullWidth: true },
             ].filter(f => f.value !== null && f.value !== undefined && String(f.value) !== '').map((f, i) => (
               <div key={i} style={{
-                display:'flex',alignItems:'flex-start',gap:12,padding:16,
+                display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',
                 borderRadius:8,gridColumn: f.fullWidth ? '1/-1' : undefined,
                 background: f.highlight ? '#FEF2F2' : '#F5F5F7',
                 border: f.highlight ? '1px solid rgba(183,28,28,0.12)' : '1px solid transparent',
-                transition:'all 0.3s',
+                transition:'all 0.3s',overflow:'hidden',minWidth:0,
               }}
                 onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.background='#fff'; el.style.borderColor='#E8E8ED'; el.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)'; }}
                 onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.background=f.highlight?'#FEF2F2':'#F5F5F7'; el.style.borderColor=f.highlight?'rgba(183,28,28,0.12)':'transparent'; el.style.boxShadow=''; }}
               >
-                <div style={{ width:36,height:36,borderRadius:8,background:'rgba(0,0,0,0.03)',
+                <div style={{ width:32,height:32,borderRadius:8,background:'rgba(0,0,0,0.03)',
                   display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
-                  color: f.highlight ? '#B71C1C' : '#86868B',fontSize:14 }}>
+                  color: f.highlight ? '#B71C1C' : '#86868B',fontSize:13 }}>
                   <i className={f.icon}/>
                 </div>
-                <div style={{ display:'flex',flexDirection:'column',minWidth:0 }}>
-                  <div style={{ fontSize:11,textTransform:'uppercase',letterSpacing:'0.8px',
-                    color:'#86868B',fontWeight:600,lineHeight:1.3 }}>{f.label}</div>
-                  <div className="field-val" style={{ fontSize: f.mono ? 13 : 16,fontWeight:600,color:'#1D1D1F',lineHeight:1.3,marginTop:2,
+                <div style={{ display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden' }}>
+                  <div style={{ fontSize:10,textTransform:'uppercase',letterSpacing:'0.5px',
+                    color:'#86868B',fontWeight:600,lineHeight:1.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{f.label}</div>
+                  <div className="field-val" style={{ fontSize: f.mono ? 12 : 15,fontWeight:600,color:'#1D1D1F',lineHeight:1.3,marginTop:2,
                     fontFamily: f.mono ? '\'Courier New\',monospace' : undefined,
-                    wordBreak: f.mono ? 'break-all' : undefined } as React.CSSProperties}>
+                    wordBreak:'break-word',overflowWrap:'anywhere' } as React.CSSProperties}>
                     {String(f.value)}
                   </div>
                 </div>
