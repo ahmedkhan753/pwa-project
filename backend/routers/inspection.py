@@ -21,7 +21,7 @@ from models.inspection import (
 from services.field_transformer import FieldTransformer
 from deps import get_current_user
 from database import get_db, SessionLocal
-from models.inspector import InspectionPDF, SubmissionJob
+from models.inspector import InspectionPDF, SubmissionJob, InspectionPhoto
 
 router = APIRouter(prefix="/inspection", tags=["Inspection"])
 logger = logging.getLogger("routers.inspection")
@@ -74,25 +74,35 @@ async def _background_submit(gateway, deal_id: int, body: dict):
             "inspector_name": deal_result.get("UF_CRM_1771579888", ""),
         }
 
-        # 3. Build inspection_data from body, extract photos for PDF
+        # 3. Build inspection_data from body; load photos from DB (primary source)
         inspection_data = dict(body)
-        body_photos = body.get("photos", {})
-        photo_urls = []
-        if isinstance(body_photos, dict):
-            for v in body_photos.values():
-                if v and isinstance(v, str) and (v.startswith("data:image") or v.startswith("http")):
-                    photo_urls.append(v)
-        elif isinstance(body_photos, list):
-            for item in body_photos:
-                if isinstance(item, str) and (item.startswith("data:image") or item.startswith("http")):
-                    photo_urls.append(item)
-                elif isinstance(item, dict):
-                    url = item.get("base64") or item.get("url") or item.get("src")
-                    if url:
-                        photo_urls.append(url)
-        logger.info(f"[BG] Photos for PDF: {len(photo_urls)}")
-        if photo_urls:
-            inspection_data["photos"] = photo_urls
+        import base64 as _b64
+        db_photos = db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == deal_id
+        ).order_by(InspectionPhoto.id).all()
+        photo_data_uris = []
+        for p in db_photos:
+            # Skip video slots — PDF renderer can't embed video
+            if p.slot_id.startswith("video_"):
+                continue
+            try:
+                uri = "data:image/jpeg;base64," + _b64.b64encode(p.photo_bytes).decode()
+                photo_data_uris.append(uri)
+            except Exception:
+                pass
+        logger.info(f"[BG] Photos from DB for PDF: {len(photo_data_uris)}")
+
+        # Fallback: extract from submit body if DB has nothing (old submissions)
+        if not photo_data_uris:
+            body_photos = body.get("photos", {})
+            if isinstance(body_photos, dict):
+                for v in body_photos.values():
+                    if v and isinstance(v, str) and v.startswith("data:image"):
+                        photo_data_uris.append(v)
+            logger.info(f"[BG] Photos from body fallback: {len(photo_data_uris)}")
+
+        if photo_data_uris:
+            inspection_data["photos"] = photo_data_uris
 
         # 4. Generate PDF
         from services.pdf_generator import generate_inspection_pdf

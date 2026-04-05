@@ -52,6 +52,17 @@ class InspectionPDF(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class InspectionPhoto(Base):
+    """Stores uploaded inspection photos by deal and slot ID."""
+    __tablename__ = "inspection_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, nullable=False, index=True)
+    slot_id = Column(String(80), nullable=False)   # e.g. "photo_front", "video_engine"
+    photo_bytes = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class SubmissionJob(Base):
     """Tracks async background submission status for each inspection deal."""
     __tablename__ = "submission_jobs"

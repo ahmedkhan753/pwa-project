@@ -6,12 +6,15 @@ Returns structured vehicle inspection report data from Bitrix24.
 No authentication required — designed for public sharing.
 """
 
+import base64 as _b64
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request, HTTPException
+from database import SessionLocal
+from models.inspector import InspectionPhoto
 
 router = APIRouter(prefix="/api", tags=["report"])
 logger = logging.getLogger("routers.report")
@@ -261,15 +264,48 @@ async def get_report(deal_id: int, request: Request):
     }
 
     # ── Standard photos ───────────────────────────────────────────────────
+    # Primary source: photos saved to DB during individual upload (all 34 slots).
+    # Fallback: Bitrix file fields (only 8 slots, used for older submissions).
     photos_standard = []
     hero_photo_url = None
+    db_photo_data_uris: List[str] = []
 
-    for key, (label, field_id, pos) in PHOTO_FIELDS.items():
-        urls = _extract_file_urls(raw.get(field_id), auth_token, base_domain)
-        url = urls[0] if urls else None
-        if url and hero_photo_url is None:
-            hero_photo_url = url
-        photos_standard.append({"label": label, "url": url, "position": pos})
+    try:
+        _db = SessionLocal()
+        db_rows = _db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == deal_id
+        ).order_by(InspectionPhoto.id).all()
+        for row in db_rows:
+            if row.slot_id.startswith("video_"):
+                continue
+            try:
+                uri = "data:image/jpeg;base64," + _b64.b64encode(row.photo_bytes).decode()
+                db_photo_data_uris.append(uri)
+                if hero_photo_url is None:
+                    hero_photo_url = uri
+                photos_standard.append({
+                    "label": row.slot_id.replace("_", " ").title(),
+                    "url": uri,
+                    "position": len(photos_standard) + 1,
+                })
+            except Exception:
+                pass
+    except Exception as db_err:
+        logger.warning(f"[Report] Could not load photos from DB: {db_err}")
+    finally:
+        try:
+            _db.close()
+        except Exception:
+            pass
+
+    # Fallback: Bitrix fields (older submissions without DB photos)
+    if not photos_standard:
+        for key, (label, field_id, pos) in PHOTO_FIELDS.items():
+            urls = _extract_file_urls(raw.get(field_id), auth_token, base_domain)
+            url = urls[0] if urls else None
+            if url and hero_photo_url is None:
+                hero_photo_url = url
+            photos_standard.append({"label": label, "url": url, "position": pos})
 
     # ── Paint measurements ────────────────────────────────────────────────
     paint_measurements = []
