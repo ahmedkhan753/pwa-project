@@ -9,9 +9,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-// In Docker, NEXT_PUBLIC_API_URL is http://backend:8000 (internal).
-// In dev, it might be http://localhost:8000.
-const BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000';
+// BACKEND_URL is a server-only env var — never baked into the client bundle.
+// It must point to the Docker-internal hostname so the request bypasses Nginx
+// (Nginx strips the /api prefix, causing FastAPI to receive /report/{id} → 404).
+// Fallback: http://backend:8000 is the Docker Compose service name.
+const BACKEND = process.env.BACKEND_URL || 'http://backend:8000';
 
 export async function GET(
   _req: NextRequest,
