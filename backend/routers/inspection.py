@@ -21,7 +21,7 @@ from models.inspection import (
 from services.field_transformer import FieldTransformer
 from deps import get_current_user
 from database import get_db, SessionLocal
-from models.inspector import InspectionPDF, SubmissionJob, InspectionPhoto
+from models.inspector import InspectionPDF, SubmissionJob, InspectionPhoto, InspectionRecord
 
 router = APIRouter(prefix="/inspection", tags=["Inspection"])
 logger = logging.getLogger("routers.inspection")
@@ -137,6 +137,34 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         except Exception as db_err:
             logger.warning(f"[BG] Could not save PDF to DB: {db_err}")
             db.rollback()
+
+        # 5b. Save inspection payload to InspectionRecord for the report endpoint
+        try:
+            import json as _json_mod
+            rec = db.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
+            rec_data = {
+                "equipment_json":       _json_mod.dumps(body.get("equipmentCompleteness") or {}),
+                "full_equipment_json":  _json_mod.dumps(body.get("fullEquipment") or {}),
+                "exterior_damage_json": _json_mod.dumps(body.get("exteriorDamage") or []),
+                "interior_damage_json": _json_mod.dumps(body.get("interiorDamage") or []),
+                "notes_json":           _json_mod.dumps(body.get("notesValuation") or {}),
+                "vehicle_json":         _json_mod.dumps(body.get("vehicleData") or {}),
+                "tires_json":           _json_mod.dumps(body.get("tires") or {}),
+                "mechanical_json":      _json_mod.dumps(body.get("mechanical") or {}),
+            }
+            if rec:
+                for k, v in rec_data.items():
+                    setattr(rec, k, v)
+            else:
+                db.add(InspectionRecord(deal_id=deal_id, **rec_data))
+            db.commit()
+            logger.info(f"[BG] InspectionRecord saved for deal {deal_id}")
+        except Exception as rec_err:
+            logger.warning(f"[BG] Could not save InspectionRecord for deal {deal_id}: {rec_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
         # 6. Upload PDF to Bitrix deal file field (non-fatal — DB is primary storage)
         try:

@@ -14,7 +14,12 @@ interface PhotoItem {
 interface ReportData {
   deal_id: number;
   generated_at: string;
+  title?: string;
+  company_name?: string;
+  client_name?: string;
   inspection_date: string;
+  inspection_place?: string;
+  inspector_name?: string;
   vehicle: {
     make: string; model: string; version?: string; vin: string;
     registration_plate: string; year: string | number;
@@ -41,8 +46,9 @@ interface ReportData {
     dot?: string; season?: string; tread_mm?: number; status: string;
   }>;
   paint_measurements: Array<{ point: number; name: string; value_um: number; status: string }>;
-  damages: Array<{ index: number; type: string; location: string; size?: string; photo_url?: string | null }>;
-  mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string };
+  damages: Array<{ index: number; type: string; location: string; size?: string; description?: string; photo_url?: string | null }>;
+  interior_damages?: Array<{ index: number; type: string; location: string; size?: string; description?: string }>;
+  mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string; [key: string]: unknown };
   notes?: string;
   signatures?: {
     inspector?: { name: string; signature_url?: string };
@@ -206,8 +212,8 @@ function CollapsibleSection({ id, icon, num, title, children, defaultOpen = fals
         gridTemplateRows: open ? '1fr' : '0fr',
         transition:'grid-template-rows 0.5s cubic-bezier(0.4,0,0.2,1)',
       }}>
-        <div style={{ overflow:'hidden',minHeight:0,
-          padding: open ? '28px' : '0 28px',
+        <div className="sec-body-inner" style={{ overflow:'hidden',minHeight:0,
+          padding: open ? '20px' : '0 20px',
           borderTop: open ? '1px solid #E8E8ED' : '1px solid transparent',
           transition:'padding 0.4s cubic-bezier(0.4,0,0.2,1),border-color 0.3s' }}>
           {children}
@@ -458,8 +464,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
   }, []);
 
   useEffect(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-    fetch(`${apiBase}/api/report/${dealId}`)
+    // Use the Next.js API proxy route (relative URL — same origin, no CORS/expiry issues).
+    fetch(`/api/report/${dealId}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(d => {
         const norm: ReportData = {
@@ -469,6 +475,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           tires:              Array.isArray(d.tires)              ? d.tires              : [],
           paint_measurements: Array.isArray(d.paint_measurements) ? d.paint_measurements : [],
           damages:            Array.isArray(d.damages)            ? d.damages            : [],
+          interior_damages:   Array.isArray(d.interior_damages)   ? d.interior_damages   : [],
           damage_summary:     d.damage_summary  ?? { cosmetic:0, structural:0, bodywork:0 },
           quick_stats:        d.quick_stats     ?? {},
           photos: {
@@ -567,6 +574,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .rg-4{grid-template-columns:repeat(2,1fr);}
           .rg-photos,.rg-gallery{grid-template-columns:1fr;}
           .summary-damages{flex-direction:column;align-items:stretch;}
+          .sec-body-inner{padding:14px!important;}
+          .rg-4 .field-val{word-break:break-all;}
         }
 
         @media print {
@@ -599,7 +608,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
       </div>
 
       {/* ── MAIN ── */}
-      <main style={{ maxWidth:1200,margin:'0 auto',padding:'0 24px 60px' }} id="main-content">
+      <main style={{ maxWidth:1200,margin:'0 auto',padding:'0 16px 60px' }} id="main-content">
 
         {/* PDF button */}
         <div className="no-print" style={{ display:'flex',justifyContent:'flex-end',marginBottom:-10,padding:'8px 0' }}>
@@ -741,6 +750,33 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
 
+        {/* ── INSPECTION DETAILS BAR ── */}
+        {(data.company_name || data.client_name || data.inspection_place || data.inspection_date || data.inspector_name) && (
+          <div style={{ background:'#fff',borderRadius:12,border:'1px solid #E8E8ED',
+            boxShadow:'0 1px 3px rgba(0,0,0,0.04)',padding:'16px 20px',marginBottom:24,
+            display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px 20px' }}>
+            {[
+              { icon:'fas fa-building',         label:'Firma',           val: data.company_name },
+              { icon:'fas fa-user',             label:'Klient',          val: data.client_name },
+              { icon:'fas fa-map-marker-alt',   label:'Miejsce oględzin',val: data.inspection_place },
+              { icon:'fas fa-calendar-alt',     label:'Data oględzin',   val: data.inspection_date },
+              { icon:'fas fa-user-tie',         label:'Inspektor',       val: data.inspector_name },
+            ].filter(i => i.val).map(i => (
+              <div key={i.label} style={{ display:'flex',alignItems:'flex-start',gap:10 }}>
+                <div style={{ width:30,height:30,borderRadius:6,background:'#FEF2F2',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  color:'#B71C1C',fontSize:12,flexShrink:0 }}>
+                  <i className={i.icon}/>
+                </div>
+                <div>
+                  <div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.5px',fontWeight:600 }}>{i.label}</div>
+                  <div style={{ fontSize:13,fontWeight:600,color:'#1D1D1F',marginTop:1 }}>{i.val}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── SECTION 01: DANE POJAZDU ── */}
         <CollapsibleSection id="dane-pojazdu" icon="fas fa-car" num="01 / Dane pojazdu" title="Dane pojazdu">
           <div className="rg-4">
@@ -785,8 +821,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 <div style={{ display:'flex',flexDirection:'column',minWidth:0 }}>
                   <div style={{ fontSize:11,textTransform:'uppercase',letterSpacing:'0.8px',
                     color:'#86868B',fontWeight:600,lineHeight:1.3 }}>{f.label}</div>
-                  <div style={{ fontSize: f.mono ? 14 : 16,fontWeight:600,color:'#1D1D1F',lineHeight:1.3,marginTop:2,
-                    fontFamily: f.mono ? '\'Courier New\',monospace' : undefined } as React.CSSProperties}>
+                  <div className="field-val" style={{ fontSize: f.mono ? 13 : 16,fontWeight:600,color:'#1D1D1F',lineHeight:1.3,marginTop:2,
+                    fontFamily: f.mono ? '\'Courier New\',monospace' : undefined,
+                    wordBreak: f.mono ? 'break-all' : undefined } as React.CSSProperties}>
                     {String(f.value)}
                   </div>
                 </div>
@@ -997,6 +1034,66 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             <div style={{ fontSize:12,color:'#AEAEB2',marginTop:4 }}>Dokumentacja fotograficzna pojazdu</div>
           </div>
         </CollapsibleSection>
+
+        {/* ── EXTERIOR DAMAGE ── */}
+        {data.damages.length > 0 && (
+          <>
+            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+            <CollapsibleSection id="uszkodzenia" icon="fas fa-exclamation-triangle" num="07 / Uszkodzenia zewnętrzne" title="Uszkodzenia zewnętrzne" defaultOpen>
+              <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
+                {data.damages.map((d, i) => (
+                  <div key={i} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
+                    background: d.severity === 'structural' ? '#FEF2F2' : '#FFFBEB',
+                    border: `1px solid ${d.severity === 'structural' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                    alignItems:'flex-start' }}>
+                    <div style={{ width:32,height:32,borderRadius:6,flexShrink:0,
+                      background: d.severity === 'structural' ? '#EF4444' : '#F59E0B',
+                      display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:13 }}>
+                      {d.index}
+                    </div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ display:'flex',flexWrap:'wrap',gap:6,marginBottom:4 }}>
+                        {d.type && <span style={{ fontSize:12,fontWeight:700,color: d.severity === 'structural' ? '#DC2626' : '#D97706' }}>{d.type}</span>}
+                        {d.location && <span style={{ fontSize:12,color:'#6B7280' }}>· {d.location}</span>}
+                        {d.size && <span style={{ fontSize:11,color:'#9CA3AF',padding:'1px 8px',background:'#F3F4F6',borderRadius:10 }}>{d.size}</span>}
+                      </div>
+                      {d.description && <p style={{ fontSize:12,color:'#4B5563',margin:0,lineHeight:1.5 }}>{d.description}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+          </>
+        )}
+
+        {/* ── INTERIOR DAMAGE ── */}
+        {(data.interior_damages?.length ?? 0) > 0 && (
+          <>
+            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+            <CollapsibleSection id="uszkodzenia-wnetrze" icon="fas fa-couch" num="08 / Uszkodzenia wnętrza" title="Uszkodzenia wnętrza">
+              <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
+                {(data.interior_damages ?? []).map((d, i) => (
+                  <div key={i} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
+                    background:'#F5F5F7',border:'1px solid #E8E8ED',alignItems:'flex-start' }}>
+                    <div style={{ width:32,height:32,borderRadius:6,flexShrink:0,
+                      background:'#6B7280',display:'flex',alignItems:'center',
+                      justifyContent:'center',color:'#fff',fontWeight:700,fontSize:13 }}>
+                      {d.index}
+                    </div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ display:'flex',flexWrap:'wrap',gap:6,marginBottom:4 }}>
+                        {d.type && <span style={{ fontSize:12,fontWeight:700,color:'#374151' }}>{d.type}</span>}
+                        {d.location && <span style={{ fontSize:12,color:'#6B7280' }}>· {d.location}</span>}
+                        {d.size && <span style={{ fontSize:11,color:'#9CA3AF',padding:'1px 8px',background:'#fff',borderRadius:10,border:'1px solid #E8E8ED' }}>{d.size}</span>}
+                      </div>
+                      {d.description && <p style={{ fontSize:12,color:'#4B5563',margin:0,lineHeight:1.5 }}>{d.description}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+          </>
+        )}
 
         {/* Notes */}
         {data.notes && (

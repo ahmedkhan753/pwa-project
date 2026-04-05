@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from database import SessionLocal
-from models.inspector import InspectionPhoto
+from models.inspector import InspectionPhoto, InspectionRecord
 
 router = APIRouter(prefix="/api", tags=["report"])
 logger = logging.getLogger("routers.report")
@@ -418,126 +418,263 @@ async def get_report(deal_id: int, request: Request):
                 "status": status,
             })
 
-    # ── Tires ─────────────────────────────────────────────────────────────
-    tires = []
+    tires: List[dict] = []   # populated later with InspectionRecord depth enrichment
+
+    # ── Load InspectionRecord from DB (contains step data not saved to Bitrix) ───
+    insp_rec_equipment: dict = {}
+    insp_rec_full_eq: dict = {}
+    insp_rec_ext_damages: list = []
+    insp_rec_int_damages: list = []
+    insp_rec_notes: dict = {}
+    insp_rec_vehicle: dict = {}
+    insp_rec_tires: dict = {}
+    insp_rec_mechanical: dict = {}
+
+    try:
+        _db2 = SessionLocal()
+        _rec = _db2.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
+        if _rec:
+            def _jload(s):
+                try:
+                    return json.loads(s) if s else {}
+                except Exception:
+                    return {}
+            def _jload_list(s):
+                try:
+                    v = json.loads(s) if s else []
+                    return v if isinstance(v, list) else []
+                except Exception:
+                    return []
+            insp_rec_equipment  = _jload(_rec.equipment_json)
+            insp_rec_full_eq    = _jload(_rec.full_equipment_json)
+            insp_rec_ext_damages= _jload_list(_rec.exterior_damage_json)
+            insp_rec_int_damages= _jload_list(_rec.interior_damage_json)
+            insp_rec_notes      = _jload(_rec.notes_json)
+            insp_rec_vehicle    = _jload(_rec.vehicle_json)
+            insp_rec_tires      = _jload(_rec.tires_json)
+            insp_rec_mechanical = _jload(_rec.mechanical_json)
+            logger.info(f"[Report] InspectionRecord found for deal {deal_id}")
+    except Exception as rec_err:
+        logger.warning(f"[Report] Could not load InspectionRecord: {rec_err}")
+    finally:
+        try:
+            _db2.close()
+        except Exception:
+            pass
+
+    # ── Damages (exterior) — DB record first, then Bitrix ────────────────
+    damages = []
+
+    def _parse_damage_list(lst: list) -> list:
+        out = []
+        for i, d in enumerate(lst, 1):
+            if not isinstance(d, dict):
+                continue
+            t   = d.get("type") or d.get("damageType") or d.get("rodzaj", "")
+            loc = d.get("location") or d.get("part") or d.get("element") or d.get("miejsce", "")
+            out.append({
+                "index":       i,
+                "type":        t,
+                "location":    loc,
+                "size":        d.get("size") or d.get("rozmiar", ""),
+                "severity":    d.get("severity", "cosmetic"),
+                "description": d.get("description") or d.get("notes") or d.get("opis", ""),
+            })
+        return out
+
+    if insp_rec_ext_damages:
+        damages = _parse_damage_list(insp_rec_ext_damages)
+    else:
+        # Fallback: Bitrix JSON field
+        ext_json = _safe_str(raw.get("UF_CRM_1772613182502"))
+        if ext_json and ext_json.startswith("["):
+            try:
+                parsed = json.loads(ext_json)
+                if isinstance(parsed, list):
+                    damages = _parse_damage_list(parsed)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # Last resort: individual damage group fields
+        if not damages:
+            for i, (type_field, desc_field) in enumerate(DAMAGE_GROUPS, 1):
+                dmg_type = _safe_str(raw.get(type_field))
+                dmg_desc = _safe_str(raw.get(desc_field))
+                if dmg_type or dmg_desc:
+                    damages.append({
+                        "index": i, "type": dmg_type, "location": "",
+                        "size": "", "severity": "cosmetic", "description": dmg_desc,
+                    })
+
+    # ── Interior damages — DB record only ────────────────────────────────
+    interior_damages = _parse_damage_list(insp_rec_int_damages) if insp_rec_int_damages else []
+
+    cosmetic_count   = sum(1 for d in damages if d.get("severity") in ("cosmetic", ""))
+    structural_count = sum(1 for d in damages if d.get("severity") == "structural")
+
+    # ── Tires — prefer InspectionRecord tread_depth if available ─────────
+    def _tv(v: Any) -> str:
+        """Normalise ToggleValue to a human-readable string."""
+        if v is None:
+            return ""
+        s = str(v).strip()
+        return s if s not in ("null", "None") else ""
+
+    # Enrich Bitrix tire data with tread depths from InspectionRecord
+    WHEEL_CODES = ["fl", "fr", "rl", "rr"]
+    tread_from_rec: dict = {}
+    if insp_rec_tires and isinstance(insp_rec_tires, dict):
+        for wk, wd in insp_rec_tires.items():
+            # wk: frontLeft | frontRight | rearLeft | rearRight
+            code = {"frontLeft": "fl", "frontRight": "fr", "rearLeft": "rl", "rearRight": "rr"}.get(wk)
+            if code and isinstance(wd, dict):
+                depth_val = _safe_float(wd.get("treadDepth"))
+                if depth_val:
+                    tread_from_rec[code] = depth_val
+
     for code, position, brand_field, size_field, type_field in TIRE_WHEELS:
         brand = _safe_str(raw.get(brand_field))
         size  = _safe_str(raw.get(size_field))
         type_ = _safe_str(raw.get(type_field))
-        depth = _safe_float(raw.get(size_field))  # depth stored in same field as size for some
-
-        # Try to parse depth from size string like "205/55R16 6.5mm"
+        depth = tread_from_rec.get(code) or _safe_float(raw.get(size_field))
         if size and not depth:
             import re
             m = re.search(r'(\d+(?:[.,]\d+)?)\s*mm', size, re.IGNORECASE)
             if m:
                 depth = _safe_float(m.group(1))
-
         if brand or size or depth:
             tires.append({
-                "position": position,
-                "code": code,
-                "brand": brand,
-                "size": size,
-                "type": type_,
-                "tread_mm": depth,
-                "status": _tire_status(depth),
+                "position": position, "code": code,
+                "brand": brand, "size": size, "type": type_,
+                "tread_mm": depth, "status": _tire_status(depth),
             })
 
-    # ── Damages ───────────────────────────────────────────────────────────
-    damages = []
+    # ── Equipment — DB record (fullEquipment) ─────────────────────────────
+    FULL_EQ_LABELS = {
+        "abs": "ABS", "esp": "ESP / DSC",
+        "airbagDriver": "Poduszka kierowcy", "airbagPassenger": "Poduszka pasażera",
+        "airbagSide": "Poduszki boczne", "airbagCurtain": "Poduszki kurtynowe",
+        "tractionControl": "Kontrola trakcji",
+        "airConditioning": "Klimatyzacja", "automaticAC": "Klimatyzacja automatyczna",
+        "heatedSeats": "Podgrzewane fotele", "electricWindows": "Elektryczne szyby",
+        "electricMirrors": "Lusterka elektryczne", "heatedMirrors": "Podgrzewane lusterka",
+        "powerSteering": "Wspomaganie kierownicy", "cruiseControl": "Tempomat",
+        "parkingSensors": "Czujniki parkowania", "rearCamera": "Kamera cofania",
+        "rainSensors": "Czujniki deszczu", "lightSensors": "Czujniki światła",
+        "centralLocking": "Centralny zamek", "keylessEntry": "Bezkluczykowy dostęp",
+        "startStop": "System Start/Stop",
+        "navigation": "Nawigacja GPS", "bluetooth": "Bluetooth",
+        "usb": "USB", "multimediaScreen": "Ekran multimedialny",
+        "soundSystem": "System audio", "onboardComputer": "Komputer pokładowy",
+        "ledLights": "Światła LED", "xenonLights": "Światła Ksenon",
+        "fogLights": "Światła przeciwmgłowe", "roofRails": "Relingi dachowe",
+        "sunroof": "Szyberdach", "panoramicRoof": "Dach panoramiczny",
+        "towBar": "Hak holowniczy", "alloyWheels": "Felgi aluminiowe",
+        "tintedWindows": "Przyciemniane szyby",
+    }
 
-    # Try JSON field first
-    ext_json = _safe_str(raw.get("UF_CRM_1772613182502"))
-    if ext_json and ext_json.startswith("["):
-        try:
-            parsed = json.loads(ext_json)
-            if isinstance(parsed, list):
-                for i, d in enumerate(parsed, 1):
-                    t = d.get("type") or d.get("damageType") or d.get("rodzaj", "")
-                    loc = d.get("location") or d.get("part") or d.get("miejsce", "")
-                    damages.append({
-                        "index": i,
-                        "type": t,
-                        "location": loc,
-                        "size": d.get("size") or d.get("rozmiar", ""),
-                        "severity": d.get("severity", "cosmetic"),
-                        "description": d.get("description") or d.get("opis", ""),
-                    })
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    # Fall back to individual damage group fields
-    if not damages:
-        for i, (type_field, desc_field) in enumerate(DAMAGE_GROUPS, 1):
-            dmg_type = _safe_str(raw.get(type_field))
-            dmg_desc = _safe_str(raw.get(desc_field))
-            if dmg_type or dmg_desc:
-                damages.append({
-                    "index": i,
-                    "type": dmg_type,
-                    "location": "",
-                    "size": "",
-                    "severity": "cosmetic",
-                    "description": dmg_desc,
-                })
-
-    cosmetic_count = sum(1 for d in damages if d.get("severity") in ("cosmetic", ""))
-    structural_count = sum(1 for d in damages if d.get("severity") == "structural")
-
-    # ── Equipment ─────────────────────────────────────────────────────────
     equipment = []
-    equip_raw = raw.get("UF_CRM_1772535073217")
-    if equip_raw:
-        if isinstance(equip_raw, str) and (equip_raw.startswith("{") or equip_raw.startswith("[")):
+    if insp_rec_full_eq:
+        for key, label in FULL_EQ_LABELS.items():
+            val = insp_rec_full_eq.get(key)
+            if val in ("TAK", "true", True, 1, "1"):
+                equipment.append({"name": label, "present": True})
+            elif val in ("NIE", "false", False, 0, "0"):
+                equipment.append({"name": label, "present": False})
+    else:
+        # Fallback: Bitrix JSON equipment field
+        equip_raw = raw.get("UF_CRM_1772535073217")
+        if equip_raw and isinstance(equip_raw, str) and equip_raw.startswith("{"):
             try:
                 equip_data = json.loads(equip_raw)
-                if isinstance(equip_data, dict):
-                    for key, name in EQUIPMENT_LABEL_MAP.items():
-                        val = equip_data.get(key)
-                        if val is not None:
-                            equipment.append({"name": name, "present": bool(val) and val not in ("0", "false", "Nie")})
-                elif isinstance(equip_data, list):
-                    for item in equip_data:
-                        if isinstance(item, str):
-                            equipment.append({"name": item, "present": True})
-                        elif isinstance(item, dict):
-                            equipment.append({"name": item.get("name", ""), "present": item.get("present", True)})
+                for key, name in EQUIPMENT_LABEL_MAP.items():
+                    val = equip_data.get(key)
+                    if val is not None:
+                        equipment.append({"name": name, "present": bool(val) and val not in ("0", "false", "Nie")})
             except (json.JSONDecodeError, TypeError):
                 pass
-        elif isinstance(equip_raw, str):
-            # Plain comma-separated list
-            for item in equip_raw.split(","):
-                item = item.strip()
-                if item:
-                    equipment.append({"name": item, "present": True})
 
-    # ── Documents check ───────────────────────────────────────────────────
+    # ── Documents check — DB record (equipmentCompleteness) ──────────────
+    DOC_CHECK_LABELS = {
+        "registrationDocPresented": "Dowód rejestracyjny",
+        "vehicleCardPresented":     "Karta pojazdu",
+        "purchaseInvoicePresented": "Faktura zakupu",
+        "serviceBookPresented":     "Książka serwisowa",
+        "antiTheftSystem":          "System antykradzieżowy",
+        "immobilizerWorking":       "Immobilizer sprawny",
+        "keysCount":                None,   # numeric — skip as present/absent
+        "spareWheel":               "Koło zapasowe",
+        "jackAndTools":             "Podnośnik i narzędzia",
+        "triangular":               "Trójkąt ostrzegawczy",
+        "firstAidKit":              "Apteczka",
+        "fireExtinguisher":         "Gaśnica",
+        "repairKit":                "Zestaw naprawczy",
+        "ownerManual":              "Instrukcja obsługi",
+        "registrationPlates":       "Tablice rejestracyjne",
+        "keys":                     "Kluczyki",
+        "airConditioningWorking":   "Klimatyzacja sprawna",
+        "wheelWrench":              "Klucz do kół",
+        "navigationCardWorking":    "Nawigacja (karta) sprawna",
+        "vinMatchesDocs":           "VIN zgodny z dokumentami",
+        "chargingCables":           "Kable do ładowania",
+        "tractionBatteryChargingCable": "Przewód ładowania baterii",
+        "tractionBatteryChargingStation": "Stacja ładowania baterii",
+    }
+
     documents_check = []
+    if insp_rec_equipment:
+        for key, label in DOC_CHECK_LABELS.items():
+            if label is None:
+                continue
+            val = insp_rec_equipment.get(key)
+            if val is None:
+                continue
+            s = str(val).strip().upper()
+            if s in ("TAK", "TRUE", "1"):
+                documents_check.append({"name": label, "status": "Tak", "status_type": "green"})
+            elif s in ("NIE", "FALSE", "0"):
+                documents_check.append({"name": label, "status": "Nie", "status_type": "red"})
+            elif s == "ELEKTRONICZNA":
+                documents_check.append({"name": label, "status": "Elektroniczna", "status_type": "blue"})
+    else:
+        # Fallback: Bitrix individual fields
+        reg_cert = _safe_str(raw.get("UF_CRM_1772533732089"))
+        if reg_cert:
+            ok = reg_cert.lower() not in ("0", "nie", "brak", "no")
+            documents_check.append({"name": "Dowód rejestracyjny", "status": "Tak" if ok else "Brak", "status_type": "green" if ok else "red"})
+        insurance = _safe_str(raw.get("UF_CRM_1772534289878"))
+        if insurance:
+            ok = insurance.lower() not in ("0", "nie", "brak", "no")
+            documents_check.append({"name": "Polisa ubezpieczenia", "status": "Tak" if ok else "Brak", "status_type": "green" if ok else "red"})
 
-    reg_cert = _safe_str(raw.get("UF_CRM_1772533732089"))
-    if reg_cert:
-        ok = reg_cert.lower() not in ("0", "nie", "brak", "no")
-        documents_check.append({"name": "Dowód rejestracyjny", "status": "Tak" if ok else "Brak", "status_type": "green" if ok else "red"})
-
-    insurance = _safe_str(raw.get("UF_CRM_1772534289878"))
-    if insurance:
-        ok = insurance.lower() not in ("0", "nie", "brak", "no")
-        documents_check.append({"name": "Polisa ubezpieczenia", "status": "Tak" if ok else "Brak", "status_type": "green" if ok else "red"})
-
-    # ── Mechanical ────────────────────────────────────────────────────────
-    mechanical = {}
-    mech_raw = raw.get("UF_CRM_1772613597958")
-    if mech_raw and isinstance(mech_raw, str) and mech_raw.startswith("{"):
-        try:
-            mechanical = json.loads(mech_raw)
-        except (json.JSONDecodeError, TypeError):
-            mechanical = {"notes": mech_raw}
-    elif mech_raw and isinstance(mech_raw, dict):
-        mechanical = mech_raw
+    # ── Mechanical — DB record first ──────────────────────────────────────
+    mechanical: dict = insp_rec_mechanical if insp_rec_mechanical else {}
+    if not mechanical:
+        mech_raw = raw.get("UF_CRM_1772613597958")
+        if mech_raw and isinstance(mech_raw, str) and mech_raw.startswith("{"):
+            try:
+                mechanical = json.loads(mech_raw)
+            except (json.JSONDecodeError, TypeError):
+                mechanical = {}
+        elif isinstance(mech_raw, dict):
+            mechanical = mech_raw
 
     warning_lights = _safe_str(raw.get("UF_CRM_1772613819989")) or mechanical.get("warningLights", "")
     ac_raw = mechanical.get("acWorking")
+
+    # ── Notes — DB record first ───────────────────────────────────────────
+    notes_from_rec = ""
+    if insp_rec_notes:
+        notes_from_rec = (
+            _safe_str(insp_rec_notes.get("generalComments")) or
+            _safe_str(insp_rec_notes.get("valuationNotes")) or
+            _safe_str(insp_rec_notes.get("marketComparison")) or ""
+        )
+    notes = (
+        notes_from_rec or
+        _safe_str(raw.get("UF_CRM_1772614097532")) or
+        _safe_str(raw.get("UF_CRM_1772798881993")) or
+        _safe_str(raw.get("COMMENTS"))
+    )
 
     # ── Signatures ────────────────────────────────────────────────────────
     sig_appraiser_urls = _extract_file_urls(raw.get("UF_CRM_1772801573"), auth_token, base_domain)
@@ -547,48 +684,44 @@ async def get_report(deal_id: int, request: Request):
     inspector_name  = _safe_str(raw.get("UF_CRM_1771579888"))
     inspector_phone = _safe_str(raw.get("UF_CRM_1773961369947"))
 
-    # Try to resolve inspector_name from DB if it looks like a Bitrix list ID (numeric)
     if inspector_name and inspector_name.isdigit():
         try:
-            from database import SessionLocal
             from models.inspector import Inspector as InspectorModel
-            db = SessionLocal()
+            _db3 = SessionLocal()
             try:
-                # Look up by matching bitrix appraiser field
-                inspector_obj = db.query(InspectorModel).filter(
-                    InspectorModel.is_active == True
-                ).first()
+                inspector_obj = _db3.query(InspectorModel).filter(InspectorModel.is_active == True).first()
                 if inspector_obj:
                     inspector_name = inspector_obj.name
                     if not inspector_phone:
                         inspector_phone = inspector_obj.phone
             finally:
-                db.close()
+                _db3.close()
         except Exception:
             pass
 
-    # ── Inspection date & place ────────────────────────────────────────────
-    inspection_date = (
-        _safe_str(raw.get("UF_CRM_1772108256983")) or
-        _safe_str(raw.get("BEGINDATE")) or
-        _safe_str(raw.get("DATE_CREATE"))
-    )
-    inspection_place = _safe_str(raw.get("UF_CRM_1766058185504")) or _safe_str(raw.get("UF_CRM_1766058194337"))
-
-    notes = (
-        _safe_str(raw.get("UF_CRM_1772614097532")) or
-        _safe_str(raw.get("UF_CRM_1772798881993")) or
-        _safe_str(raw.get("COMMENTS"))
-    )
+    # ── Inspection date, place, company ───────────────────────────────────
+    inspection_date  = (_safe_str(raw.get("UF_CRM_1772108256983")) or
+                        _safe_str(raw.get("BEGINDATE")) or
+                        _safe_str(raw.get("DATE_CREATE")))
+    inspection_place = (_safe_str(raw.get("UF_CRM_1766058185504")) or
+                        _safe_str(raw.get("UF_CRM_1766058194337")))
+    company_name     = _safe_str(raw.get("UF_CRM_1766057964319"))
+    client_name      = _safe_str(raw.get("UF_CRM_1766057941327"))
+    order_title      = _safe_str(raw.get("TITLE")) or f"Inspekcja #{deal_id}"
 
     # ── Build & return ────────────────────────────────────────────────────
     return {
-        "deal_id": deal_id,
-        "report_url": f"https://app.zaufajrzeczoznawcy.pl/report/{deal_id}",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "title": _safe_str(raw.get("TITLE")) or f"Inspekcja #{deal_id}",
+        "deal_id":         deal_id,
+        "report_url":      f"https://app.zaufajrzeczoznawcy.pl/report/{deal_id}",
+        "generated_at":    datetime.now(timezone.utc).isoformat(),
+        "title":           order_title,
+        "company_name":    company_name,
+        "client_name":     client_name,
+        "inspection_date": inspection_date,
+        "inspection_place":inspection_place,
+        "inspector_name":  inspector_name,
 
-        "vehicle": vehicle,
+        "vehicle":        vehicle,
         "hero_photo_url": hero_photo_url,
 
         "quick_stats": {
@@ -615,10 +748,11 @@ async def get_report(deal_id: int, request: Request):
         },
 
         "paint_measurements": paint_measurements,
-        "tires": tires,
-        "damages": damages,
-        "equipment": equipment,
-        "documents_check": documents_check,
+        "tires":              tires,
+        "damages":            damages,
+        "interior_damages":   interior_damages,
+        "equipment":          equipment,
+        "documents_check":    documents_check,
 
         "mechanical": {
             "warning_lights": warning_lights,
@@ -637,22 +771,12 @@ async def get_report(deal_id: int, request: Request):
                 "signature_url": sig_appraiser_urls[0] if sig_appraiser_urls else None,
             },
             "client": {
-                "name":          _safe_str(raw.get("UF_CRM_1766057941327")),
+                "name":          client_name,
                 "signature_url": sig_client_urls[0] if sig_client_urls else None,
             },
         },
 
-        "inspector": {
-            "name":  inspector_name,
-            "phone": inspector_phone,
-        },
-
-        "client": {
-            "name":    _safe_str(raw.get("UF_CRM_1766057941327")),
-            "company": _safe_str(raw.get("UF_CRM_1766057964319")),
-            "phone":   _safe_str(raw.get("UF_CRM_1766058053224")),
-        },
-
-        "inspection_date":  inspection_date,
-        "inspection_place": inspection_place,
+        "inspector": {"name": inspector_name, "phone": inspector_phone},
+        "client":    {"name": client_name, "company": company_name,
+                      "phone": _safe_str(raw.get("UF_CRM_1766058053224"))},
     }

@@ -74,3 +74,27 @@ class SubmissionJob(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())
+
+
+class InspectionRecord(Base):
+    """Stores the full inspection payload at submit time for the report endpoint.
+
+    Most PWA step data (equipment, damages, notes) is NOT mapped to individual
+    Bitrix24 fields, so it cannot be read back from Bitrix.  This table is the
+    authoritative DB-side source for the web report page.
+    """
+    __tablename__ = "inspection_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, unique=True, nullable=False, index=True)
+    # JSON columns — each stores the corresponding step payload
+    equipment_json      = Column(Text, nullable=True)   # equipmentCompleteness
+    full_equipment_json = Column(Text, nullable=True)   # fullEquipment
+    exterior_damage_json= Column(Text, nullable=True)   # exteriorDamage array
+    interior_damage_json= Column(Text, nullable=True)   # interiorDamage array
+    notes_json          = Column(Text, nullable=True)   # notesValuation
+    vehicle_json        = Column(Text, nullable=True)   # vehicleData
+    tires_json          = Column(Text, nullable=True)   # tires
+    mechanical_json     = Column(Text, nullable=True)   # mechanical
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now())
