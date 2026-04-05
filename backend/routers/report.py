@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request, HTTPException
 from database import SessionLocal
 from models.inspector import InspectionPhoto, InspectionRecord
 
-router = APIRouter(prefix="/api", tags=["report"])
+router = APIRouter(tags=["report"])
 logger = logging.getLogger("routers.report")
 
 
