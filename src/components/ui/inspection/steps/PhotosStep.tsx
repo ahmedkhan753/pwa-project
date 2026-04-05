@@ -213,7 +213,7 @@ function VideoRecordSlot({
     );
 }
 export function PhotosStep() {
-    const { data, setPhotoSlot, clearPhotoSlot } = useInspectionStore();
+    const { data, setPhotoSlot, clearPhotoSlot, jobs, auth } = useInspectionStore();
     const photoSlots = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
@@ -224,8 +224,35 @@ export function PhotosStep() {
     const filledCount = photoSlots.filter((p) => p.base64).length;
     const requiredFilledCount = required.filter((p) => p.base64).length;
 
+    const dealId = jobs?.currentJobId;
+    const token = auth?.token;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+    // Upload photo to backend DB immediately on capture so photos survive
+    // any page reload that clears base64 from in-memory state.
+    const uploadToBackend = (slotId: string, base64: string) => {
+        if (!dealId || !token) return;
+        const isImage = base64.startsWith('data:image');
+        const isVideo = base64.startsWith('data:video');
+        if (!isImage && !isVideo) return;
+        const b64 = base64.split(',')[1];
+        if (!b64) return;
+        const ext = isVideo ? 'mp4' : 'jpg';
+        fetch(`${apiUrl}/files/upload-json`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                deal_id: Number(dealId),
+                field_key: slotId,
+                file_base64: b64,
+                filename: `${slotId}.${ext}`,
+            }),
+        }).catch(() => { /* non-fatal — base64 is still in store */ });
+    };
+
     const updatePhotoSlot = (slotId: string, base64: string) => {
         setPhotoSlot(slotId, base64);
+        uploadToBackend(slotId, base64);
     };
 
     const handleVideoCapture = (e: React.ChangeEvent<HTMLInputElement>, slotId: string) => {
@@ -298,7 +325,7 @@ export function PhotosStep() {
                             label={slot.label}
                             base64={slot.base64}
                             required={slot.required}
-                            onCapture={(b64) => setPhotoSlot(slot.id, b64)}
+                            onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
                             onClear={() => clearPhotoSlot(slot.id)}
                         />
                     )
@@ -339,7 +366,7 @@ export function PhotosStep() {
                                 label={slot.label}
                                 base64={slot.base64}
                                 required={false}
-                                onCapture={(b64) => setPhotoSlot(slot.id, b64)}
+                                onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
                                 onClear={() => clearPhotoSlot(slot.id)}
                             />
                         ))}
