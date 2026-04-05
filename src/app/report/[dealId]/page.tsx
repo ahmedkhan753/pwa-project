@@ -46,7 +46,7 @@ interface ReportData {
     dot?: string; season?: string; tread_mm?: number; status: string;
   }>;
   paint_measurements: Array<{ point: number; name: string; value_um: number; status: string }>;
-  damages: Array<{ index: number; type: string; location: string; size?: string; description?: string; photo_url?: string | null }>;
+  damages: Array<{ index: number; type: string; location: string; size?: string; description?: string; severity?: string; photo_url?: string | null }>;
   interior_damages?: Array<{ index: number; type: string; location: string; size?: string; description?: string }>;
   mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string; [key: string]: unknown };
   notes?: string;
