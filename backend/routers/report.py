@@ -281,19 +281,70 @@ async def get_report(deal_id: int, request: Request):
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
 
-    if not bitrix_ready:
-        raise HTTPException(status_code=503, detail="Usługa tymczasowo niedostępna")
+    # ── Step 1: Try Bitrix (non-fatal — DB is the fallback) ──────────────
+    raw: dict = {}
+    if bitrix_ready:
+        try:
+            _fetched = await gateway.call("crm.deal.get", {"ID": deal_id, "select": ["*", "UF_*"]})
+            if _fetched:
+                raw = _fetched
+                logger.info(f"[Report] Fetched deal {deal_id} from Bitrix — {len(raw)} fields")
+        except Exception as e:
+            logger.warning(f"[Report] Bitrix unavailable for deal {deal_id}: {e} — trying DB fallback")
+    else:
+        logger.warning(f"[Report] Bitrix not ready — using DB-only for deal {deal_id}")
+
+    # ── Step 2: Load InspectionRecord early (needed for 404 check + vehicle fallback) ──
+    insp_rec_equipment: dict = {}
+    insp_rec_full_eq: dict = {}
+    insp_rec_ext_damages: list = []
+    insp_rec_int_damages: list = []
+    insp_rec_notes: dict = {}
+    insp_rec_vehicle: dict = {}
+    insp_rec_tires: dict = {}
+    insp_rec_mechanical: dict = {}
+    _rec = None
 
     try:
-        raw = await gateway.call("crm.deal.get", {"ID": deal_id, "select": ["*", "UF_*"]})
-    except Exception as e:
-        logger.error(f"[Report] Failed to fetch deal {deal_id}: {e}")
-        raise HTTPException(status_code=404, detail=f"Zlecenie {deal_id} nie zostało znalezione")
+        _db_rec = SessionLocal()
+        _rec = _db_rec.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
+        if _rec:
+            def _jload(s):
+                try:
+                    return json.loads(s) if s else {}
+                except Exception:
+                    return {}
+            def _jload_list(s):
+                try:
+                    v = json.loads(s) if s else []
+                    return v if isinstance(v, list) else []
+                except Exception:
+                    return []
+            insp_rec_equipment   = _jload(_rec.equipment_json)
+            insp_rec_full_eq     = _jload(_rec.full_equipment_json)
+            insp_rec_ext_damages = _jload_list(_rec.exterior_damage_json)
+            insp_rec_int_damages = _jload_list(_rec.interior_damage_json)
+            insp_rec_notes       = _jload(_rec.notes_json)
+            insp_rec_vehicle     = _jload(_rec.vehicle_json)
+            insp_rec_tires       = _jload(_rec.tires_json)
+            insp_rec_mechanical  = _jload(_rec.mechanical_json)
+            logger.info(f"[Report] InspectionRecord found for deal {deal_id}")
+        else:
+            logger.warning(f"[Report] No InspectionRecord in DB for deal {deal_id}")
+    except Exception as rec_err:
+        logger.warning(f"[Report] Could not load InspectionRecord: {rec_err}")
+    finally:
+        try:
+            _db_rec.close()
+        except Exception:
+            pass
 
-    if not raw:
-        raise HTTPException(status_code=404, detail=f"Zlecenie {deal_id} nie zostało znalezione")
-
-    logger.info(f"[Report] Fetched deal {deal_id} — {len(raw)} fields")
+    # ── Step 3: If NEITHER Bitrix NOR DB has the deal → genuine 404 ───────
+    if not raw and not _rec:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Zlecenie #{deal_id} nie istnieje lub nie jest dostępne",
+        )
 
     # Auth token for Bitrix file URLs
     auth_token = ""
@@ -334,6 +385,35 @@ async def get_report(deal_id: int, request: Request):
         "paint_type":            _f("paint_type"),
         "version":               _f("version"),
     }
+
+    # ── DB fallback: overwrite empty vehicle fields from InspectionRecord ─
+    if insp_rec_vehicle:
+        iv = insp_rec_vehicle
+        bi = iv.get("basicInfo") or {}
+        _fallbacks = {
+            "vin":                     iv.get("vin", ""),
+            "make":                    iv.get("make", ""),
+            "model":                   iv.get("model", ""),
+            "year":                    str(iv.get("year", "")),
+            "color":                   iv.get("color", ""),
+            "engine_capacity_cc":      str(iv.get("engineCapacity", "")),
+            "engine_power_hp":         str(iv.get("enginePower", "")),
+            "fuel_type":               iv.get("fuelType", ""),
+            "body_type":               iv.get("bodyType", ""),
+            "transmission":            iv.get("gearboxType", ""),
+            "drive_type":              iv.get("driveType", ""),
+            "registration_plate":      iv.get("registrationPlates", ""),
+            "first_registration_date": iv.get("firstRegistration", ""),
+            "mileage":                 str(iv.get("mileage", "")),
+        }
+        for k, v in _fallbacks.items():
+            if not vehicle.get(k) and v:
+                vehicle[k] = v
+        # Recompute kw if hp was filled from DB
+        if vehicle.get("engine_power_hp") and not vehicle.get("engine_power_kw"):
+            _hp = str(vehicle["engine_power_hp"])
+            if _hp.replace(".", "", 1).isdigit():
+                vehicle["engine_power_kw"] = str(round(float(_hp) / 1.341))
 
     # ── Photos ────────────────────────────────────────────────────────────
     # Primary source: DB (InspectionPhoto) for new-style submissions.
@@ -420,47 +500,7 @@ async def get_report(deal_id: int, request: Request):
 
     tires: List[dict] = []   # populated later with InspectionRecord depth enrichment
 
-    # ── Load InspectionRecord from DB (contains step data not saved to Bitrix) ───
-    insp_rec_equipment: dict = {}
-    insp_rec_full_eq: dict = {}
-    insp_rec_ext_damages: list = []
-    insp_rec_int_damages: list = []
-    insp_rec_notes: dict = {}
-    insp_rec_vehicle: dict = {}
-    insp_rec_tires: dict = {}
-    insp_rec_mechanical: dict = {}
-
-    try:
-        _db2 = SessionLocal()
-        _rec = _db2.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
-        if _rec:
-            def _jload(s):
-                try:
-                    return json.loads(s) if s else {}
-                except Exception:
-                    return {}
-            def _jload_list(s):
-                try:
-                    v = json.loads(s) if s else []
-                    return v if isinstance(v, list) else []
-                except Exception:
-                    return []
-            insp_rec_equipment  = _jload(_rec.equipment_json)
-            insp_rec_full_eq    = _jload(_rec.full_equipment_json)
-            insp_rec_ext_damages= _jload_list(_rec.exterior_damage_json)
-            insp_rec_int_damages= _jload_list(_rec.interior_damage_json)
-            insp_rec_notes      = _jload(_rec.notes_json)
-            insp_rec_vehicle    = _jload(_rec.vehicle_json)
-            insp_rec_tires      = _jload(_rec.tires_json)
-            insp_rec_mechanical = _jload(_rec.mechanical_json)
-            logger.info(f"[Report] InspectionRecord found for deal {deal_id}")
-    except Exception as rec_err:
-        logger.warning(f"[Report] Could not load InspectionRecord: {rec_err}")
-    finally:
-        try:
-            _db2.close()
-        except Exception:
-            pass
+    # InspectionRecord already loaded above (Steps 2-3) — no second query needed.
 
     # ── Damages (exterior) — DB record first, then Bitrix ────────────────
     damages = []
@@ -684,6 +724,10 @@ async def get_report(deal_id: int, request: Request):
     inspector_name  = _safe_str(raw.get("UF_CRM_1771579888"))
     inspector_phone = _safe_str(raw.get("UF_CRM_1773961369947"))
 
+    # DB fallback: use inspector name from InspectionRecord if Bitrix is empty
+    if not inspector_name and insp_rec_vehicle:
+        inspector_name = _safe_str((insp_rec_vehicle.get("basicInfo") or {}).get("inspectorName"))
+
     if inspector_name and inspector_name.isdigit():
         try:
             from models.inspector import Inspector as InspectorModel
@@ -700,13 +744,16 @@ async def get_report(deal_id: int, request: Request):
             pass
 
     # ── Inspection date, place, company ───────────────────────────────────
+    _bi = (insp_rec_vehicle.get("basicInfo") or {}) if insp_rec_vehicle else {}
     inspection_date  = (_safe_str(raw.get("UF_CRM_1772108256983")) or
                         _safe_str(raw.get("BEGINDATE")) or
-                        _safe_str(raw.get("DATE_CREATE")))
+                        _safe_str(raw.get("DATE_CREATE")) or
+                        _safe_str(_bi.get("inspectionDate")))
     inspection_place = (_safe_str(raw.get("UF_CRM_1766058185504")) or
-                        _safe_str(raw.get("UF_CRM_1766058194337")))
-    company_name     = _safe_str(raw.get("UF_CRM_1766057964319"))
-    client_name      = _safe_str(raw.get("UF_CRM_1766057941327"))
+                        _safe_str(raw.get("UF_CRM_1766058194337")) or
+                        _safe_str(_bi.get("inspectionPlace")))
+    company_name     = _safe_str(raw.get("UF_CRM_1766057964319")) or _safe_str(_bi.get("companyName"))
+    client_name      = _safe_str(raw.get("UF_CRM_1766057941327")) or _safe_str(_bi.get("userOwner"))
     order_title      = _safe_str(raw.get("TITLE")) or f"Inspekcja #{deal_id}"
 
     # ── Build & return ────────────────────────────────────────────────────
