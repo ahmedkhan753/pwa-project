@@ -1129,6 +1129,30 @@ export const useInspectionStore = create<InspectionState>()(
     }),
     {
       name: 'inspection-storage',
+      // Exclude photo/video base64 data from localStorage.
+      // A 6-second video is 10-50 MB as base64 — combined with 28+ photos (~4 MB)
+      // this blows past the 5 MB localStorage limit, causing all subsequent state
+      // writes to fail silently. The slot structure (ids, labels, required flags) is
+      // preserved so the UI shows the correct empty slots on reload; the user just
+      // needs to retake photos if the page reloads mid-inspection.
+      partialize: (state) => ({
+        ...state,
+        data: {
+          ...state.data,
+          photos: state.data.photos.map((p) => ({ ...p, base64: '' })),
+        },
+        // Also strip photo base64 from any saved drafts — a draft switch
+        // while photos are filled would otherwise also overflow localStorage.
+        drafts: Object.fromEntries(
+          Object.entries(state.drafts).map(([k, v]) => [
+            k,
+            {
+              ...(v as StepData),
+              photos: (v as StepData).photos.map((p) => ({ ...p, base64: '' })),
+            },
+          ])
+        ),
+      }),
       storage: createJSONStorage(() => ({
         getItem: (name: string) => {
           try { return localStorage.getItem(name); } catch { return null; }
@@ -1137,10 +1161,8 @@ export const useInspectionStore = create<InspectionState>()(
           try {
             localStorage.setItem(name, value);
           } catch (e: any) {
-            // QuotaExceededError — storage full, data not saved.
-            // Log but don't crash — app continues, user loses data only on refresh.
             if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-              console.error('[Storage] localStorage quota exceeded — photos may not persist across refresh');
+              console.error('[Storage] localStorage quota exceeded even after partialize — check state size');
             }
           }
         },
