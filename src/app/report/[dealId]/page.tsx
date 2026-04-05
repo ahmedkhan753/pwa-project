@@ -19,11 +19,13 @@ interface ReportData {
     make: string; model: string; version?: string; vin: string;
     registration_plate: string; year: string | number;
     first_registration_date?: string; mileage: string | number; mileage_unit?: string;
-    color: string; fuel_type: string; engine_power_kw?: string | number;
-    engine_power_hp?: string | number; engine_capacity_cc?: string | number;
+    color: string; fuel_type: string;
+    engine_power_kw?: string | number; engine_power_hp?: string | number;
+    engine_capacity_cc?: string | number;
     transmission: string; drive_type?: string; body_type?: string;
     doors?: string | number; seats?: string | number; weight_kg?: string | number;
     owners_count?: string | number; overall_condition?: string; paint_type?: string;
+    [key: string]: unknown;
   };
   hero_photo_url: string | null;
   quick_stats: { year?: string | number; fuel?: string; power?: string; transmission?: string };
@@ -509,8 +511,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
   const v = data.vehicle;
   const vehicleName = [v.make, v.model, v.version].filter(Boolean).join(' ');
   const heroSubtitle = [
-    v.engine_capacity_cc ? `${v.engine_capacity_cc} cc` : null,
-    v.engine_power_hp ? `${v.engine_power_hp} KM` : null,
+    (v as any).engine_capacity_cc ? `${(v as any).engine_capacity_cc} cc` : null,
+    (v as any).engine_power_hp ? `${(v as any).engine_power_hp} KM` : null,
     v.transmission,
     v.fuel_type,
     v.year ? String(v.year) : null,
@@ -528,12 +530,57 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         ::-webkit-scrollbar{width:7px;}
         ::-webkit-scrollbar-track{background:#F5F5F7;}
         ::-webkit-scrollbar-thumb{background:#AEAEB2;border-radius:10px;}
+
+        /* ── Responsive grids ── */
+        .rg-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+        .rg-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+        .rg-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px;}
+        .rg-tire-paint{display:grid;grid-template-columns:45fr 55fr;gap:28px;align-items:start;}
+        .rg-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+        .rg-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+
+        .summary-bar{display:flex;align-items:stretch;gap:24px;flex-wrap:wrap;}
+        .summary-specs{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+          padding-right:24px;border-right:1px solid #E8E8ED;min-width:200px;}
+        .summary-damages{display:flex;gap:12px;flex-shrink:0;align-items:stretch;flex-wrap:wrap;}
+
+        @media(max-width:1024px){
+          .rg-4{grid-template-columns:repeat(3,1fr);}
+          .rg-tire-paint{grid-template-columns:1fr;}
+          .summary-specs{border-right:none;padding-right:0;padding-bottom:16px;border-bottom:1px solid #E8E8ED;}
+          .summary-damages{justify-content:center;}
+        }
+        @media(max-width:768px){
+          .rg-4{grid-template-columns:repeat(2,1fr);gap:8px;}
+          .rg-3{grid-template-columns:1fr;}
+          .rg-stats{grid-template-columns:repeat(2,1fr);gap:10px;}
+          .rg-photos{grid-template-columns:repeat(2,1fr);gap:10px;}
+          .rg-gallery{grid-template-columns:repeat(2,1fr);gap:10px;}
+          .rg-tire-paint{grid-template-columns:1fr;}
+          .summary-bar{flex-direction:column;}
+          .summary-specs{border-right:none;padding-right:0;padding-bottom:12px;border-bottom:1px solid #E8E8ED;}
+          .summary-damages{justify-content:center;}
+          .damage-counter-mobile{min-width:90px!important;padding:10px 12px!important;}
+          .damage-counter-val-mobile{font-size:22px!important;}
+        }
+        @media(max-width:480px){
+          .rg-4{grid-template-columns:repeat(2,1fr);}
+          .rg-photos,.rg-gallery{grid-template-columns:1fr;}
+          .summary-damages{flex-direction:column;align-items:stretch;}
+        }
+
         @media print {
           .no-print{display:none!important;}
           *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
           @page{size:A4;margin:12mm 10mm;}
           .section-body{display:grid!important;grid-template-rows:1fr!important;}
           body{background:#fff!important;}
+          .rg-4{grid-template-columns:repeat(4,1fr)!important;}
+          .rg-stats{grid-template-columns:repeat(4,1fr)!important;}
+          .rg-photos,.rg-gallery{grid-template-columns:repeat(3,1fr)!important;}
+          .rg-tire-paint{grid-template-columns:1fr 1fr!important;}
+          .summary-bar{flex-direction:row!important;}
+          .summary-specs{border-right:1px solid #E0E0E0!important;border-bottom:none!important;padding-right:16px!important;padding-bottom:0!important;}
         }
       `}</style>
 
@@ -626,11 +673,11 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           </div>
 
           {/* Quick stats */}
-          <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginTop:20 }}>
+          <div className="rg-stats">
             {[
               { icon:'fas fa-calendar-alt', value: data.quick_stats.year || v.year, label:'Rok produkcji' },
               { icon:'fas fa-gas-pump',     value: data.quick_stats.fuel || v.fuel_type, label:'Rodzaj paliwa' },
-              { icon:'fas fa-bolt',         value: data.quick_stats.power || (v.engine_power_hp ? `${v.engine_power_hp} KM` : null), label: v.engine_power_kw ? `${v.engine_power_kw} kW` : 'Moc' },
+              { icon:'fas fa-bolt',         value: data.quick_stats.power || ((v as any).engine_power_hp ? `${(v as any).engine_power_hp} KM` : null), label: (v as any).engine_power_kw ? `${(v as any).engine_power_kw} kW` : 'Moc' },
               { icon:'fas fa-cogs',         value: data.quick_stats.transmission || v.transmission, label:'Skrzynia biegów' },
             ].map(s => s.value && (
               <div key={s.label} style={{ background:'#fff',borderRadius:12,padding:'18px 14px',
@@ -646,11 +693,10 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           </div>
 
           {/* Summary bar */}
-          <div style={{ marginTop:20,background:'#fff',borderRadius:12,border:'1px solid #E8E8ED',
-            boxShadow:'0 1px 3px rgba(0,0,0,0.04)',padding:'20px 28px',display:'flex',alignItems:'stretch',gap:24,flexWrap:'wrap' }}>
+          <div className="summary-bar" style={{ marginTop:20,background:'#fff',borderRadius:12,border:'1px solid #E8E8ED',
+            boxShadow:'0 1px 3px rgba(0,0,0,0.04)',padding:'20px 28px' }}>
             {/* Spec pills */}
-            <div style={{ flex:1,display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,
-              paddingRight:24,borderRight:'1px solid #E8E8ED',minWidth:200 }}>
+            <div className="summary-specs">
               {[
                 { label:'Rocznik',    val: v.year },
                 { label:'Przebieg',   val: v.mileage ? `${Number(v.mileage).toLocaleString('pl-PL')} km` : null },
@@ -670,7 +716,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               ))}
             </div>
             {/* Damage counters */}
-            <div style={{ display:'flex',gap:12,flexShrink:0,alignItems:'stretch',flexWrap:'wrap' }}>
+            <div className="summary-damages">
               {[
                 { label:'Uszkodzenia\nkosmetyczne', count: data.damage_summary.cosmetic,  cls: data.damage_summary.cosmetic  > 0 ? 'yellow' : 'green' },
                 { label:'Uszkodzenia\nkonstrukcyjne', count: data.damage_summary.structural, cls: data.damage_summary.structural > 0 ? 'red' : 'green' },
@@ -697,7 +743,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         {/* ── SECTION 01: DANE POJAZDU ── */}
         <CollapsibleSection id="dane-pojazdu" icon="fas fa-car" num="01 / Dane pojazdu" title="Dane pojazdu">
-          <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12 }}>
+          <div className="rg-4">
             {[
               { icon:'fas fa-id-card',       label:'Numer rejestracyjny', value: v.registration_plate, highlight: true },
               { icon:'fas fa-car',           label:'Marka',               value: v.make },
@@ -708,7 +754,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               { icon:'fas fa-palette',       label:'Kolor',               value: v.color },
               { icon:'fas fa-gas-pump',      label:'Rodzaj paliwa',       value: v.fuel_type },
               { icon:'fas fa-paint-roller',  label:'Lakier',              value: v.paint_type },
-              { icon:'fas fa-bolt',          label:'Moc silnika',         value: v.engine_power_hp ? `${v.engine_power_kw||'—'} kW / ${v.engine_power_hp} KM` : null },
+              { icon:'fas fa-bolt',          label:'Moc silnika',         value: v.engine_power_hp ? `${v.engine_power_kw ? v.engine_power_kw+' kW / ' : ''}${v.engine_power_hp} KM` : null },
               { icon:'fas fa-cog',           label:'Pojemność',           value: v.engine_capacity_cc ? `${v.engine_capacity_cc} cc` : null },
               { icon:'fas fa-cogs',          label:'Skrzynia biegów',     value: v.transmission },
               { icon:'fas fa-road',          label:'Napęd',               value: v.drive_type },
@@ -755,7 +801,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         {data.equipment.length > 0 && (
           <>
             <CollapsibleSection id="wyposazenie" icon="fas fa-list-check" num="02 / Wyposażenie" title="Wyposażenie">
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10 }}>
+              <div className="rg-4" style={{ gap:10 }}>
                 {data.equipment.filter(e => e.present).map((eq, i) => (
                   <div key={i} style={{ display:'flex',alignItems:'center',gap:10,padding:'14px 16px',
                     borderRadius:8,background:'#F5F5F7',transition:'all 0.3s',border:'1px solid transparent' }}
@@ -781,7 +827,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         <CollapsibleSection id="zdjecia-podstawowe" icon="fas fa-camera" num="03 / Zdjęcia podstawowe" title="Zdjęcia podstawowe">
           {data.photos.standard.length > 0 ? (
             <>
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16 }}>
+              <div className="rg-photos">
                 {data.photos.standard.map((p, i) => (
                   <PhotoCard key={i} photo={p} index={i} total={data.photos.standard.length}
                     onClick={() => allStandardPhotos.length > 0 && openLightbox(allStandardPhotos, allStandardPhotos.findIndex(x => x.url === p.url))} />
@@ -802,7 +848,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         {data.documents_check.length > 0 && (
           <>
             <CollapsibleSection id="dokumentacja" icon="fas fa-folder-open" num="04 / Dokumentacja pojazdu" title="Dokumentacja pojazdu">
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12 }}>
+              <div className="rg-3" style={{ gap:12 }}>
                 {data.documents_check.map((d, i) => {
                   const badgeCls = d.status_type === 'green' ? { bg:'rgba(34,197,94,0.15)', clr:'#16a34a' }
                     : d.status_type === 'red' ? { bg:'rgba(239,68,68,0.15)', clr:'#dc2626' }
@@ -836,7 +882,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         {/* ── SECTION 05: OPONY I POMIAR LAKIERU ── */}
         <CollapsibleSection id="opony-lakier" icon="fas fa-circle-notch" num="05 / Opony i pomiar lakieru" title="Opony i pomiar lakieru">
-          <div style={{ display:'grid',gridTemplateColumns:'45fr 55fr',gap:28,alignItems:'start' }}>
+          <div className="rg-tire-paint">
             {/* Tires */}
             <div style={{ background:'#fff',borderRadius:12,border:'1px solid #E8E8ED',boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden' }}>
               <div style={{ padding:'20px 24px',borderBottom:'1px solid #E8E8ED' }}>
@@ -900,7 +946,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   </div>
                 )}
                 {g.photos.length > 0 ? (
-                  <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14 }}>
+                  <div className="rg-gallery">
                     {g.photos.map((p, i) => (
                       <div key={i}
                         onClick={() => p.url && openLightbox(withUrls, withUrls.findIndex(x => x.url === p.url))}

@@ -38,6 +38,70 @@ VEHICLE_FIELDS = {
     "first_registration":"UF_CRM_1771529218758",
     "mileage":           "UF_CRM_1772534309693",
     "doors":             "UF_CRM_1772536169528",
+    "seats":             "UF_CRM_1772536182491",
+    "weight":            "UF_CRM_1772536201847",
+    "owners_count":      "UF_CRM_1772534418926",
+    "overall_condition": "UF_CRM_1766057661321",
+    "paint_type":        "UF_CRM_1772534426802",
+    "version":           "UF_CRM_1766057961822",
+}
+
+# ─── Photo slot label lookup ─────────────────────────────────────────────────
+
+PHOTO_LABELS: dict = {
+    "photo_diag_front_left":      "Przekątna przednia lewa",
+    "photo_front":                "Przód pojazdu",
+    "photo_front_under":          "Podwozie przednie",
+    "photo_diag_front_right":     "Przekątna przednia prawa",
+    "photo_right_front":          "Prawa strona przód",
+    "photo_right_rear":           "Prawa strona tył",
+    "photo_diag_rear_right":      "Przekątna tylna prawa",
+    "photo_rear":                 "Tył pojazdu",
+    "photo_rear_under":           "Podwozie tylne",
+    "photo_trunk_open":           "Otwarty bagażnik",
+    "photo_spare_tire":           "Koło zapasowe",
+    "photo_diag_rear_left":       "Przekątna tylna lewa",
+    "photo_left_rear":            "Lewa strona tył",
+    "photo_left_front":           "Lewa strona przód",
+    "photo_door_left_front_open": "Otwarte lewe drzwi",
+    "photo_left_side_door":       "Lewe drzwi boczne",
+    "photo_dashboard_rear":       "Deska rozdzielcza (tył)",
+    "photo_cockpit_center":       "Centralny kokpit",
+    "photo_center_tunnel":        "Tunel centralny",
+    "photo_rear_vent":            "Tylny nawiew centralny",
+    "photo_steering_wheel":       "Kierownica",
+    "photo_multimedia":           "Multimedia / kamera",
+    "photo_odometer":             "Licznik przebiegu",
+    "photo_navigation":           "Nawigacja",
+    "photo_service_display":      "Wyświetlacz serwisowy",
+    "photo_hood_open":            "Otwarta maska silnika",
+    "photo_vin":                  "Numer VIN",
+    "photo_nameplate":            "Tabliczka znamionowa",
+    "photo_registration_doc":     "Dowód rejestracyjny + kluczyki",
+    "photo_id_card_back":         "Dowód osobisty (tył)",
+    "photo_owner_manual":         "Instrukcja obsługi",
+    "photo_service_book":         "Książka serwisowa",
+    "photo_other_docs":           "Inne dokumenty",
+    "video_engine":               "Film z silnikiem",
+}
+
+BODY_SLOTS = {
+    "photo_diag_front_left", "photo_front", "photo_front_under",
+    "photo_diag_front_right", "photo_right_front", "photo_right_rear",
+    "photo_diag_rear_right", "photo_rear", "photo_rear_under",
+    "photo_trunk_open", "photo_spare_tire", "photo_diag_rear_left",
+    "photo_left_rear", "photo_left_front", "photo_door_left_front_open",
+    "photo_left_side_door",
+}
+INTERIOR_SLOTS = {
+    "photo_dashboard_rear", "photo_cockpit_center", "photo_center_tunnel",
+    "photo_rear_vent", "photo_steering_wheel", "photo_multimedia",
+    "photo_odometer", "photo_navigation", "photo_service_display",
+}
+ENGINE_SLOTS = {"photo_hood_open", "photo_nameplate"}
+DOCUMENT_SLOTS = {
+    "photo_vin", "photo_registration_doc", "photo_id_card_back",
+    "photo_owner_manual", "photo_service_book", "photo_other_docs",
 }
 
 # Standard photo fields — each maps to a Bitrix file field
@@ -246,50 +310,79 @@ async def get_report(deal_id: int, request: Request):
 
     # ── Vehicle ───────────────────────────────────────────────────────────
     vehicle = {
-        "vin":             _f("vin"),
-        "make":            _f("make"),
-        "model":           _f("model"),
-        "year":            _f("year"),
-        "color":           _f("color"),
-        "engine_capacity": _f("engine_capacity"),
-        "engine_power":    _f("engine_power"),
-        "fuel_type":       _f("fuel_type"),
-        "body_type":       _f("body_type"),
-        "transmission":    _f("transmission"),
-        "drive_type":      _f("drive_type"),
-        "registration_plate": _f("registration_plate"),
-        "first_registration": _f("first_registration"),
-        "mileage":         _f("mileage"),
-        "doors":           _f("doors"),
+        "vin":                   _f("vin"),
+        "make":                  _f("make"),
+        "model":                 _f("model"),
+        "year":                  _f("year"),
+        "color":                 _f("color"),
+        "engine_capacity_cc":    _f("engine_capacity"),
+        "engine_power_hp":       _f("engine_power"),
+        "engine_power_kw":       str(round(float(_f("engine_power")) / 1.341)) if _f("engine_power").replace('.','',1).isdigit() else "",
+        "fuel_type":             _f("fuel_type"),
+        "body_type":             _f("body_type"),
+        "transmission":          _f("transmission"),
+        "drive_type":            _f("drive_type"),
+        "registration_plate":    _f("registration_plate"),
+        "first_registration_date": _f("first_registration"),
+        "mileage":               _f("mileage"),
+        "mileage_unit":          "km",
+        "doors":                 _f("doors"),
+        "seats":                 _f("seats"),
+        "weight_kg":             _f("weight"),
+        "owners_count":          _f("owners_count"),
+        "overall_condition":     _f("overall_condition"),
+        "paint_type":            _f("paint_type"),
+        "version":               _f("version"),
     }
 
-    # ── Standard photos ───────────────────────────────────────────────────
-    # Primary source: photos saved to DB during individual upload (all 34 slots).
-    # Fallback: Bitrix file fields (only 8 slots, used for older submissions).
-    photos_standard = []
-    hero_photo_url = None
-    db_photo_data_uris: List[str] = []
+    # ── Photos ────────────────────────────────────────────────────────────
+    # Primary source: DB (InspectionPhoto) for new-style submissions.
+    # Fallback: Bitrix file fields (older 8-slot submissions).
+    photos_standard:  List[dict] = []
+    photos_body:      List[dict] = []
+    photos_interior:  List[dict] = []
+    photos_engine:    List[dict] = []
+    photos_documents: List[dict] = []
+    photos_damages:   List[dict] = []
+    hero_photo_url: Optional[str] = None
 
     try:
         _db = SessionLocal()
         db_rows = _db.query(InspectionPhoto).filter(
             InspectionPhoto.deal_id == deal_id
         ).order_by(InspectionPhoto.id).all()
+        pos = 1
         for row in db_rows:
             if row.slot_id.startswith("video_"):
                 continue
             try:
                 uri = "data:image/jpeg;base64," + _b64.b64encode(row.photo_bytes).decode()
-                db_photo_data_uris.append(uri)
-                if hero_photo_url is None:
+                if hero_photo_url is None and row.slot_id in BODY_SLOTS:
                     hero_photo_url = uri
-                photos_standard.append({
-                    "label": row.slot_id.replace("_", " ").title(),
-                    "url": uri,
-                    "position": len(photos_standard) + 1,
-                })
+                label = PHOTO_LABELS.get(row.slot_id, row.slot_id.replace("_", " ").title())
+                photo = {"label": label, "url": uri, "position": pos}
+                pos += 1
+
+                if row.slot_id in BODY_SLOTS:
+                    photos_body.append(photo)
+                    photos_standard.append(photo)          # section 03 = exterior overview
+                elif row.slot_id in INTERIOR_SLOTS:
+                    photos_interior.append(photo)
+                elif row.slot_id in ENGINE_SLOTS:
+                    photos_engine.append(photo)
+                elif row.slot_id in DOCUMENT_SLOTS:
+                    photos_documents.append(photo)
+                elif row.slot_id.startswith("photo_optional_"):
+                    photos_damages.append(photo)
+                else:
+                    photos_standard.append(photo)          # uncategorized → standard
             except Exception:
                 pass
+        # If no exterior shots, pick any photo for hero
+        if hero_photo_url is None and photos_standard:
+            hero_photo_url = photos_standard[0]["url"]
+        if hero_photo_url is None and photos_interior:
+            hero_photo_url = photos_interior[0]["url"]
     except Exception as db_err:
         logger.warning(f"[Report] Could not load photos from DB: {db_err}")
     finally:
@@ -299,13 +392,13 @@ async def get_report(deal_id: int, request: Request):
             pass
 
     # Fallback: Bitrix fields (older submissions without DB photos)
-    if not photos_standard:
-        for key, (label, field_id, pos) in PHOTO_FIELDS.items():
+    if not photos_standard and not photos_body:
+        for key, (label, field_id, pos_idx) in PHOTO_FIELDS.items():
             urls = _extract_file_urls(raw.get(field_id), auth_token, base_domain)
             url = urls[0] if urls else None
             if url and hero_photo_url is None:
                 hero_photo_url = url
-            photos_standard.append({"label": label, "url": url, "position": pos})
+            photos_standard.append({"label": label, "url": url, "position": pos_idx})
 
     # ── Paint measurements ────────────────────────────────────────────────
     paint_measurements = []
@@ -501,7 +594,7 @@ async def get_report(deal_id: int, request: Request):
         "quick_stats": {
             "year":         vehicle["year"],
             "fuel":         vehicle["fuel_type"],
-            "power":        f"{vehicle['engine_power']} KM" if vehicle["engine_power"] else "",
+            "power":        f"{vehicle['engine_power_hp']} KM" if vehicle["engine_power_hp"] else "",
             "transmission": vehicle["transmission"],
             "mileage":      f"{vehicle['mileage']} km" if vehicle["mileage"] else "",
         },
@@ -513,7 +606,12 @@ async def get_report(deal_id: int, request: Request):
         },
 
         "photos": {
-            "standard": photos_standard,
+            "standard":  photos_standard,
+            "body":      photos_body,
+            "interior":  photos_interior,
+            "engine":    photos_engine,
+            "documents": photos_documents,
+            "damages":   photos_damages,
         },
 
         "paint_measurements": paint_measurements,
