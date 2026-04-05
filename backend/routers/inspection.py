@@ -55,24 +55,39 @@ async def _background_submit(gateway, deal_id: int, body: dict):
     try:
         _update_status('processing')
 
-        # 1. Set Bitrix deal stage to "Inspection Completed"
-        await gateway.call("crm.deal.update", {
-            "ID": deal_id,
-            "fields": {"STAGE_ID": "UC_0T9W8E"}
-        })
-        logger.info(f"[BG] Deal {deal_id} stage → UC_0T9W8E")
+        # 1. Set Bitrix deal stage to "Inspection Completed" (non-fatal)
+        try:
+            await gateway.call("crm.deal.update", {
+                "ID": deal_id,
+                "fields": {"STAGE_ID": "UC_0T9W8E"}
+            })
+            logger.info(f"[BG] Deal {deal_id} stage → UC_0T9W8E")
+        except Exception as stage_err:
+            logger.warning(f"[BG] Stage update failed for deal {deal_id} (non-fatal): {stage_err}")
 
-        # 2. Fetch deal from Bitrix for PDF header + authoritative vehicle data
-        deal_result = await gateway.call("crm.deal.get", {"ID": deal_id})
+        # 2. Fetch deal from Bitrix for PDF header + authoritative vehicle data (non-fatal)
         deal_info = {
-            "title": deal_result.get("TITLE", f"Zlecenie nr. {deal_id}"),
-            "order_number": f"Zlecenie nr. {deal_id} - {deal_result.get('TITLE', '')}",
-            "company_name": deal_result.get("UF_CRM_1766057964319", ""),
-            "client_name": deal_result.get("UF_CRM_1766057941327", ""),
-            "inspection_place": deal_result.get("UF_CRM_1766058185504", ""),
-            "inspection_date": deal_result.get("UF_CRM_1772108256983", ""),
-            "inspector_name": deal_result.get("UF_CRM_1771579888", ""),
+            "title": f"Zlecenie nr. {deal_id}",
+            "order_number": f"Zlecenie nr. {deal_id}",
+            "company_name": "",
+            "client_name": "",
+            "inspection_place": "",
+            "inspection_date": "",
+            "inspector_name": "",
         }
+        try:
+            deal_result = await gateway.call("crm.deal.get", {"ID": deal_id})
+            deal_info = {
+                "title": deal_result.get("TITLE", f"Zlecenie nr. {deal_id}"),
+                "order_number": f"Zlecenie nr. {deal_id} - {deal_result.get('TITLE', '')}",
+                "company_name": deal_result.get("UF_CRM_1766057964319", ""),
+                "client_name": deal_result.get("UF_CRM_1766057941327", ""),
+                "inspection_place": deal_result.get("UF_CRM_1766058185504", ""),
+                "inspection_date": deal_result.get("UF_CRM_1772108256983", ""),
+                "inspector_name": deal_result.get("UF_CRM_1771579888", ""),
+            }
+        except Exception as deal_err:
+            logger.warning(f"[BG] Deal fetch failed for deal {deal_id} (non-fatal, using defaults): {deal_err}")
 
         # 3. Build inspection_data from body; load photos from DB (primary source)
         inspection_data = dict(body)
@@ -123,16 +138,19 @@ async def _background_submit(gateway, deal_id: int, body: dict):
             logger.warning(f"[BG] Could not save PDF to DB: {db_err}")
             db.rollback()
 
-        # 6. Upload PDF to Bitrix deal file field
-        pdf_b64 = b64_module.b64encode(pdf_bytes).decode('utf-8')
-        pdf_filename = f"Protokol_zwrotu_pojazdu_{deal_id}.pdf"
-        await gateway.call("crm.deal.update", {
-            "ID": deal_id,
-            "fields": {
-                "UF_CRM_1772801617": {"fileData": [pdf_filename, pdf_b64]}
-            }
-        })
-        logger.info(f"[BG] PDF uploaded to Bitrix deal {deal_id}")
+        # 6. Upload PDF to Bitrix deal file field (non-fatal — DB is primary storage)
+        try:
+            pdf_b64 = b64_module.b64encode(pdf_bytes).decode('utf-8')
+            pdf_filename = f"Protokol_zwrotu_pojazdu_{deal_id}.pdf"
+            await gateway.call("crm.deal.update", {
+                "ID": deal_id,
+                "fields": {
+                    "UF_CRM_1772801617": {"fileData": [pdf_filename, pdf_b64]}
+                }
+            })
+            logger.info(f"[BG] PDF uploaded to Bitrix deal {deal_id}")
+        except Exception as pdf_upload_err:
+            logger.warning(f"[BG] PDF upload to Bitrix failed for deal {deal_id} (non-fatal, PDF is in DB): {pdf_upload_err}")
 
         # 7. Write public report URL to Bitrix field UF_CRM_1775247032324
         # Non-blocking: failure here must never abort the core submit flow

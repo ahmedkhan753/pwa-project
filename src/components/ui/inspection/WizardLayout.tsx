@@ -139,45 +139,8 @@ async function compressImage(base64: string): Promise<string> {
 
         // ── Fire-and-forget: runs after dashboard appears ──────────────
         (async () => {
-            const rawPhotos = storeData?.photos || [];
-            const photoArray = Array.isArray(rawPhotos) ? rawPhotos : [];
-            const photosWithData = (photoArray as Array<{id: string; base64: string}>)
-                .filter(slot => slot?.base64?.startsWith('data:image'));
-
-            const uploadedPhotoData: Record<string, string> = {};
-
-            // Upload photos one by one (sequential — safe on all browsers)
-            for (const slot of photosWithData) {
-                try {
-                    const compressed = await compressImage(slot.base64);
-                    const b64 = compressed.split(',')[1];
-                    if (!b64) continue;
-
-                    for (let attempt = 0; attempt < 2; attempt++) {
-                        if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
-                        const controller = new AbortController();
-                        const timeout = setTimeout(() => controller.abort(), 30000);
-                        try {
-                            const res = await fetch(`${apiUrl}/files/upload-json`, {
-                                method: 'POST',
-                                signal: controller.signal,
-                                headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    deal_id: Number(dealId),
-                                    field_key: slot.id,
-                                    file_base64: b64,
-                                    filename: `${slot.id}.jpg`
-                                })
-                            });
-                            clearTimeout(timeout);
-                            if (res.ok) { uploadedPhotoData[slot.id] = compressed; break; }
-                        } catch { clearTimeout(timeout); }
-                    }
-                } catch { /* skip failed photo */ }
-            }
+            // Photos are already in DB from immediate step-6 uploads — no need to re-upload.
+            // The backend reads photos directly from the DB when generating the PDF.
 
             // Submit — backend generates PDF in background, returns fast
             const finalSummary = storeData?.finalSummary || {};
@@ -187,7 +150,7 @@ async function compressImage(base64: string): Promise<string> {
                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         deal_id: dealId,
-                        photos: uploadedPhotoData,
+                        photos: {},
                         finalSummary: {
                             signatureAppraiser: finalSummary.signatureAppraiser || '',
                             signatureClient: finalSummary.signatureClient || '',
