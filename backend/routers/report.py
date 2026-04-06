@@ -858,18 +858,20 @@ async def proxy_document(deal_id: int, doc_type: str):
     if doc_type not in ("cepik", "damage_history"):
         raise HTTPException(404, "Unknown document type")
 
-    # Re-fetch the Bitrix deal to get fresh file URLs
+    # Re-fetch the Bitrix deal to get fresh file info
     import os, re
     webhook_url = os.getenv("BITRIX_WEBHOOK_URL", "")
     if not webhook_url:
         raise HTTPException(503, "Bitrix webhook not configured")
 
+    # Extract webhook components
+    # webhook_url = "https://b24-xxx.bitrix24.pl/rest/10/k7nt85mhxjh1pd9k/"
     base_domain = ""
-    auth_token = ""
-    m = re.match(r"(https?://[^/]+)(/rest/\d+/[^/]+/?).*", webhook_url)
+    rest_path = ""
+    m = re.match(r"(https?://[^/]+)(/rest/\d+/[^/]+/?)", webhook_url)
     if m:
         base_domain = m.group(1)
-        auth_token = m.group(2).strip("/").split("/")[-1]
+        rest_path = m.group(2).rstrip("/")  # e.g. /rest/10/k7nt85mhxjh1pd9k
 
     field_id = "UF_CRM_1775497237180" if doc_type == "cepik" else "UF_CRM_1775497290806"
 
@@ -885,20 +887,75 @@ async def proxy_document(deal_id: int, doc_type: str):
         logger.error(f"Bitrix fetch for doc proxy failed: {e}")
         raise HTTPException(502, "Cannot fetch deal from Bitrix")
 
-    file_urls = _extract_file_urls(deal.get(field_id), auth_token, base_domain)
-    if not file_urls:
+    field_value = deal.get(field_id)
+    if not field_value:
         raise HTTPException(404, f"No {doc_type} document uploaded for deal #{deal_id}")
 
-    download_url = file_urls[0]
+    # Extract file ID from the field value
+    file_id = None
+    if isinstance(field_value, (int, float)):
+        file_id = int(field_value)
+    elif isinstance(field_value, str) and field_value.isdigit():
+        file_id = int(field_value)
+    elif isinstance(field_value, dict):
+        file_id = field_value.get("id") or field_value.get("ID") or field_value.get("fileId")
+        if isinstance(file_id, str) and file_id.isdigit():
+            file_id = int(file_id)
+    elif isinstance(field_value, list) and field_value:
+        item = field_value[0]
+        if isinstance(item, (int, float)):
+            file_id = int(item)
+        elif isinstance(item, dict):
+            file_id = item.get("id") or item.get("ID") or item.get("fileId")
+            if isinstance(file_id, str) and file_id.isdigit():
+                file_id = int(file_id)
 
-    # Stream the file from Bitrix to the client
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            bitrix_resp = await client.get(download_url)
-            bitrix_resp.raise_for_status()
-    except Exception as e:
-        logger.error(f"Failed to download file from Bitrix: {e}")
-        raise HTTPException(502, "Failed to download document")
+    if not file_id:
+        logger.error(f"Could not extract file ID from field {field_id}, value: {field_value}")
+        raise HTTPException(404, f"No valid file found for {doc_type} in deal #{deal_id}")
+
+    logger.info(f"[DocProxy] deal={deal_id} doc={doc_type} file_id={file_id}")
+
+    # Try downloading using REST webhook path (avoids show_file.php session auth issue)
+    download_urls = [
+        # Method 1: REST show_file through webhook path (auth handled by path)
+        f"{base_domain}{rest_path}/crm.deal.show/show_file.php?ownerId={deal_id}&fieldName={field_id}&fileId={file_id}&dynamic=Y",
+        # Method 2: Direct disk file download through webhook
+        f"{webhook_url}disk.file.getfilecontent?id={file_id}",
+        # Method 3: Show file with explicit auth parameter
+        f"{base_domain}/bitrix/components/bitrix/crm.deal.show/show_file.php?ownerId={deal_id}&fieldName={field_id}&fileId={file_id}&dynamic=Y",
+    ]
+
+    bitrix_resp = None
+    for url in download_urls:
+        try:
+            logger.info(f"[DocProxy] Trying download: {url[:120]}...")
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                resp = await client.get(url)
+
+            ct = resp.headers.get("content-type", "")
+            # Check if we got an actual file (PDF, binary) not an HTML error page
+            if resp.status_code == 200 and "text/html" not in ct:
+                bitrix_resp = resp
+                logger.info(f"[DocProxy] ✅ Download success via {url[:80]}... (content-type={ct})")
+                break
+            elif resp.status_code == 200 and "text/html" in ct:
+                # Check if body looks like an error page
+                body_preview = resp.text[:200].lower()
+                if "access denied" in body_preview or "login" in body_preview or "bitrix" in body_preview:
+                    logger.warning(f"[DocProxy] ❌ Got HTML auth page from {url[:80]}...")
+                    continue
+                # Might be valid HTML content, unlikely for PDF
+                continue
+            else:
+                logger.warning(f"[DocProxy] ❌ HTTP {resp.status_code} from {url[:80]}...")
+                continue
+        except Exception as e:
+            logger.warning(f"[DocProxy] ❌ Error trying {url[:80]}...: {e}")
+            continue
+
+    if not bitrix_resp:
+        raise HTTPException(502, "Could not download document from Bitrix24. The file may require direct Bitrix access.")
 
     content_type = bitrix_resp.headers.get("content-type", "application/pdf")
     filename_map = {
