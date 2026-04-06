@@ -244,6 +244,7 @@ function CollapsibleSection({ id, icon, num, title, children, defaultOpen = fals
 function DocumentsSection({ dealId }: { dealId: number }) {
   const [status, setStatus] = useState<{ has_cepik: boolean; has_damage_history: boolean }>({ has_cepik: false, has_damage_history: false });
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/report/${dealId}/documents/status`)
@@ -253,55 +254,107 @@ function DocumentsSection({ dealId }: { dealId: number }) {
       .finally(() => setLoading(false));
   }, [dealId]);
 
+  const handleDownload = async (docType: string, filename: string) => {
+    setDownloading(docType);
+    try {
+      const res = await fetch(`/api/report/${dealId}/document/${docType}`);
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { alert('Nie udało się pobrać pliku'); }
+    setDownloading(null);
+  };
+
+  const handleView = (docType: string) => {
+    window.open(`/api/report/${dealId}/document/${docType}`, '_blank', 'noopener,noreferrer');
+  };
+
   if (loading || (!status.has_cepik && !status.has_damage_history)) return null;
 
   const docs = [
     { key: 'cepik', label: 'Raport CEPIK', sub: 'Historia pojazdu z CEPiK', icon: 'fas fa-car-crash',
+      filename: `CEPIK_Raport_${dealId}.pdf`,
       color: '#B71C1C', bg: 'linear-gradient(135deg,#FEF2F2,#fff)', border: 'rgba(183,28,28,0.15)',
-      hoverShadow: 'rgba(183,28,28,0.12)', dlBg: '#FEF2F2', has: status.has_cepik },
+      hoverShadow: 'rgba(183,28,28,0.12)', has: status.has_cepik },
     { key: 'damage_history', label: 'Historia szkodowości', sub: 'Raport szkód i napraw', icon: 'fas fa-shield-alt',
+      filename: `Historia_Szkodowosci_${dealId}.pdf`,
       color: '#F59E0B', bg: 'linear-gradient(135deg,#FFF7ED,#fff)', border: 'rgba(245,158,11,0.2)',
-      hoverShadow: 'rgba(245,158,11,0.12)', dlBg: '#FFFBEB', has: status.has_damage_history },
+      hoverShadow: 'rgba(245,158,11,0.12)', has: status.has_damage_history },
   ].filter(d => d.has);
 
   return (
-    <div style={{ marginTop:24,background:'#fff',borderRadius:16,padding:'24px',
-      boxShadow:'0 2px 12px rgba(0,0,0,0.06)',border:'1px solid #E8E8ED' }}>
-      <div style={{ display:'flex',alignItems:'center',gap:12,marginBottom:20 }}>
-        <div style={{ width:42,height:42,borderRadius:10,background:'linear-gradient(135deg,#B71C1C,#D32F2F)',
-          display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:18,flexShrink:0 }}>
+    <div style={{ marginTop:32,marginBottom:32,background:'#fff',borderRadius:16,padding:'28px 24px',
+      boxShadow:'0 4px 20px rgba(0,0,0,0.08)',border:'2px solid #E8E8ED' }}>
+      <div style={{ display:'flex',alignItems:'center',gap:12,marginBottom:24 }}>
+        <div style={{ width:46,height:46,borderRadius:12,background:'linear-gradient(135deg,#B71C1C,#D32F2F)',
+          display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:20,flexShrink:0 }}>
           <i className="fas fa-file-pdf"/>
         </div>
         <div>
-          <div style={{ fontSize:11,fontWeight:700,color:'#B71C1C',letterSpacing:'2px',textTransform:'uppercase',lineHeight:1.2,marginBottom:2 }}>Dokumenty</div>
-          <div style={{ fontSize:18,fontWeight:700,color:'#1D1D1F',lineHeight:1.3 }}>Raporty historii pojazdu</div>
+          <div style={{ fontSize:11,fontWeight:700,color:'#B71C1C',letterSpacing:'2px',textTransform:'uppercase',lineHeight:1.2,marginBottom:3 }}>Dokumenty</div>
+          <div style={{ fontSize:19,fontWeight:700,color:'#1D1D1F',lineHeight:1.3 }}>Raporty historii pojazdu</div>
         </div>
       </div>
-      <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12 }}>
+      <div style={{ display:'grid',gridTemplateColumns:'1fr',gap:16 }}>
         {docs.map(d => (
-          <a key={d.key} href={`/api/report/${dealId}/document/${d.key}`} target="_blank" rel="noopener noreferrer"
-            style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
-              borderRadius:12,background:d.bg,border:`1px solid ${d.border}`,textDecoration:'none',
-              transition:'all 0.3s',cursor:'pointer' }}
-            onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-2px)'; el.style.boxShadow=`0 4px 16px ${d.hoverShadow}`; el.style.borderColor=d.color; }}
-            onMouseLeave={e => { const el = e.currentTarget; el.style.transform=''; el.style.boxShadow=''; el.style.borderColor=d.border; }}
-          >
-            <div style={{ width:44,height:44,borderRadius:10,background:d.color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-              <i className={d.icon} style={{ color:'#fff',fontSize:18 }}/>
+          <div key={d.key} style={{
+            padding:'20px',borderRadius:14,background:d.bg,
+            border:`1.5px solid ${d.border}`,transition:'all 0.3s',
+          }}>
+            <div style={{ display:'flex',alignItems:'center',gap:14,marginBottom:16 }}>
+              <div style={{ width:48,height:48,borderRadius:12,background:d.color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                <i className={d.icon} style={{ color:'#fff',fontSize:20 }}/>
+              </div>
+              <div style={{ minWidth:0,flex:1 }}>
+                <div style={{ fontSize:16,fontWeight:700,color:'#1D1D1F',marginBottom:3 }}>{d.label}</div>
+                <div style={{ fontSize:12,color:'#86868B',fontWeight:500 }}>{d.sub}</div>
+              </div>
             </div>
-            <div style={{ minWidth:0,flex:1 }}>
-              <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>{d.label}</div>
-              <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>{d.sub}</div>
+            <div style={{ display:'flex',gap:10 }}>
+              <button
+                onClick={() => handleView(d.key)}
+                style={{
+                  flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                  padding:'12px 16px',borderRadius:10,border:`1.5px solid ${d.color}`,
+                  background:'#fff',color:d.color,fontSize:13,fontWeight:700,cursor:'pointer',
+                  transition:'all 0.2s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background=d.color; e.currentTarget.style.color='#fff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.color=d.color; }}
+              >
+                <i className="fas fa-eye" style={{ fontSize:14 }}/>
+                Otwórz
+              </button>
+              <button
+                onClick={() => handleDownload(d.key, d.filename)}
+                disabled={downloading === d.key}
+                style={{
+                  flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                  padding:'12px 16px',borderRadius:10,border:'none',
+                  background:d.color,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',
+                  transition:'all 0.2s',opacity: downloading === d.key ? 0.7 : 1,
+                }}
+                onMouseEnter={e => { if (downloading !== d.key) e.currentTarget.style.opacity='0.85'; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = downloading === d.key ? '0.7' : '1'; }}
+              >
+                <i className={downloading === d.key ? 'fas fa-spinner fa-spin' : 'fas fa-download'} style={{ fontSize:14 }}/>
+                {downloading === d.key ? 'Pobieranie...' : 'Pobierz PDF'}
+              </button>
             </div>
-            <div style={{ width:32,height:32,borderRadius:'50%',background:d.dlBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-              <i className="fas fa-download" style={{ color:d.color,fontSize:13 }}/>
-            </div>
-          </a>
+          </div>
         ))}
       </div>
     </div>
   );
 }
+
 
 
 // ─── GallerySubcategory ────────────────────────────────────────────────────────
