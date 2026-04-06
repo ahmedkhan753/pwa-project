@@ -174,11 +174,11 @@ export default function KosztorysPage() {
         .table-scroll table { min-width:600px; }
         .print-label { display:inline; }
         .thumb-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px; }
-        .veh-row { display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+        .expertise-grid > div { min-width:0; }
+        .veh-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px;
           padding:10px 0; border-bottom:1px solid #F3F4F6; }
         .veh-label { color:#6B7280; font-weight:500; font-size:14px; flex-shrink:0; }
-        .veh-value { font-weight:600; font-size:14px; text-align:right; overflow:hidden;
-          text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+        .veh-value { font-weight:600; font-size:14px; text-align:right; overflow-wrap:anywhere; word-break:break-word; min-width:0; }
         /* \u2500\u2500\u2500 Mobile Responsive \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
         @media (max-width: 768px) {
           .section-title { font-size:18px; margin-bottom:16px; }
