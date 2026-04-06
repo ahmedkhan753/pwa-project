@@ -239,6 +239,102 @@ function CollapsibleSection({ id, icon, num, title, children, defaultOpen = fals
     </section>
   );
 }
+// ─── DocumentsSection ──────────────────────────────────────────────────────────
+
+function DocumentsSection({ dealId }: { dealId: number }) {
+  const [status, setStatus] = useState<{ has_cepik: boolean; has_damage_history: boolean }>({ has_cepik: false, has_damage_history: false });
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState<string | null>(null);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/report/${dealId}/documents/status`);
+      if (res.ok) setStatus(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [dealId]);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const handleUpload = async (docType: string, file: File) => {
+    if (!file.name.toLowerCase().endsWith('.pdf')) { alert('Tylko pliki PDF są dozwolone'); return; }
+    setUploading(docType);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/report/${dealId}/document/${docType}`, { method: 'POST', body: fd });
+      if (res.ok) {
+        setStatus(prev => ({ ...prev, [`has_${docType}`]: true }));
+      } else { alert('Błąd przesyłania pliku'); }
+    } catch { alert('Błąd połączenia'); }
+    setUploading(null);
+  };
+
+  if (loading) return null;
+
+  const docs = [
+    { key: 'cepik', label: 'Raport CEPIK', sub: 'Historia pojazdu z CEPiK', icon: 'fas fa-car-crash',
+      color: '#B71C1C', bg: 'linear-gradient(135deg,#FEF2F2,#fff)', border: 'rgba(183,28,28,0.15)',
+      hoverShadow: 'rgba(183,28,28,0.12)', dlBg: '#FEF2F2', has: status.has_cepik },
+    { key: 'damage_history', label: 'Historia szkodowości', sub: 'Raport szkód i napraw', icon: 'fas fa-shield-alt',
+      color: '#F59E0B', bg: 'linear-gradient(135deg,#FFF7ED,#fff)', border: 'rgba(245,158,11,0.2)',
+      hoverShadow: 'rgba(245,158,11,0.12)', dlBg: '#FFFBEB', has: status.has_damage_history },
+  ];
+
+  return (
+    <div style={{ marginTop:24,background:'#fff',borderRadius:16,padding:'24px',
+      boxShadow:'0 2px 12px rgba(0,0,0,0.06)',border:'1px solid #E8E8ED' }}>
+      <div style={{ display:'flex',alignItems:'center',gap:12,marginBottom:20 }}>
+        <div style={{ width:42,height:42,borderRadius:10,background:'linear-gradient(135deg,#B71C1C,#D32F2F)',
+          display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:18,flexShrink:0 }}>
+          <i className="fas fa-file-pdf"/>
+        </div>
+        <div>
+          <div style={{ fontSize:11,fontWeight:700,color:'#B71C1C',letterSpacing:'2px',textTransform:'uppercase',lineHeight:1.2,marginBottom:2 }}>Dokumenty</div>
+          <div style={{ fontSize:18,fontWeight:700,color:'#1D1D1F',lineHeight:1.3 }}>Raporty historii pojazdu</div>
+        </div>
+      </div>
+      <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12 }}>
+        {docs.map(d => d.has ? (
+          <a key={d.key} href={`/api/report/${dealId}/document/${d.key}`} target="_blank" rel="noopener noreferrer"
+            style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
+              borderRadius:12,background:d.bg,border:`1px solid ${d.border}`,textDecoration:'none',
+              transition:'all 0.3s',cursor:'pointer' }}
+            onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-2px)'; el.style.boxShadow=`0 4px 16px ${d.hoverShadow}`; el.style.borderColor=d.color; }}
+            onMouseLeave={e => { const el = e.currentTarget; el.style.transform=''; el.style.boxShadow=''; el.style.borderColor=d.border; }}
+          >
+            <div style={{ width:44,height:44,borderRadius:10,background:d.color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <i className={d.icon} style={{ color:'#fff',fontSize:18 }}/>
+            </div>
+            <div style={{ minWidth:0,flex:1 }}>
+              <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>{d.label}</div>
+              <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>{d.sub}</div>
+            </div>
+            <div style={{ width:32,height:32,borderRadius:'50%',background:d.dlBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <i className="fas fa-download" style={{ color:d.color,fontSize:13 }}/>
+            </div>
+          </a>
+        ) : (
+          <label key={d.key} style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
+            borderRadius:12,background:'#FAFAFA',border:'2px dashed #D1D1D6',transition:'all 0.3s',cursor:'pointer' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=d.color; e.currentTarget.style.background='#fff'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='#D1D1D6'; e.currentTarget.style.background='#FAFAFA'; }}
+          >
+            <input type="file" accept=".pdf" style={{ display:'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(d.key, f); }} />
+            <div style={{ width:44,height:44,borderRadius:10,background:'#F5F5F7',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <i className={uploading === d.key ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-upload-alt'} style={{ color:d.color,fontSize:18 }}/>
+            </div>
+            <div style={{ minWidth:0,flex:1 }}>
+              <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>{uploading === d.key ? 'Przesyłanie...' : d.label}</div>
+              <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>{uploading === d.key ? 'Proszę czekać' : 'Kliknij aby przesłać PDF'}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ─── GallerySubcategory ────────────────────────────────────────────────────────
 
@@ -1128,72 +1224,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         </div>{/* end sections-stack */}
 
-        {/* Attached PDF Reports */}
-        {(data.attached_reports?.has_cepik || data.attached_reports?.has_damage_history) && (
-          <div style={{ marginTop:24,background:'#fff',borderRadius:16,padding:'24px',
-            boxShadow:'0 2px 12px rgba(0,0,0,0.06)',border:'1px solid #E8E8ED' }}>
-            <div style={{ display:'flex',alignItems:'center',gap:12,marginBottom:20 }}>
-              <div style={{ width:42,height:42,borderRadius:10,background:'linear-gradient(135deg,#B71C1C,#D32F2F)',
-                display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:18,flexShrink:0 }}>
-                <i className="fas fa-file-pdf"/>
-              </div>
-              <div>
-                <div style={{ fontSize:11,fontWeight:700,color:'#B71C1C',letterSpacing:'2px',textTransform:'uppercase',lineHeight:1.2,marginBottom:2 }}>
-                  Dokumenty
-                </div>
-                <div style={{ fontSize:18,fontWeight:700,color:'#1D1D1F',lineHeight:1.3 }}>Raporty historii pojazdu</div>
-              </div>
-            </div>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12 }}>
-              {data.attached_reports.has_cepik && (
-                <a href={`/api/report/${data.deal_id}/document/cepik`} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
-                    borderRadius:12,background:'linear-gradient(135deg,#FEF2F2,#fff)',
-                    border:'1px solid rgba(183,28,28,0.15)',textDecoration:'none',
-                    transition:'all 0.3s',cursor:'pointer' }}
-                  onMouseEnter={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform='translateY(-2px)'; el.style.boxShadow='0 4px 16px rgba(183,28,28,0.12)'; el.style.borderColor='#B71C1C'; }}
-                  onMouseLeave={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform=''; el.style.boxShadow=''; el.style.borderColor='rgba(183,28,28,0.15)'; }}
-                >
-                  <div style={{ width:44,height:44,borderRadius:10,background:'#B71C1C',
-                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    <i className="fas fa-car-crash" style={{ color:'#fff',fontSize:18 }}/>
-                  </div>
-                  <div style={{ minWidth:0,flex:1 }}>
-                    <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>Raport CEPIK</div>
-                    <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>Historia pojazdu z CEPiK</div>
-                  </div>
-                  <div style={{ width:32,height:32,borderRadius:'50%',background:'#FEF2F2',
-                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    <i className="fas fa-download" style={{ color:'#B71C1C',fontSize:13 }}/>
-                  </div>
-                </a>
-              )}
-              {data.attached_reports.has_damage_history && (
-                <a href={`/api/report/${data.deal_id}/document/damage_history`} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
-                    borderRadius:12,background:'linear-gradient(135deg,#FFF7ED,#fff)',
-                    border:'1px solid rgba(245,158,11,0.2)',textDecoration:'none',
-                    transition:'all 0.3s',cursor:'pointer' }}
-                  onMouseEnter={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform='translateY(-2px)'; el.style.boxShadow='0 4px 16px rgba(245,158,11,0.12)'; el.style.borderColor='#F59E0B'; }}
-                  onMouseLeave={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform=''; el.style.boxShadow=''; el.style.borderColor='rgba(245,158,11,0.2)'; }}
-                >
-                  <div style={{ width:44,height:44,borderRadius:10,background:'#F59E0B',
-                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    <i className="fas fa-shield-alt" style={{ color:'#fff',fontSize:18 }}/>
-                  </div>
-                  <div style={{ minWidth:0,flex:1 }}>
-                    <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>Historia szkodowości</div>
-                    <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>Raport szkód i napraw</div>
-                  </div>
-                  <div style={{ width:32,height:32,borderRadius:'50%',background:'#FFFBEB',
-                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    <i className="fas fa-download" style={{ color:'#F59E0B',fontSize:13 }}/>
-                  </div>
-                </a>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Attached PDF Reports — fetched from our server */}
+        <DocumentsSection dealId={data.deal_id} />
 
         {/* Notes */}
         {data.notes && (

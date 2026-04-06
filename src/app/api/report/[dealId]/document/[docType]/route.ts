@@ -55,3 +55,33 @@ export async function GET(
     );
   }
 }
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { dealId: string; docType: string } },
+) {
+  const { dealId, docType } = params;
+
+  if (!['cepik', 'damage_history'].includes(docType)) {
+    return NextResponse.json({ error: 'Unknown document type' }, { status: 404 });
+  }
+
+  try {
+    const formData = await req.formData();
+    const res = await fetch(`${BACKEND}/report/${dealId}/document/${docType}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const body = await res.text();
+    return new NextResponse(body, {
+      status: res.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: 'Backend unavailable', detail: String(err) },
+      { status: 503 },
+    );
+  }
+}
