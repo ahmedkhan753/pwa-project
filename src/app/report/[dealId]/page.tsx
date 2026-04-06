@@ -244,33 +244,16 @@ function CollapsibleSection({ id, icon, num, title, children, defaultOpen = fals
 function DocumentsSection({ dealId }: { dealId: number }) {
   const [status, setStatus] = useState<{ has_cepik: boolean; has_damage_history: boolean }>({ has_cepik: false, has_damage_history: false });
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<string | null>(null);
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/report/${dealId}/documents/status`);
-      if (res.ok) setStatus(await res.json());
-    } catch { /* ignore */ }
-    setLoading(false);
+  useEffect(() => {
+    fetch(`/api/report/${dealId}/documents/status`)
+      .then(r => r.ok ? r.json() : { has_cepik: false, has_damage_history: false })
+      .then(setStatus)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [dealId]);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
-
-  const handleUpload = async (docType: string, file: File) => {
-    if (!file.name.toLowerCase().endsWith('.pdf')) { alert('Tylko pliki PDF są dozwolone'); return; }
-    setUploading(docType);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch(`/api/report/${dealId}/document/${docType}`, { method: 'POST', body: fd });
-      if (res.ok) {
-        setStatus(prev => ({ ...prev, [`has_${docType}`]: true }));
-      } else { alert('Błąd przesyłania pliku'); }
-    } catch { alert('Błąd połączenia'); }
-    setUploading(null);
-  };
-
-  if (loading) return null;
+  if (loading || (!status.has_cepik && !status.has_damage_history)) return null;
 
   const docs = [
     { key: 'cepik', label: 'Raport CEPIK', sub: 'Historia pojazdu z CEPiK', icon: 'fas fa-car-crash',
@@ -279,7 +262,7 @@ function DocumentsSection({ dealId }: { dealId: number }) {
     { key: 'damage_history', label: 'Historia szkodowości', sub: 'Raport szkód i napraw', icon: 'fas fa-shield-alt',
       color: '#F59E0B', bg: 'linear-gradient(135deg,#FFF7ED,#fff)', border: 'rgba(245,158,11,0.2)',
       hoverShadow: 'rgba(245,158,11,0.12)', dlBg: '#FFFBEB', has: status.has_damage_history },
-  ];
+  ].filter(d => d.has);
 
   return (
     <div style={{ marginTop:24,background:'#fff',borderRadius:16,padding:'24px',
@@ -295,7 +278,7 @@ function DocumentsSection({ dealId }: { dealId: number }) {
         </div>
       </div>
       <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12 }}>
-        {docs.map(d => d.has ? (
+        {docs.map(d => (
           <a key={d.key} href={`/api/report/${dealId}/document/${d.key}`} target="_blank" rel="noopener noreferrer"
             style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
               borderRadius:12,background:d.bg,border:`1px solid ${d.border}`,textDecoration:'none',
@@ -314,27 +297,12 @@ function DocumentsSection({ dealId }: { dealId: number }) {
               <i className="fas fa-download" style={{ color:d.color,fontSize:13 }}/>
             </div>
           </a>
-        ) : (
-          <label key={d.key} style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
-            borderRadius:12,background:'#FAFAFA',border:'2px dashed #D1D1D6',transition:'all 0.3s',cursor:'pointer' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor=d.color; e.currentTarget.style.background='#fff'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='#D1D1D6'; e.currentTarget.style.background='#FAFAFA'; }}
-          >
-            <input type="file" accept=".pdf" style={{ display:'none' }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(d.key, f); }} />
-            <div style={{ width:44,height:44,borderRadius:10,background:'#F5F5F7',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-              <i className={uploading === d.key ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-upload-alt'} style={{ color:d.color,fontSize:18 }}/>
-            </div>
-            <div style={{ minWidth:0,flex:1 }}>
-              <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>{uploading === d.key ? 'Przesyłanie...' : d.label}</div>
-              <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>{uploading === d.key ? 'Proszę czekać' : 'Kliknij aby przesłać PDF'}</div>
-            </div>
-          </label>
         ))}
       </div>
     </div>
   );
 }
+
 
 // ─── GallerySubcategory ────────────────────────────────────────────────────────
 
