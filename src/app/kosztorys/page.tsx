@@ -143,8 +143,9 @@ export default function KosztorysPage() {
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
+      <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; }
         body { margin:0; font-family:'Inter',system-ui,sans-serif; background:#FAFAFA; color:#1D1D1F; }
         @media print {
@@ -167,7 +168,7 @@ export default function KosztorysPage() {
         .green { color:#16A34A; }
         .red { color:#DC2626; }
         .orange { color:#EA580C; }
-      `}</style>
+      `}} />
 
       {/* ─── Sticky Nav ─────────────────────────────────────────────── */}
       <nav className="no-print" style={{ position:'sticky',top:0,zIndex:100,background:'#fff',
