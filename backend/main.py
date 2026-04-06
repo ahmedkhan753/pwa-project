@@ -159,9 +159,30 @@ async def lifespan(app: FastAPI):
     logger.info("Backend startup complete")
     logger.info("=" * 60)
 
+    # ─── Periodic OAuth token refresh (keeps refresh_token alive) ─────
+    import asyncio
+    async def _oauth_keep_alive():
+        """Refresh OAuth tokens every 12 hours to prevent expiry."""
+        while True:
+            await asyncio.sleep(12 * 3600)  # 12 hours
+            try:
+                from services.bitrix_oauth import get_oauth
+                oauth = get_oauth()
+                if oauth.has_tokens():
+                    success = await oauth.refresh_tokens()
+                    if success:
+                        logger.info("[OAuth KeepAlive] ✅ Tokens refreshed")
+                    else:
+                        logger.warning("[OAuth KeepAlive] ⚠ Token refresh failed")
+            except Exception as e:
+                logger.error(f"[OAuth KeepAlive] Error: {e}")
+
+    _keep_alive_task = asyncio.create_task(_oauth_keep_alive())
+
     yield
 
     # Shutdown
+    _keep_alive_task.cancel()
     logger.info("Shutting down — closing HTTP client")
     await gateway.close()
 

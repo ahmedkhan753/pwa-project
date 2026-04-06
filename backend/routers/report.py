@@ -910,7 +910,7 @@ async def download_document(deal_id: int, doc_type: str):
         iter([path.read_bytes()]),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "public, max-age=3600",
         },
     )
