@@ -720,6 +720,10 @@ async def get_report(deal_id: int, request: Request):
     sig_appraiser_urls = _extract_file_urls(raw.get("UF_CRM_1772801573"), auth_token, base_domain)
     sig_client_urls    = _extract_file_urls(raw.get("UF_CRM_1772190199297"), auth_token, base_domain)
 
+    # ── Attached PDF reports (CEPIK + damage history) ─────────────────────
+    cepik_urls   = _extract_file_urls(raw.get("UF_CRM_1775497237180"), auth_token, base_domain)
+    damage_urls  = _extract_file_urls(raw.get("UF_CRM_1775497290806"), auth_token, base_domain)
+
     # ── Inspector info ────────────────────────────────────────────────────
     inspector_name  = _safe_str(raw.get("UF_CRM_1771579888"))
     inspector_phone = _safe_str(raw.get("UF_CRM_1773961369947"))
@@ -826,4 +830,9 @@ async def get_report(deal_id: int, request: Request):
         "inspector": {"name": inspector_name, "phone": inspector_phone},
         "client":    {"name": client_name, "company": company_name,
                       "phone": _safe_str(raw.get("UF_CRM_1766058053224"))},
+
+        "attached_reports": {
+            "cepik_url":          cepik_urls[0] if cepik_urls else None,
+            "damage_history_url": damage_urls[0] if damage_urls else None,
+        },
     }

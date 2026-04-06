@@ -55,6 +55,10 @@ interface ReportData {
     client?: { name: string; signature_url?: string };
   };
   inspector?: { name: string; phone?: string };
+  attached_reports?: {
+    cepik_url?: string | null;
+    damage_history_url?: string | null;
+  };
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -1121,6 +1125,73 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         )}
 
         </div>{/* end sections-stack */}
+
+        {/* Attached PDF Reports */}
+        {(data.attached_reports?.cepik_url || data.attached_reports?.damage_history_url) && (
+          <div style={{ marginTop:24,background:'#fff',borderRadius:16,padding:'24px',
+            boxShadow:'0 2px 12px rgba(0,0,0,0.06)',border:'1px solid #E8E8ED' }}>
+            <div style={{ display:'flex',alignItems:'center',gap:12,marginBottom:20 }}>
+              <div style={{ width:42,height:42,borderRadius:10,background:'linear-gradient(135deg,#B71C1C,#D32F2F)',
+                display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:18,flexShrink:0 }}>
+                <i className="fas fa-file-pdf"/>
+              </div>
+              <div>
+                <div style={{ fontSize:11,fontWeight:700,color:'#B71C1C',letterSpacing:'2px',textTransform:'uppercase',lineHeight:1.2,marginBottom:2 }}>
+                  Dokumenty
+                </div>
+                <div style={{ fontSize:18,fontWeight:700,color:'#1D1D1F',lineHeight:1.3 }}>Raporty historii pojazdu</div>
+              </div>
+            </div>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12 }}>
+              {data.attached_reports.cepik_url && (
+                <a href={data.attached_reports.cepik_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
+                    borderRadius:12,background:'linear-gradient(135deg,#FEF2F2,#fff)',
+                    border:'1px solid rgba(183,28,28,0.15)',textDecoration:'none',
+                    transition:'all 0.3s',cursor:'pointer' }}
+                  onMouseEnter={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform='translateY(-2px)'; el.style.boxShadow='0 4px 16px rgba(183,28,28,0.12)'; el.style.borderColor='#B71C1C'; }}
+                  onMouseLeave={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform=''; el.style.boxShadow=''; el.style.borderColor='rgba(183,28,28,0.15)'; }}
+                >
+                  <div style={{ width:44,height:44,borderRadius:10,background:'#B71C1C',
+                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    <i className="fas fa-car-crash" style={{ color:'#fff',fontSize:18 }}/>
+                  </div>
+                  <div style={{ minWidth:0,flex:1 }}>
+                    <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>Raport CEPIK</div>
+                    <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>Historia pojazdu z CEPiK</div>
+                  </div>
+                  <div style={{ width:32,height:32,borderRadius:'50%',background:'#FEF2F2',
+                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    <i className="fas fa-download" style={{ color:'#B71C1C',fontSize:13 }}/>
+                  </div>
+                </a>
+              )}
+              {data.attached_reports.damage_history_url && (
+                <a href={data.attached_reports.damage_history_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
+                    borderRadius:12,background:'linear-gradient(135deg,#FFF7ED,#fff)',
+                    border:'1px solid rgba(245,158,11,0.2)',textDecoration:'none',
+                    transition:'all 0.3s',cursor:'pointer' }}
+                  onMouseEnter={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform='translateY(-2px)'; el.style.boxShadow='0 4px 16px rgba(245,158,11,0.12)'; el.style.borderColor='#F59E0B'; }}
+                  onMouseLeave={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.transform=''; el.style.boxShadow=''; el.style.borderColor='rgba(245,158,11,0.2)'; }}
+                >
+                  <div style={{ width:44,height:44,borderRadius:10,background:'#F59E0B',
+                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    <i className="fas fa-shield-alt" style={{ color:'#fff',fontSize:18 }}/>
+                  </div>
+                  <div style={{ minWidth:0,flex:1 }}>
+                    <div style={{ fontSize:14,fontWeight:700,color:'#1D1D1F',marginBottom:2 }}>Historia szkodowości</div>
+                    <div style={{ fontSize:11,color:'#86868B',fontWeight:500 }}>Raport szkód i napraw</div>
+                  </div>
+                  <div style={{ width:32,height:32,borderRadius:'50%',background:'#FFFBEB',
+                    display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    <i className="fas fa-download" style={{ color:'#F59E0B',fontSize:13 }}/>
+                  </div>
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Notes */}
         {data.notes && (
