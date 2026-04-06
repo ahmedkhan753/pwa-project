@@ -243,9 +243,14 @@ def _extract_file_urls(field_value: Any, auth_token: str, base_domain: str) -> L
             url = item
 
         if url:
-            if auth_token and "auth=" not in url:
-                sep = "&" if "?" in url else "?"
-                url = f"{url}{sep}auth={auth_token}"
+            import re as _re
+            if auth_token:
+                # Replace empty auth= or append if missing
+                if _re.search(r'auth=(&|$)', url):
+                    url = _re.sub(r'auth=(&|$)', f'auth={auth_token}\\1', url)
+                elif 'auth=' not in url:
+                    sep = "&" if "?" in url else "?"
+                    url = f"{url}{sep}auth={auth_token}"
             urls.append(url)
 
     return urls
