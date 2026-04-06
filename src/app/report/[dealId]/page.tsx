@@ -92,6 +92,16 @@ function tireColor(s: string) {
   return '#AEAEB2';
 }
 
+function formatDate(raw: string | undefined): string {
+  if (!raw) return '';
+  try {
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return raw;
+    return d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      + ' · ' + d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+  } catch { return raw; }
+}
+
 // ─── Lightbox ──────────────────────────────────────────────────────────────────
 
 function Lightbox({ photos, startIndex, onClose }: {
@@ -213,9 +223,10 @@ function CollapsibleSection({ id, icon, num, title, children, defaultOpen = fals
         transition:'grid-template-rows 0.5s cubic-bezier(0.4,0,0.2,1)',
       }}>
         <div className="sec-body-inner" style={{ overflow:'hidden',minHeight:0,
-          padding: open ? '20px' : '0 20px',
-          borderTop: open ? '1px solid #E8E8ED' : '1px solid transparent',
-          transition:'padding 0.4s cubic-bezier(0.4,0,0.2,1),border-color 0.3s' }}>
+          padding: open ? '20px' : '0',
+          opacity: open ? 1 : 0,
+          borderTop: open ? '1px solid #E8E8ED' : 'none',
+          transition:'padding 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease, border-color 0.3s' }}>
           {children}
         </div>
       </div>
@@ -547,6 +558,11 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         .rg-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
         .rg-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
 
+        /* ── Sections stack — clean vertical rhythm ── */
+        .sections-stack{display:flex;flex-direction:column;gap:16px;}
+        .sections-stack .section-card{transition:box-shadow 0.3s,transform 0.3s;}
+        .sections-stack .section-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.06);}
+
         .summary-bar{display:flex;align-items:stretch;gap:24px;flex-wrap:wrap;}
         .summary-specs{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
           padding-right:24px;border-right:1px solid #E8E8ED;min-width:200px;}
@@ -570,8 +586,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .summary-damages{justify-content:center;}
           .damage-counter-mobile{min-width:90px!important;padding:10px 12px!important;}
           .damage-counter-val-mobile{font-size:22px!important;}
-          .section-header{padding:16px 16px!important;}
-          .sec-body-inner{padding:12px!important;}
+          .section-header{padding:16px 14px!important;}
+          .sec-body-inner{padding:14px!important;}
+          .sections-stack{gap:12px;}
         }
         @media(max-width:480px){
           .rg-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
@@ -581,6 +598,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .sec-body-inner{padding:10px!important;}
           .section-header{padding:14px 12px!important;}
           .field-val{word-break:break-word;overflow-wrap:anywhere;font-size:14px!important;}
+          .sections-stack{gap:10px;}
         }
 
         @media print {
@@ -595,6 +613,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .rg-tire-paint{grid-template-columns:1fr 1fr!important;}
           .summary-bar{flex-direction:row!important;}
           .summary-specs{border-right:1px solid #E0E0E0!important;border-bottom:none!important;padding-right:16px!important;padding-bottom:0!important;}
+          .sections-stack{gap:12px;}
         }
       `}</style>
 
@@ -764,7 +783,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               { icon:'fas fa-building',         label:'Firma',           val: data.company_name },
               { icon:'fas fa-user',             label:'Klient',          val: data.client_name },
               { icon:'fas fa-map-marker-alt',   label:'Miejsce oględzin',val: data.inspection_place },
-              { icon:'fas fa-calendar-alt',     label:'Data oględzin',   val: data.inspection_date },
+              { icon:'fas fa-calendar-alt',     label:'Data oględzin',   val: formatDate(data.inspection_date) },
               { icon:'fas fa-user-tie',         label:'Inspektor',       val: data.inspector_name },
             ].filter(i => i.val).map(i => (
               <div key={i.label} style={{ display:'flex',alignItems:'flex-start',gap:10 }}>
@@ -773,9 +792,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   color:'#B71C1C',fontSize:12,flexShrink:0 }}>
                   <i className={i.icon}/>
                 </div>
-                <div>
+                <div style={{ minWidth:0 }}>
                   <div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.5px',fontWeight:600 }}>{i.label}</div>
-                  <div style={{ fontSize:13,fontWeight:600,color:'#1D1D1F',marginTop:1 }}>{i.val}</div>
+                  <div style={{ fontSize:13,fontWeight:600,color:'#1D1D1F',marginTop:1,wordBreak:'break-word' }}>{i.val}</div>
                 </div>
               </div>
             ))}
@@ -783,6 +802,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         )}
 
         {/* ── SECTION 01: DANE POJAZDU ── */}
+        <div className="sections-stack">
         <CollapsibleSection id="dane-pojazdu" icon="fas fa-car" num="01 / Dane pojazdu" title="Dane pojazdu">
           <div className="rg-4">
             {[
@@ -823,9 +843,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   color: f.highlight ? '#B71C1C' : '#86868B',fontSize:13 }}>
                   <i className={f.icon}/>
                 </div>
-                <div style={{ display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden' }}>
+                <div style={{ display:'flex',flexDirection:'column',minWidth:0 }}>
                   <div style={{ fontSize:10,textTransform:'uppercase',letterSpacing:'0.5px',
-                    color:'#86868B',fontWeight:600,lineHeight:1.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{f.label}</div>
+                    color:'#86868B',fontWeight:600,lineHeight:1.3 }}>{f.label}</div>
                   <div className="field-val" style={{ fontSize: f.mono ? 12 : 15,fontWeight:600,color:'#1D1D1F',lineHeight:1.3,marginTop:2,
                     fontFamily: f.mono ? '\'Courier New\',monospace' : undefined,
                     wordBreak:'break-word',overflowWrap:'anywhere' } as React.CSSProperties}>
@@ -837,7 +857,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           </div>
         </CollapsibleSection>
 
-        <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+
 
         {/* ── SECTION 02: WYPOSAŻENIE ── */}
         {data.equipment.length > 0 && (
@@ -861,7 +881,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 ))}
               </div>
             </CollapsibleSection>
-            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+
           </>
         )}
 
@@ -1099,6 +1119,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             </CollapsibleSection>
           </>
         )}
+
+        </div>{/* end sections-stack */}
 
         {/* Notes */}
         {data.notes && (
