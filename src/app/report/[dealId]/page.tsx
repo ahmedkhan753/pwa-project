@@ -58,6 +58,8 @@ interface ReportData {
   attached_reports?: {
     cepik_url?: string | null;
     damage_history_url?: string | null;
+    has_cepik?: boolean;
+    has_damage_history?: boolean;
   };
 }
 
@@ -1127,7 +1129,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         </div>{/* end sections-stack */}
 
         {/* Attached PDF Reports */}
-        {(data.attached_reports?.cepik_url || data.attached_reports?.damage_history_url) && (
+        {(data.attached_reports?.has_cepik || data.attached_reports?.has_damage_history) && (
           <div style={{ marginTop:24,background:'#fff',borderRadius:16,padding:'24px',
             boxShadow:'0 2px 12px rgba(0,0,0,0.06)',border:'1px solid #E8E8ED' }}>
             <div style={{ display:'flex',alignItems:'center',gap:12,marginBottom:20 }}>
@@ -1143,8 +1145,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               </div>
             </div>
             <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12 }}>
-              {data.attached_reports.cepik_url && (
-                <a href={data.attached_reports.cepik_url} target="_blank" rel="noopener noreferrer"
+              {data.attached_reports.has_cepik && (
+                <a href={`/api/report/${data.deal_id}/document/cepik`} target="_blank" rel="noopener noreferrer"
                   style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
                     borderRadius:12,background:'linear-gradient(135deg,#FEF2F2,#fff)',
                     border:'1px solid rgba(183,28,28,0.15)',textDecoration:'none',
@@ -1166,8 +1168,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   </div>
                 </a>
               )}
-              {data.attached_reports.damage_history_url && (
-                <a href={data.attached_reports.damage_history_url} target="_blank" rel="noopener noreferrer"
+              {data.attached_reports.has_damage_history && (
+                <a href={`/api/report/${data.deal_id}/document/damage_history`} target="_blank" rel="noopener noreferrer"
                   style={{ display:'flex',alignItems:'center',gap:14,padding:'16px 20px',
                     borderRadius:12,background:'linear-gradient(135deg,#FFF7ED,#fff)',
                     border:'1px solid rgba(245,158,11,0.2)',textDecoration:'none',

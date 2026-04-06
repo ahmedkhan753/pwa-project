@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import StreamingResponse
+import httpx
 from database import SessionLocal
 from models.inspector import InspectionPhoto, InspectionRecord
 
@@ -834,5 +836,77 @@ async def get_report(deal_id: int, request: Request):
         "attached_reports": {
             "cepik_url":          cepik_urls[0] if cepik_urls else None,
             "damage_history_url": damage_urls[0] if damage_urls else None,
+            "has_cepik":          bool(cepik_urls),
+            "has_damage_history": bool(damage_urls),
         },
     }
+
+
+# ─── Document proxy endpoint ───────────────────────────────────────────────────
+
+@router.get("/report/{deal_id}/document/{doc_type}")
+async def proxy_document(deal_id: int, doc_type: str):
+    """
+    Proxy Bitrix24 file downloads so clients never need Bitrix auth.
+    doc_type: 'cepik' or 'damage_history'
+    """
+    if doc_type not in ("cepik", "damage_history"):
+        raise HTTPException(404, "Unknown document type")
+
+    # Re-fetch the Bitrix deal to get fresh file URLs
+    import os, re
+    webhook_url = os.getenv("BITRIX_WEBHOOK_URL", "")
+    if not webhook_url:
+        raise HTTPException(503, "Bitrix webhook not configured")
+
+    base_domain = ""
+    auth_token = ""
+    m = re.match(r"(https?://[^/]+)(/rest/\d+/[^/]+/?).*", webhook_url)
+    if m:
+        base_domain = m.group(1)
+        auth_token = m.group(2).strip("/").split("/")[-1]
+
+    field_id = "UF_CRM_1775497237180" if doc_type == "cepik" else "UF_CRM_1775497290806"
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{webhook_url}crm.deal.get",
+                json={"ID": deal_id},
+            )
+            resp.raise_for_status()
+            deal = resp.json().get("result", {})
+    except Exception as e:
+        logger.error(f"Bitrix fetch for doc proxy failed: {e}")
+        raise HTTPException(502, "Cannot fetch deal from Bitrix")
+
+    file_urls = _extract_file_urls(deal.get(field_id), auth_token, base_domain)
+    if not file_urls:
+        raise HTTPException(404, f"No {doc_type} document uploaded for deal #{deal_id}")
+
+    download_url = file_urls[0]
+
+    # Stream the file from Bitrix to the client
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            bitrix_resp = await client.get(download_url)
+            bitrix_resp.raise_for_status()
+    except Exception as e:
+        logger.error(f"Failed to download file from Bitrix: {e}")
+        raise HTTPException(502, "Failed to download document")
+
+    content_type = bitrix_resp.headers.get("content-type", "application/pdf")
+    filename_map = {
+        "cepik": f"CEPIK_Raport_{deal_id}.pdf",
+        "damage_history": f"Historia_Szkodowosci_{deal_id}.pdf",
+    }
+    filename = filename_map.get(doc_type, f"document_{deal_id}.pdf")
+
+    return StreamingResponse(
+        iter([bitrix_resp.content]),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
