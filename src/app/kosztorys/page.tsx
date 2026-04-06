@@ -168,19 +168,47 @@ export default function KosztorysPage() {
         .green { color:#16A34A; }
         .red { color:#DC2626; }
         .orange { color:#EA580C; }
+        .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        .table-scroll table { min-width:600px; }
+        /* ─── Mobile Responsive ─────────────────────────── */
+        @media (max-width: 768px) {
+          .section-title { font-size:18px; margin-bottom:16px; }
+          .kosz-section { padding:20px 16px !important; }
+          .kosz-hr { margin:0 16px !important; }
+          .expertise-grid { grid-template-columns:1fr !important; gap:20px !important; }
+          .expertise-grid h1 { font-size:22px !important; }
+          .nav-scroll { gap:12px !important; justify-content:flex-start !important; padding:0 8px; }
+          .nav-link { font-size:11px !important; padding:6px 0 !important; }
+          .nav-outer { padding:0 12px !important; }
+          .damage-grid { grid-template-columns:1fr !important; }
+          .amort-bar { flex-direction:column !important; gap:12px !important; align-items:stretch !important; }
+          .amort-bar input[type=range] { min-width:unset !important; width:100% !important; }
+          .grand-total { flex-direction:column !important; gap:8px !important; text-align:center !important; }
+          .grand-total span:last-child { font-size:22px !important; }
+          .equip-grid { grid-template-columns:1fr !important; }
+          .docs-grid { grid-template-columns:1fr !important; }
+          .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
+          .footer-bar { flex-direction:column !important; gap:8px !important; text-align:center !important; }
+          .table-scroll table { min-width:500px; }
+        }
+        @media (max-width: 480px) {
+          .nav-link { font-size:10px !important; }
+          .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
+          .table-scroll table { min-width:420px; }
+        }
       `}} />
 
       {/* ─── Sticky Nav ─────────────────────────────────────────────── */}
       <nav className="no-print" style={{ position:'sticky',top:0,zIndex:100,background:'#fff',
         borderBottom:'1px solid #E5E7EB',boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}>
-        <div style={{ maxWidth:1100,margin:'0 auto',padding:'0 24px',display:'flex',
+        <div className="nav-outer" style={{ maxWidth:1100,margin:'0 auto',padding:'0 24px',display:'flex',
           alignItems:'center',justifyContent:'space-between',gap:16 }}>
           <div style={{ display:'flex',alignItems:'center',gap:10,flexShrink:0 }}>
             <div style={{ width:36,height:36,background:'linear-gradient(135deg,#B71C1C,#D32F2F)',
               borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',
               fontWeight:900,fontSize:14 }}>ZR</div>
           </div>
-          <div style={{ display:'flex',gap:20,overflow:'auto',flex:1,justifyContent:'center' }}>
+          <div className="nav-scroll" style={{ display:'flex',gap:20,overflow:'auto',flex:1,justifyContent:'center' }}>
             {NAV_ITEMS.map(n => (
               <a key={n.id} className="nav-link" onClick={() => scrollTo(n.id)}
                 style={{ cursor:'pointer' }}>{n.label}</a>
@@ -203,12 +231,12 @@ export default function KosztorysPage() {
         minHeight:'100vh',boxShadow:'0 0 40px rgba(0,0,0,0.06)' }}>
 
         {/* ═══ SECTION 1: EXPERTISE ═══════════════════════════════════ */}
-        <section id="expertise" style={{ padding:'32px 40px' }}>
+        <section id="expertise" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div style={{ display:'inline-block',background:'#B71C1C',color:'#fff',padding:'6px 16px',
             borderRadius:6,fontSize:12,fontWeight:700,letterSpacing:1,textTransform:'uppercase',marginBottom:20 }}>
             Ekspertyza
           </div>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:32 }}>
+          <div className="expertise-grid" style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:32 }}>
             {/* Photo carousel placeholder */}
             <div>
               <PhotoSpot id="hero-main" size={280} />
@@ -246,14 +274,14 @@ export default function KosztorysPage() {
           </div>
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ SECTION 2: COST OVERVIEW ═══════════════════════════════ */}
-        <section id="costs" style={{ padding:'32px 40px' }}>
+        <section id="costs" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">ZESTAWIENIE KOSZTÓW</div>
 
           {/* Amortyzacja slider */}
-          <div className="no-print" style={{ marginBottom:24,padding:'16px 20px',borderRadius:12,
+          <div className="no-print amort-bar" style={{ marginBottom:24,padding:'16px 20px',borderRadius:12,
             background:'linear-gradient(135deg,#FEF2F2,#FFFBEB)',border:'1.5px solid rgba(183,28,28,0.15)',
             display:'flex',alignItems:'center',gap:20,flexWrap:'wrap' }}>
             <div style={{ display:'flex',alignItems:'center',gap:10 }}>
@@ -269,7 +297,7 @@ export default function KosztorysPage() {
             </div>
           </div>
 
-          <div style={{ overflowX:'auto' }}>
+          <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
@@ -339,7 +367,7 @@ export default function KosztorysPage() {
           </table>
 
           {/* Grand total */}
-          <div style={{ marginTop:24,display:'flex',justifyContent:'space-between',alignItems:'center',
+          <div className="grand-total" style={{ marginTop:24,display:'flex',justifyContent:'space-between',alignItems:'center',
             padding:'16px 20px',borderRadius:12,background:'#F9FAFB',border:'2px solid #E5E7EB' }}>
             <span style={{ fontSize:16,fontWeight:800,textTransform:'uppercase' }}>
               ŁĄCZNY KOSZT NETTO <span style={{color:'#6B7280',fontWeight:500,fontSize:12}}>(bez VAT)</span>
@@ -370,12 +398,12 @@ export default function KosztorysPage() {
           </table>
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ SECTION 3: DOCUMENTS ═══════════════════════════════════ */}
-        <section id="documents" style={{ padding:'32px 40px' }}>
+        <section id="documents" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">WYKAZ DOKUMENTÓW</div>
-          <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:12 }}>
+          <div className="docs-grid" style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:12 }}>
             {DOCUMENTS.map(([k,v]) => (
               <div key={k} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',
                 padding:'12px 16px',borderRadius:10,background:'#F9FAFB',border:'1px solid #F3F4F6' }}>
@@ -386,12 +414,12 @@ export default function KosztorysPage() {
           </div>
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ SECTION 4: EQUIPMENT ═══════════════════════════════════ */}
-        <section id="equipment" style={{ padding:'32px 40px' }}>
+        <section id="equipment" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">WYPOSAŻENIE POJAZDU</div>
-          <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10 }}>
+          <div className="equip-grid" style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10 }}>
             {EQUIPMENT.map(([k,v]) => {
               const clr = v==='Tak'?'#16A34A':v==='NIE'?'#DC2626':v==='ND'?'#EA580C':'#1D1D1F';
               return (
@@ -405,13 +433,13 @@ export default function KosztorysPage() {
           </div>
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ SECTION 5: TIRES ═══════════════════════════════════════ */}
-        <section id="tires" style={{ padding:'32px 40px' }}>
+        <section id="tires" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">OPONY</div>
           <h4 style={{ fontSize:14,fontWeight:700,color:'#6B7280',marginBottom:12 }}>Opony zamontowane</h4>
-          <div style={{ overflowX:'auto' }}>
+          <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
@@ -434,10 +462,10 @@ export default function KosztorysPage() {
           </div>
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ SECTION 6: DAMAGE ══════════════════════════════════════ */}
-        <section id="damage" style={{ padding:'32px 40px' }}>
+        <section id="damage" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">USZKODZENIA</div>
 
           {/* Interior */}
@@ -457,22 +485,22 @@ export default function KosztorysPage() {
           ))}
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ SECTION 7: BASIC PHOTOS ════════════════════════════════ */}
-        <section id="photos" style={{ padding:'32px 40px' }}>
+        <section id="photos" className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">ZDJĘCIA PODSTAWOWE</div>
-          <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12 }}>
+          <div className="photos-grid" style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12 }}>
             {Array.from({length:12}).map((_,i) => (
               <PhotoSpot key={i} id={`basic-photo-${i}`} size={140} />
             ))}
           </div>
         </section>
 
-        <hr style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
+        <hr className="kosz-hr" style={{ margin:'0 40px',border:'none',borderTop:'1px solid #E5E7EB' }}/>
 
         {/* ═══ COMMENTS + FOOTER ══════════════════════════════════════ */}
-        <section style={{ padding:'32px 40px' }}>
+        <section className="kosz-section" style={{ padding:'32px 40px' }}>
           <div className="section-title">UWAGI</div>
           <div style={{ padding:'16px 20px',borderRadius:10,background:'#F9FAFB',border:'1px solid #F3F4F6',
             fontSize:14,lineHeight:1.8,color:'#374151',fontStyle:'italic' }}>
@@ -481,7 +509,7 @@ export default function KosztorysPage() {
         </section>
 
         {/* Footer */}
-        <footer style={{ padding:'24px 40px',background:'#1D1D1F',color:'#9CA3AF',fontSize:12,
+        <footer className="footer-bar" style={{ padding:'24px 40px',background:'#1D1D1F',color:'#9CA3AF',fontSize:12,
           display:'flex',justifyContent:'space-between',alignItems:'center' }}>
           <div style={{ display:'flex',alignItems:'center',gap:10 }}>
             <div style={{ width:28,height:28,background:'#B71C1C',borderRadius:6,display:'flex',
@@ -508,7 +536,7 @@ function DamageCard({ damage: d, globalAmort }: { damage: DamageItem; globalAmor
   return (
     <div style={{ marginBottom:24,padding:'24px',borderRadius:14,border:'1px solid #E5E7EB',
       background:'#fff',boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
-      <div style={{ display:'grid',gridTemplateColumns:'minmax(200px,2fr) 3fr',gap:24 }}>
+      <div className="damage-grid" style={{ display:'grid',gridTemplateColumns:'minmax(200px,2fr) 3fr',gap:24 }}>
         {/* Photos */}
         <div style={{ display:'grid',gridTemplateColumns:photoCols,gap:8 }}>
           {Array.from({length:d.photoSlots}).map((_,i) => (
