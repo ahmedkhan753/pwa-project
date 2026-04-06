@@ -147,12 +147,14 @@ export default function KosztorysPage() {
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
       <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; }
-        body { margin:0; font-family:'Inter',system-ui,sans-serif; background:#FAFAFA; color:#1D1D1F; }
+        html, body { margin:0; padding:0; font-family:'Inter',system-ui,sans-serif; background:#FAFAFA; color:#1D1D1F;
+          overflow-x:hidden; width:100%; }
         @media print {
           .no-print { display:none !important; }
           body { background:#fff; }
           .page-container { box-shadow:none !important; }
         }
+        .page-container { overflow-x:hidden; max-width:100vw; }
         .nav-link { color:#6B7280; text-decoration:none; font-size:13px; font-weight:600; padding:8px 0;
           border-bottom:2px solid transparent; transition:all 0.2s; white-space:nowrap; }
         .nav-link:hover { color:#1D1D1F; border-bottom-color:#B71C1C; }
@@ -170,6 +172,10 @@ export default function KosztorysPage() {
         .orange { color:#EA580C; }
         .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
         .table-scroll table { min-width:600px; }
+        .vehicle-table td { word-break:break-word; }
+        .vehicle-table td:last-child { max-width:55vw; overflow-wrap:break-word; }
+        .print-label { display:inline; }
+        .thumb-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px; }
         /* ─── Mobile Responsive ─────────────────────────── */
         @media (max-width: 768px) {
           .section-title { font-size:18px; margin-bottom:16px; }
@@ -177,9 +183,13 @@ export default function KosztorysPage() {
           .kosz-hr { margin:0 16px !important; }
           .expertise-grid { grid-template-columns:1fr !important; gap:20px !important; }
           .expertise-grid h1 { font-size:22px !important; }
-          .nav-scroll { gap:12px !important; justify-content:flex-start !important; padding:0 8px; }
+          .nav-scroll { gap:10px !important; justify-content:flex-start !important; padding:0 4px;
+            -ms-overflow-style:none; scrollbar-width:none; }
+          .nav-scroll::-webkit-scrollbar { display:none; }
           .nav-link { font-size:11px !important; padding:6px 0 !important; }
-          .nav-outer { padding:0 12px !important; }
+          .nav-outer { padding:0 8px !important; gap:8px !important; }
+          .print-label { display:none !important; }
+          .print-btn { padding:6px 10px !important; min-width:36px; }
           .damage-grid { grid-template-columns:1fr !important; }
           .amort-bar { flex-direction:column !important; gap:12px !important; align-items:stretch !important; }
           .amort-bar input[type=range] { min-width:unset !important; width:100% !important; }
@@ -190,11 +200,16 @@ export default function KosztorysPage() {
           .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
           .footer-bar { flex-direction:column !important; gap:8px !important; text-align:center !important; }
           .table-scroll table { min-width:500px; }
+          .vehicle-table { font-size:13px !important; }
+          .vehicle-table td { padding:8px 0 !important; }
+          .vehicle-table td:last-child { font-size:12px !important; max-width:50vw; }
+          .thumb-grid { grid-template-columns:repeat(3,1fr) !important; }
         }
         @media (max-width: 480px) {
           .nav-link { font-size:10px !important; }
           .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
           .table-scroll table { min-width:420px; }
+          .vehicle-table td:last-child { max-width:45vw; font-size:11px !important; }
         }
       `}} />
 
@@ -214,7 +229,7 @@ export default function KosztorysPage() {
                 style={{ cursor:'pointer' }}>{n.label}</a>
             ))}
           </div>
-          <button onClick={() => window.print()} className="no-print" style={{
+          <button onClick={() => window.print()} className="no-print print-btn" style={{
             padding:'8px 16px',borderRadius:8,border:'1.5px solid #D1D5DB',background:'#fff',
             color:'#374151',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',
             alignItems:'center',gap:6,flexShrink:0,transition:'all 0.2s',
@@ -222,7 +237,8 @@ export default function KosztorysPage() {
             onMouseEnter={e => { e.currentTarget.style.background='#F3F4F6'; }}
             onMouseLeave={e => { e.currentTarget.style.background='#fff'; }}
           >
-            <i className="fas fa-print" style={{ fontSize:13 }}/> Drukuj
+            <i className="fas fa-print" style={{ fontSize:13 }}/>
+            <span className="print-label">Drukuj</span>
           </button>
         </div>
       </nav>
@@ -240,7 +256,7 @@ export default function KosztorysPage() {
             {/* Photo carousel placeholder */}
             <div>
               <PhotoSpot id="hero-main" size={280} />
-              <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginTop:8 }}>
+              <div className="thumb-grid">
                 {[1,2,3,4].map(i => <PhotoSpot key={i} id={`hero-thumb-${i}`} size={70} />)}
               </div>
             </div>
@@ -250,7 +266,7 @@ export default function KosztorysPage() {
                 {VEHICLE.make} {VEHICLE.model}
               </h1>
               <div style={{ fontSize:15,color:'#6B7280',fontWeight:500,marginBottom:24 }}>{VEHICLE.variant}</div>
-              <table style={{ width:'100%',borderCollapse:'collapse',fontSize:14 }}>
+              <table className="vehicle-table" style={{ width:'100%',borderCollapse:'collapse',fontSize:14,tableLayout:'fixed' }}>
                 <tbody>
                   {([
                     ['VIN', VEHICLE.vin],
