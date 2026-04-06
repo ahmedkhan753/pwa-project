@@ -142,19 +142,19 @@ export default function KosztorysPage() {
   const grandNetTotal = totalNetCost + addNet;
 
   return (
-    <>
+    <div style={{ overflowX:'hidden',width:'100%',maxWidth:'100vw' }}>
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
       <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; }
         html, body { margin:0; padding:0; font-family:'Inter',system-ui,sans-serif; background:#FAFAFA; color:#1D1D1F;
-          overflow-x:hidden; width:100%; }
+          overflow-x:hidden; width:100%; max-width:100vw; }
         @media print {
           .no-print { display:none !important; }
           body { background:#fff; }
           .page-container { box-shadow:none !important; }
         }
-        .page-container { overflow-x:hidden; max-width:100vw; }
+        .page-container { overflow:hidden; width:100%; }
         .nav-link { color:#6B7280; text-decoration:none; font-size:13px; font-weight:600; padding:8px 0;
           border-bottom:2px solid transparent; transition:all 0.2s; white-space:nowrap; }
         .nav-link:hover { color:#1D1D1F; border-bottom-color:#B71C1C; }
@@ -172,11 +172,14 @@ export default function KosztorysPage() {
         .orange { color:#EA580C; }
         .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
         .table-scroll table { min-width:600px; }
-        .vehicle-table td { word-break:break-word; }
-        .vehicle-table td:last-child { max-width:55vw; overflow-wrap:break-word; }
         .print-label { display:inline; }
         .thumb-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px; }
-        /* ─── Mobile Responsive ─────────────────────────── */
+        .veh-row { display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+          padding:10px 0; border-bottom:1px solid #F3F4F6; }
+        .veh-label { color:#6B7280; font-weight:500; font-size:14px; flex-shrink:0; }
+        .veh-value { font-weight:600; font-size:14px; text-align:right; overflow:hidden;
+          text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+        /* \u2500\u2500\u2500 Mobile Responsive \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
         @media (max-width: 768px) {
           .section-title { font-size:18px; margin-bottom:16px; }
           .kosz-section { padding:20px 16px !important; }
@@ -200,16 +203,16 @@ export default function KosztorysPage() {
           .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
           .footer-bar { flex-direction:column !important; gap:8px !important; text-align:center !important; }
           .table-scroll table { min-width:500px; }
-          .vehicle-table { font-size:13px !important; }
-          .vehicle-table td { padding:8px 0 !important; }
-          .vehicle-table td:last-child { font-size:12px !important; max-width:50vw; }
           .thumb-grid { grid-template-columns:repeat(3,1fr) !important; }
+          .veh-row { padding:8px 0; }
+          .veh-label { font-size:13px; }
+          .veh-value { font-size:12px; }
         }
         @media (max-width: 480px) {
           .nav-link { font-size:10px !important; }
           .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
           .table-scroll table { min-width:420px; }
-          .vehicle-table td:last-child { max-width:45vw; font-size:11px !important; }
+          .veh-value { font-size:11px; }
         }
       `}} />
 
@@ -266,9 +269,8 @@ export default function KosztorysPage() {
                 {VEHICLE.make} {VEHICLE.model}
               </h1>
               <div style={{ fontSize:15,color:'#6B7280',fontWeight:500,marginBottom:24 }}>{VEHICLE.variant}</div>
-              <table className="vehicle-table" style={{ width:'100%',borderCollapse:'collapse',fontSize:14,tableLayout:'fixed' }}>
-                <tbody>
-                  {([
+              <div style={{ marginBottom:24 }}>
+                {([
                     ['VIN', VEHICLE.vin],
                     ['Rejestracja', VEHICLE.registration],
                     ['Grupa', VEHICLE.group],
@@ -279,13 +281,12 @@ export default function KosztorysPage() {
                     ['Data ekspertyzy', VEHICLE.expertiseDate],
                     ['Adres oględzin', VEHICLE.address],
                   ] as [string,string][]).map(([k,v]) => (
-                    <tr key={k}>
-                      <td style={{ padding:'10px 0',color:'#6B7280',fontWeight:500,borderBottom:'1px solid #F3F4F6',width:'45%' }}>{k}</td>
-                      <td style={{ padding:'10px 0',fontWeight:600,textAlign:'right',borderBottom:'1px solid #F3F4F6' }}>{v}</td>
-                    </tr>
+                    <div key={k} className="veh-row">
+                      <span className="veh-label">{k}</span>
+                      <span className="veh-value">{v}</span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+              </div>
             </div>
           </div>
         </section>
@@ -535,7 +536,7 @@ export default function KosztorysPage() {
           <div>© 2025 Zaufaj Rzeczoznawcy. Wygenerowano: {VEHICLE.expertiseDate}</div>
         </footer>
       </div>
-    </>
+    </div>
   );
 }
 
