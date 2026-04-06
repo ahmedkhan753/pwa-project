@@ -141,37 +141,46 @@ async def sync_deal_documents(deal_id: int, deal: dict):
         # Build list of download URLs to try
         urls_to_try = []
 
-        # Method 1: If urlMachine or download_url is available (REST-compatible)
-        if download_url:
-            full_url = download_url if download_url.startswith("http") else f"{base_domain}{download_url}"
-            urls_to_try.append((full_url, "urlFromField"))
+        # Method 0 (PRIMARY): show_file.php with OAuth access token
+        from services.bitrix_oauth import get_oauth
+        oauth = get_oauth()
+        oauth_token = await oauth.get_valid_token()
+        if oauth_token and file_id:
+            show_url = field_value.get("showUrl", "") if isinstance(field_value, dict) else ""
+            if show_url:
+                full_show = show_url if show_url.startswith("http") else f"{base_domain}{show_url}"
+                sep = "&" if "?" in full_show else "?"
+                urls_to_try.append((f"{full_show}{sep}auth={oauth_token}", "oauth+showUrl"))
+            urls_to_try.append((
+                f"{base_domain}/bitrix/components/bitrix/crm.deal.show/show_file.php"
+                f"?auth={oauth_token}&ownerId={deal_id}&fieldName={field_id}&fileId={file_id}&dynamic=Y",
+                "oauth+show_file"
+            ))
+        elif not oauth_token:
+            logger.warning("[DocSync] No OAuth token available — install the Bitrix app first")
 
-        # Method 2: show_file.php with webhook key
+        # Method 1: downloadUrl from field with OAuth token injected
+        if download_url and oauth_token:
+            full_url = download_url if download_url.startswith("http") else f"{base_domain}{download_url}"
+            # Replace empty auth= with OAuth token
+            import re as _re
+            if "auth=" in full_url:
+                full_url = _re.sub(r'auth=(&|$)', f'auth={oauth_token}\\1', full_url)
+            else:
+                sep = "&" if "?" in full_url else "?"
+                full_url = f"{full_url}{sep}auth={oauth_token}"
+            urls_to_try.append((full_url, "oauth+downloadUrl"))
+
+        # Method 2: show_file.php with webhook key (fallback)
         if file_id:
             webhook_key = ""
             wm = re.match(r"https?://[^/]+/rest/\d+/([^/]+)", webhook_url)
             if wm:
                 webhook_key = wm.group(1)
-
             urls_to_try.append((
                 f"{base_domain}/bitrix/components/bitrix/crm.deal.show/show_file.php"
                 f"?auth={webhook_key}&ownerId={deal_id}&fieldName={field_id}&fileId={file_id}&dynamic=Y",
                 "show_file+webhook_key"
-            ))
-
-        # Method 3: show_file.php without auth (some Bitrix configs allow)
-        if file_id:
-            urls_to_try.append((
-                f"{base_domain}/bitrix/components/bitrix/crm.deal.show/show_file.php"
-                f"?ownerId={deal_id}&fieldName={field_id}&fileId={file_id}&dynamic=Y",
-                "show_file_noauth"
-            ))
-
-        # Method 4: disk.file.getfilecontent (works if file is on Disk module)
-        if file_id:
-            urls_to_try.append((
-                f"{webhook_url}disk.file.getfilecontent?id={file_id}",
-                "disk_getfilecontent"
             ))
 
         # Try each method
@@ -186,6 +195,107 @@ async def sync_deal_documents(deal_id: int, deal: dict):
             logger.info(f"[DocSync] ✅ Saved {doc_type} for deal {deal_id} ({len(content)} bytes) → {path}")
         else:
             logger.error(f"[DocSync] ❌ All download methods failed for {doc_type} in deal {deal_id}")
+
+
+# ─── OAuth install / callback endpoints ───────────────────────────────────────
+
+@router.post("/bitrix/oauth/install")
+async def bitrix_oauth_install(request: Request):
+    """
+    Called by Bitrix24 when the local app is installed.
+    Captures the initial access_token and refresh_token.
+    """
+    content_type = request.headers.get("content-type", "")
+    try:
+        if "application/json" in content_type:
+            body = await request.json()
+        else:
+            form = await request.form()
+            body = dict(form)
+    except Exception as e:
+        logger.error(f"[OAuth Install] Parse error: {e}")
+        return {"status": "error", "detail": str(e)}
+
+    logger.info(f"[OAuth Install] Received: {body}")
+
+    # Extract tokens from install payload
+    auth_id = body.get("AUTH_ID", "") or body.get("auth[access_token]", "")
+    refresh_id = body.get("REFRESH_ID", "") or body.get("auth[refresh_token]", "")
+    expires_in = int(body.get("AUTH_EXPIRES", 3600) or 3600)
+    domain = body.get("DOMAIN", "") or body.get("auth[domain]", "")
+    member_id = body.get("member_id", "") or body.get("auth[member_id]", "")
+
+    if auth_id and refresh_id:
+        from services.bitrix_oauth import get_oauth
+        oauth = get_oauth()
+        oauth.store_tokens(
+            access_token=auth_id,
+            refresh_token=refresh_id,
+            expires_in=expires_in,
+            domain=domain,
+            member_id=member_id,
+        )
+        logger.info(f"[OAuth Install] ✅ Tokens stored from app install (domain={domain})")
+        return {"status": "ok", "message": "OAuth tokens stored successfully"}
+    else:
+        logger.warning(f"[OAuth Install] No tokens in payload, keys: {list(body.keys())}")
+        return {"status": "warning", "message": "No tokens found in install payload"}
+
+
+@router.get("/bitrix/oauth/callback")
+async def bitrix_oauth_callback(request: Request):
+    """OAuth callback — exchanges authorization code for tokens."""
+    code = request.query_params.get("code", "")
+    domain = request.query_params.get("domain", "")
+    member_id = request.query_params.get("member_id", "")
+
+    if not code:
+        return {"status": "error", "message": "No authorization code provided"}
+
+    client_id = os.getenv("BITRIX_APP_ID", "")
+    client_secret = os.getenv("BITRIX_APP_SECRET", "")
+
+    if not client_id or not client_secret:
+        return {"status": "error", "message": "BITRIX_APP_ID or BITRIX_APP_SECRET not configured"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get("https://oauth.bitrix.info/oauth/token/", params={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+            })
+
+            data = resp.json()
+            logger.info(f"[OAuth Callback] Token response: {resp.status_code}")
+
+            if "error" in data:
+                logger.error(f"[OAuth Callback] Error: {data}")
+                return {"status": "error", "detail": data}
+
+            from services.bitrix_oauth import get_oauth
+            oauth = get_oauth()
+            oauth.store_tokens(
+                access_token=data["access_token"],
+                refresh_token=data["refresh_token"],
+                expires_in=int(data.get("expires_in", 3600)),
+                domain=data.get("domain", domain),
+                member_id=data.get("member_id", member_id),
+            )
+
+            return {"status": "ok", "message": "✅ OAuth authorized! PDF sync is now active."}
+
+    except Exception as e:
+        logger.error(f"[OAuth Callback] Exception: {e}")
+        return {"status": "error", "detail": str(e)}
+
+
+@router.get("/bitrix/oauth/status")
+async def bitrix_oauth_status():
+    """Check OAuth token status."""
+    from services.bitrix_oauth import get_oauth
+    return get_oauth().get_status()
 
 
 # ─── Webhook endpoint ─────────────────────────────────────────────────────────

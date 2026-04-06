@@ -32,6 +32,8 @@ services:
     environment:
       BITRIX_WEBHOOK_URL: ${BITRIX_WEBHOOK_URL}
       BITRIX_STORAGE_ID: ${BITRIX_STORAGE_ID:-1}
+      BITRIX_APP_ID: ${BITRIX_APP_ID:-}
+      BITRIX_APP_SECRET: ${BITRIX_APP_SECRET:-}
       SECRET_KEY: ${SECRET_KEY:-supersecretkey123}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin2025!}
       DATABASE_URL: ${DATABASE_URL:-postgresql://inspection_user:inspection_pass@db:5432/inspection_db}
