@@ -419,16 +419,14 @@ export default function KosztorysPage() {
         borderBottom: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <div className="nav-outer" style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          {/* Logo — dark pill so the white Z is visible */}
+          {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <div style={{ background: '#1D1D1F', borderRadius: 8, padding: '4px 10px',
-              display: 'flex', alignItems: 'center' }}>
             <img
               src="https://i.postimg.cc/VsgMRGYH/SPROWADZENIE-SAMOCHODOW-Z-USAPOD-DOM-(500-x-500-px)-(800-x-500-px)-(700-x-300-px)-2.png"
               alt="Zaufaj Rzeczoznawcy"
-              style={{ height: 30, width: 'auto', objectFit: 'contain', display: 'block' }}
+              style={{ height: 36, width: 'auto', objectFit: 'contain', display: 'block',
+                filter: 'drop-shadow(0 0 0.5px #1D1D1F) drop-shadow(0 0 0.5px #1D1D1F)' }}
             />
-            </div>
           </div>
           <div className="nav-scroll" style={{ display: 'flex', gap: 20, overflow: 'auto', flex: 1, justifyContent: 'center' }}>
             {NAV_ITEMS.map(n => (
