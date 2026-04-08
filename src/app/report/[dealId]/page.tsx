@@ -667,7 +667,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
         html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
         body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-          background:#F5F5F7;color:#1D1D1F;line-height:1.6;min-height:100vh;overflow-x:hidden;
+          background:#F5F5F7!important;color:#1D1D1F!important;line-height:1.6;min-height:100vh;overflow-x:hidden;
           max-width:100vw;}
         ::-webkit-scrollbar{width:7px;}
         ::-webkit-scrollbar-track{background:#F5F5F7;}
