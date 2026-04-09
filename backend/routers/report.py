@@ -1015,6 +1015,56 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
                 pass
 
 
+@router.get("/gallery/{deal_id}/damage/{source}/{dmg_idx}/{photo_idx}")
+async def get_gallery_damage_photo(deal_id: int, source: str, dmg_idx: int, photo_idx: int):
+    """
+    GET /api/gallery/{deal_id}/damage/{source}/{dmg_idx}/{photo_idx}
+    Public — serves a single damage photo stored as base64 inside InspectionRecord JSON.
+    source: "ext" (exterior) or "int" (interior)
+    """
+    import base64 as _b64m
+    from fastapi.responses import Response as _Resp
+
+    if source not in ("ext", "int"):
+        raise HTTPException(status_code=404, detail="Invalid damage source")
+
+    _db2 = SessionLocal()
+    try:
+        rec2 = _db2.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
+        if not rec2:
+            raise HTTPException(status_code=404, detail="Inspection not found")
+
+        raw_json = rec2.exterior_damage_json if source == "ext" else rec2.interior_damage_json
+        if not raw_json:
+            raise HTTPException(status_code=404, detail="No damage data")
+
+        damages = json.loads(raw_json)
+        if dmg_idx >= len(damages) or not isinstance(damages[dmg_idx], dict):
+            raise HTTPException(status_code=404, detail="Damage index out of range")
+
+        photos = damages[dmg_idx].get("photos") or []
+        if photo_idx >= len(photos):
+            raise HTTPException(status_code=404, detail="Photo index out of range")
+
+        b64_str = photos[photo_idx] or ""
+        if "," in b64_str:
+            b64_str = b64_str.split(",", 1)[1]
+
+        img_bytes = _b64m.b64decode(b64_str)
+        return _Resp(content=img_bytes, media_type="image/jpeg",
+                     headers={"Cache-Control": "public, max-age=3600"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[Gallery] Damage photo error deal={deal_id} {source}[{dmg_idx}][{photo_idx}]: {e}")
+        raise HTTPException(status_code=404, detail="Photo not found")
+    finally:
+        try:
+            _db2.close()
+        except Exception:
+            pass
+
+
 @router.get("/gallery/{deal_id}")
 async def get_gallery(deal_id: int, request: Request):
     """
@@ -1031,26 +1081,31 @@ async def get_gallery(deal_id: int, request: Request):
     vehicle_name = f"Pojazd #{deal_id}"
     inspection_date = ""
     _rec = None
+    _ext_damage_json = None
+    _int_damage_json = None
 
     try:
         _db_rec = SessionLocal()
         _rec = _db_rec.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
-        if _rec and _rec.vehicle_json:
-            try:
-                iv = json.loads(_rec.vehicle_json)
-                bi = iv.get("basicInfo") or {}
-                make  = _safe_str(iv.get("make")  or bi.get("make") or "")
-                model = _safe_str(iv.get("model") or bi.get("model") or "")
-                year  = _safe_str(iv.get("year")  or bi.get("year") or "")
-                name  = " ".join(p for p in [make, model, year] if p)
-                if name.strip():
-                    vehicle_name = name
-                inspection_date = (
-                    _safe_str(bi.get("inspectionDate")) or
-                    _safe_str(iv.get("inspectionDate")) or ""
-                )
-            except Exception:
-                pass
+        if _rec:
+            _ext_damage_json = _rec.exterior_damage_json
+            _int_damage_json = _rec.interior_damage_json
+            if _rec.vehicle_json:
+                try:
+                    iv = json.loads(_rec.vehicle_json)
+                    bi = iv.get("basicInfo") or {}
+                    make  = _safe_str(iv.get("make")  or bi.get("make") or "")
+                    model = _safe_str(iv.get("model") or bi.get("model") or "")
+                    year  = _safe_str(iv.get("year")  or bi.get("year") or "")
+                    name  = " ".join(p for p in [make, model, year] if p)
+                    if name.strip():
+                        vehicle_name = name
+                    inspection_date = (
+                        _safe_str(bi.get("inspectionDate")) or
+                        _safe_str(iv.get("inspectionDate")) or ""
+                    )
+                except Exception:
+                    pass
     except Exception:
         pass
     finally:
@@ -1134,6 +1189,39 @@ async def get_gallery(deal_id: int, request: Request):
             _db.close()
         except Exception:
             pass
+
+    # ── Damage photos from InspectionRecord JSON ─────────────────────────
+    # These are photos taken during ExteriorDamageStep / InteriorDamageStep
+    # and stored as base64 inside the damage JSON (not in InspectionPhoto table).
+    for _source, _damage_json_str in [("ext", _ext_damage_json), ("int", _int_damage_json)]:
+        if not _damage_json_str:
+            continue
+        try:
+            _damages = json.loads(_damage_json_str)
+            for _dmg_idx, _dmg in enumerate(_damages):
+                if not isinstance(_dmg, dict):
+                    continue
+                _photos = _dmg.get("photos") or []
+                if not _photos:
+                    continue
+                _part = str(_dmg.get("part") or "").strip()
+                _desc = str(_dmg.get("description") or "").strip()
+                _label = _part or "Uszkodzenie"
+                if _desc:
+                    _label = f"{_label}: {_desc}"
+                for _photo_idx in range(len(_photos)):
+                    _slot_id = f"dmg_{_source}_{_dmg_idx}_photo_{_photo_idx}"
+                    _url = f"/api/gallery/{deal_id}/damage/{_source}/{_dmg_idx}/{_photo_idx}"
+                    media_items.append({
+                        "slot_id":    _slot_id,
+                        "label":      _label,
+                        "category":   "damages",
+                        "is_video":   False,
+                        "url":        _url,
+                        "size_bytes": 0,
+                    })
+        except Exception as _dmg_err:
+            logger.warning(f"[Gallery] Error loading damage photos for deal {deal_id} source={_source}: {_dmg_err}")
 
     if not media_items:
         raise HTTPException(status_code=404, detail=f"No media found for deal {deal_id}")

@@ -33,7 +33,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string; order: numb
   exterior:  { label: 'Nadwozie',       icon: '🚗', order: 1 },
   interior:  { label: 'Wnętrze',        icon: '🪑', order: 2 },
   engine:    { label: 'Silnik',          icon: '⚙️', order: 3 },
-  documents: { label: 'Dokumentacja',    icon: '📄', order: 4 },
+  documents: { label: 'Dokumenty',        icon: '📄', order: 4 },
   damages:   { label: 'Uszkodzenia',     icon: '⚠️', order: 5 },
   videos:    { label: 'Materiały wideo', icon: '🎬', order: 6 },
   other:     { label: 'Inne',            icon: '📎', order: 7 },
@@ -75,6 +75,7 @@ export default function GalleryPage({ params }: { params: { dealId: string } }) 
   const [loading, setLoading] = useState(true);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [downloading, setDownloading] = useState(false);
 
   // Flat list of all media for lightbox navigation
   const allMedia = data?.media ?? [];
@@ -108,6 +109,19 @@ export default function GalleryPage({ params }: { params: { dealId: string } }) 
   const toggleCategory = (cat: string) => {
     setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
+
+  const handleDownloadAll = useCallback(async () => {
+    if (!data || downloading) return;
+    setDownloading(true);
+    const photos = data.media.filter(m => !m.is_video);
+    for (let i = 0; i < photos.length; i++) {
+      const item = photos[i];
+      await downloadMedia(item.url, formatFilename(item, dealId));
+      // Small delay between downloads to avoid browser throttling
+      if (i < photos.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
+    setDownloading(false);
+  }, [data, dealId, downloading]);
 
   // Group media by category
   const grouped = React.useMemo(() => {
@@ -170,6 +184,17 @@ export default function GalleryPage({ params }: { params: { dealId: string } }) 
           <div className="gal-stat">
             <span className="gal-stat-num">{grouped.length}</span>
             <span className="gal-stat-label">Kategorie</span>
+          </div>
+          <div className="gal-stat-divider" />
+          <div className="gal-stat">
+            <button
+              className="gal-dl-all-btn"
+              onClick={handleDownloadAll}
+              disabled={downloading}
+              title="Pobierz wszystkie zdjęcia"
+            >
+              {downloading ? '⏳' : '⬇'} {downloading ? 'Pobieranie...' : 'Pobierz wszystkie'}
+            </button>
           </div>
         </div>
       </header>
@@ -393,6 +418,13 @@ html, body { font-family: 'Inter', system-ui, -apple-system, sans-serif;
 .gal-stat-num { font-size: 20px; font-weight: 800; color: #B71C1C; }
 .gal-stat-label { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
 .gal-stat-divider { width: 1px; background: rgba(255,255,255,0.1); margin: 2px 0; }
+.gal-dl-all-btn {
+  background: #B71C1C; color: #fff; border: none; border-radius: 8px;
+  font-size: 11px; font-weight: 700; padding: 6px 12px; cursor: pointer;
+  white-space: nowrap; transition: background 0.2s; font-family: inherit;
+}
+.gal-dl-all-btn:hover { background: #D32F2F; }
+.gal-dl-all-btn:disabled { background: #555; cursor: default; }
 
 /* ─── Main ─── */
 .gal-main {
