@@ -13,31 +13,57 @@ import { MechanicalStep } from "./steps/MechanicalStep";
 import { NotesStep } from "./steps/NotesStep";
 import { ValidationStep } from "./steps/ValidationStep";
 import { SummaryStep } from "./steps/SummaryStep";
+import { useState, useEffect, useTransition } from "react";
 
-export function StepDispatcher() {
-    const { currentStep } = useInspectionStore();
-
-    // Wrapping in a keyed div forces React to fully unmount the previous
-    // step's DOM tree before mounting the new one.  This avoids the iOS
-    // WebKit "insertBefore / removeChild" crash that occurs when React
-    // tries to patch the DOM in-place across very different component trees.
-    let content: React.ReactNode;
-    switch (currentStep) {
-        case 1:  content = <VehicleDataStep />;      break;
-        case 2:  content = <EquipmentStep />;        break;
-        case 3:  content = <FullEquipmentStep />;    break;
-        case 4:  content = <PaintStep />;            break;
-        case 5:  content = <TiresStep />;            break;
-        case 6:  content = <PhotosStep />;           break;
-        case 7:  content = <ExteriorDamageStep />;   break;
-        case 8:  content = <InteriorDamageStep />;   break;
-        case 9:  content = <MechanicalStep />;       break;
-        case 10: content = <NotesStep />;            break;
-        case 11: content = <ValidationStep />;       break;
-        case 12: content = <SummaryStep />;          break;
-        default: content = <VehicleDataStep />;      break;
+function stepContent(step: number): React.ReactNode {
+    switch (step) {
+        case 1:  return <VehicleDataStep />;
+        case 2:  return <EquipmentStep />;
+        case 3:  return <FullEquipmentStep />;
+        case 4:  return <PaintStep />;
+        case 5:  return <TiresStep />;
+        case 6:  return <PhotosStep />;
+        case 7:  return <ExteriorDamageStep />;
+        case 8:  return <InteriorDamageStep />;
+        case 9:  return <MechanicalStep />;
+        case 10: return <NotesStep />;
+        case 11: return <ValidationStep />;
+        case 12: return <SummaryStep />;
+        default: return <VehicleDataStep />;
     }
-
-    return <div key={`step-${currentStep}`}>{content}</div>;
 }
 
+/**
+ * StepDispatcher — iOS WebKit crash-safe step switcher.
+ *
+ * WHY: iOS WebKit crashes when React mutates a large DOM tree in-place during
+ * a single synchronous rendering pass (removeChild / insertBefore race).
+ *
+ * FIX: We decouple the *store* step (what Zustand says) from the *displayed*
+ * step (what is actually in the DOM).  On each store change we schedule the
+ * DOM switch via requestAnimationFrame, which pushes it to the NEXT paint
+ * cycle.  Combined with React's useTransition this makes the swap non-blocking
+ * and gives WebKit time to settle its internal layout state before we modify
+ * the DOM.  The result: no more removeChild crash on step transitions.
+ */
+export function StepDispatcher() {
+    const currentStep = useInspectionStore((s) => s.currentStep);
+    const [displayStep, setDisplayStep] = useState(currentStep);
+    const [, startTransition] = useTransition();
+
+    useEffect(() => {
+        if (displayStep === currentStep) return;
+
+        // Defer the actual DOM tree swap to the next animation frame.
+        // This breaks the synchronous React reconciliation path that triggers
+        // the iOS WebKit DOM crash on step transitions.
+        const raf = requestAnimationFrame(() => {
+            startTransition(() => {
+                setDisplayStep(currentStep);
+            });
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return <div key={`step-${displayStep}`}>{stepContent(displayStep)}</div>;
+}

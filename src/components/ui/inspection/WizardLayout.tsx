@@ -27,6 +27,7 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
     const totalSteps = STEPS.length;
     const mainRef = useRef<HTMLElement>(null);
+    const didMountRef = useRef(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
@@ -42,8 +43,14 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         } catch { /* ignore */ }
     }, [currentStep]);
 
-    // Bitrix Auto-Sync (Anti-Oops) — debounced, disabled while submitting
+    // Bitrix Auto-Sync (Anti-Oops) — debounced, fires on step CHANGE only.
+    // Critically: skipped on initial mount so that iOS app-restart / Zustand
+    // rehydration does NOT auto-fire a step-1 save and create a 3× submit loop.
     useEffect(() => {
+        if (!didMountRef.current) {
+            didMountRef.current = true;
+            return; // Skip sync on first render (mount / rehydration)
+        }
         if (isSubmitting) return;
 
         const timer = setTimeout(async () => {

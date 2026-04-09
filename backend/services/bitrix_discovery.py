@@ -426,8 +426,15 @@ class BitrixFieldDiscovery:
             # Not an enum field or no items
             return value
 
-        value_upper = str(value).upper().strip()
+        value_str   = str(value).strip()
+        value_upper = value_str.upper()
 
+        # Fast-path: value is already a valid Bitrix item ID — pass through silently.
+        for item in items:
+            if str(item.get("ID", "")) == value_str:
+                return value_str
+
+        # Exact VALUE match (case-insensitive)
         for item in items:
             item_value = str(item.get("VALUE", "")).upper().strip()
             if item_value == value_upper:
