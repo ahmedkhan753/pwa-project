@@ -398,8 +398,8 @@ function GallerySubcategory({ letter, title, icon, count, children, isDamage = f
           </div>
         </div>
       </div>
-      <div style={{ display:'grid',gridTemplateRows: open ? '1fr' : '0fr',transition:'grid-template-rows 0.5s cubic-bezier(0.4,0,0.2,1)' }}>
-        <div style={{ overflow:'hidden',minHeight:0 }}>
+      <div className="gal-sub-body" style={{ display:'grid',gridTemplateRows: open ? '1fr' : '0fr',transition:'grid-template-rows 0.5s cubic-bezier(0.4,0,0.2,1)' }}>
+        <div className="gal-sub-inner" style={{ overflow:'hidden',minHeight:0 }}>
           <div style={{ padding:20 }}>{children}</div>
         </div>
       </div>
@@ -424,7 +424,7 @@ function PhotoCard({ photo, index, total, onClick }: {
     >
       {photo.url && !err ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photo.url} alt={photo.label} loading="lazy" onError={() => setErr(true)}
+        <img src={photo.url} alt={photo.label} onError={() => setErr(true)}
           style={{ width:'100%',height:200,objectFit:'cover',display:'block',background:'#F5F5F7' }} />
       ) : (
         <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
@@ -661,6 +661,27 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
   const allStandardPhotos = data.photos.standard.filter(p => p.url).map(p => ({ label: p.label, url: p.url! }));
 
+  const handlePrint = useCallback(() => {
+    // Wait for all images to finish loading before printing so none appear blank.
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img'));
+    const pending = imgs.filter(img => !img.complete);
+    if (pending.length === 0) {
+      window.print();
+      return;
+    }
+    let settled = 0;
+    const onSettle = () => {
+      settled++;
+      if (settled >= pending.length) window.print();
+    };
+    pending.forEach(img => {
+      img.addEventListener('load',  onSettle, { once: true });
+      img.addEventListener('error', onSettle, { once: true });
+    });
+    // Fallback: print anyway after 5s even if some images fail
+    setTimeout(window.print.bind(window), 5000);
+  }, []);
+
   return (
     <>
       <style>{`
@@ -728,8 +749,17 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .no-print{display:none!important;}
           *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
           @page{size:A4;margin:12mm 10mm;}
-          .section-body{display:grid!important;grid-template-rows:1fr!important;}
           body{background:#fff!important;}
+
+          /* Force ALL collapsible sections open */
+          .section-body{display:grid!important;grid-template-rows:1fr!important;overflow:visible!important;}
+          .sec-body-inner{opacity:1!important;padding:20px!important;overflow:visible!important;border-top:1px solid #E8E8ED!important;}
+
+          /* Force GallerySubcategory sections open */
+          .gal-sub-body{display:grid!important;grid-template-rows:1fr!important;overflow:visible!important;}
+          .gal-sub-inner{overflow:visible!important;}
+
+          /* Layout overrides for print */
           .rg-4{grid-template-columns:repeat(4,minmax(0,1fr))!important;}
           .rg-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important;}
           .rg-photos,.rg-gallery{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
@@ -737,6 +767,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .summary-bar{flex-direction:row!important;}
           .summary-specs{border-right:1px solid #E0E0E0!important;border-bottom:none!important;padding-right:16px!important;padding-bottom:0!important;}
           .sections-stack{gap:12px;}
+
+          /* Ensure images render */
+          img{display:block!important;max-width:100%!important;}
         }
       `}</style>
 
@@ -759,7 +792,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         {/* PDF button */}
         <div className="no-print" style={{ display:'flex',justifyContent:'flex-end',marginBottom:-10,padding:'8px 0' }}>
-          <button onClick={() => window.print()}
+          <button onClick={() => handlePrint()}
             style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:500,
               color:'#86868B',background:'#fff',border:'1px solid #E0E0E0',borderRadius:6,cursor:'pointer',
               fontFamily:'inherit',transition:'all 0.3s' }}
@@ -1146,7 +1179,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                         <div style={{ position:'relative',width:'100%',aspectRatio:'4/3',overflow:'hidden',background:'#F5F5F7' }}>
                           {p.url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.url} alt={p.label} loading="lazy"
+                            <img src={p.url} alt={p.label}
                               style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block' }} />
                           ) : (
                             <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',
@@ -1295,7 +1328,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         {/* PDF bottom */}
         <div className="no-print" style={{ textAlign:'center',padding:'24px 0' }}>
-          <button onClick={() => window.print()}
+          <button onClick={() => handlePrint()}
             style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:500,
               color:'#86868B',background:'#fff',border:'1px solid #E0E0E0',borderRadius:6,cursor:'pointer',fontFamily:'inherit' }}>
             <i className="fas fa-file-pdf"/> Pobierz PDF
