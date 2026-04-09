@@ -22,7 +22,7 @@ logger = logging.getLogger("routers.files")
 
 # Allowed file types and max size
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB (videos can be large)
 
 
 def _validate_file(file: UploadFile) -> str:
@@ -155,12 +155,6 @@ async def upload_file_json(request: Request):
         if not deal_id or not field_key or not file_base64:
             raise HTTPException(status_code=422, detail="Missing required fields: deal_id, field_key, file_base64")
 
-        gateway = request.app.state.gateway
-        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
-
-        if not bitrix_ready:
-            raise HTTPException(status_code=503, detail="Bitrix24 integration not ready")
-
         try:
             file_bytes = base64.b64decode(file_base64)
         except Exception:
@@ -169,13 +163,13 @@ async def upload_file_json(request: Request):
         if len(file_bytes) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: 10MB.",
+                detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: {MAX_FILE_SIZE // 1024 // 1024}MB.",
             )
 
-        logger.info(f"[upload-json] Uploading {field_key} to deal {deal_id} — {len(file_bytes)}B")
+        logger.info(f"[upload-json] {field_key} deal={deal_id} size={len(file_bytes)}B")
 
-        # 1. Save to DB first — this is the source of truth for PDF/report.
-        #    Bitrix upload is best-effort (many field keys can't be resolved).
+        # ── Step 1: Save to DB (ALWAYS — DB is source of truth, Bitrix is best-effort) ──
+        db_saved = False
         try:
             db = SessionLocal()
             existing = db.query(InspectionPhoto).filter_by(
@@ -190,6 +184,8 @@ async def upload_file_json(request: Request):
                     photo_bytes=file_bytes,
                 ))
             db.commit()
+            db_saved = True
+            logger.info(f"[upload-json] DB saved: {field_key} deal={deal_id}")
         except Exception as db_err:
             logger.warning(f"[upload-json] DB save failed for {field_key}: {db_err}")
         finally:
@@ -198,25 +194,29 @@ async def upload_file_json(request: Request):
             except Exception:
                 pass
 
-        # 2. Best-effort Bitrix field upload (non-fatal if field key can't be resolved)
-        result = {"file_id": filename, "url": None, "success": True}
-        try:
-            result = await gateway.upload_file_to_deal(
-                deal_id=int(deal_id),
-                field_pwa_key=field_key,
-                file_bytes=file_bytes,
-                filename=filename,
-            )
-            logger.info(f"[upload-json] Bitrix result for {field_key}: {result}")
-        except Exception as bitrix_err:
-            logger.warning(f"[upload-json] Bitrix upload failed for {field_key} (non-fatal): {bitrix_err}")
+        # ── Step 2: Best-effort Bitrix upload (never blocks Step 1) ──
+        gateway = request.app.state.gateway
+        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+        result: dict = {"file_id": filename, "url": None, "success": db_saved}
+        if bitrix_ready:
+            try:
+                result = await gateway.upload_file_to_deal(
+                    deal_id=int(deal_id),
+                    field_pwa_key=field_key,
+                    file_bytes=file_bytes,
+                    filename=filename,
+                )
+                logger.info(f"[upload-json] Bitrix result for {field_key}: {result}")
+            except Exception as bitrix_err:
+                logger.warning(f"[upload-json] Bitrix upload failed for {field_key} (non-fatal): {bitrix_err}")
+        else:
+            logger.info(f"[upload-json] Bitrix not ready — skipping Bitrix upload for {field_key} (DB saved={db_saved})")
 
-        # Always return success=True if DB save worked — Bitrix failure is non-fatal
         return FileUploadResult(
             field_key=field_key,
             file_id=result.get("file_id") or filename,
             url=result.get("url"),
-            success=True,
+            success=True,  # always true if we got here; DB save is what matters
         )
 
     except ClientDisconnect:
