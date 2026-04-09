@@ -924,3 +924,160 @@ async def document_status(deal_id: int):
         "has_damage_history": _doc_path(deal_id, "damage_history").exists(),
     }
 
+
+# ─── Gallery endpoint ──────────────────────────────────────────────────────────
+
+VIDEO_SLOTS = {"video_engine"}
+
+CATEGORY_SLOTS: dict = {
+    "exterior":  BODY_SLOTS,
+    "interior":  INTERIOR_SLOTS,
+    "engine":    ENGINE_SLOTS,
+    "documents": DOCUMENT_SLOTS,
+}
+
+
+def _detect_video_mime(data: bytes) -> str:
+    """Detect video MIME type from magic bytes; defaults to video/mp4."""
+    if not data:
+        return "video/mp4"
+    if len(data) >= 4 and data[:4] == b'\x1aE\xdf\xa3':
+        return "video/webm"
+    if len(data) >= 12 and data[4:8] == b'ftyp':
+        return "video/mp4"
+    return "video/mp4"
+
+
+@router.get("/gallery/{deal_id}")
+async def get_gallery(deal_id: int, request: Request):
+    """
+    GET /api/gallery/{deal_id}
+    Public — no authentication required.
+    Returns all inspection media (photos + videos) as base64 data URIs,
+    organized by category.
+    """
+    gateway = request.app.state.gateway
+    bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+
+    # ── Vehicle identity from InspectionRecord (primary) ──────────────────
+    vehicle_name = f"Pojazd #{deal_id}"
+    inspection_date = ""
+    _rec = None
+
+    try:
+        _db_rec = SessionLocal()
+        _rec = _db_rec.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
+        if _rec and _rec.vehicle_json:
+            try:
+                iv = json.loads(_rec.vehicle_json)
+                bi = iv.get("basicInfo") or {}
+                make  = _safe_str(iv.get("make")  or bi.get("make") or "")
+                model = _safe_str(iv.get("model") or bi.get("model") or "")
+                year  = _safe_str(iv.get("year")  or bi.get("year") or "")
+                name  = " ".join(p for p in [make, model, year] if p)
+                if name.strip():
+                    vehicle_name = name
+                inspection_date = (
+                    _safe_str(bi.get("inspectionDate")) or
+                    _safe_str(iv.get("inspectionDate")) or ""
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+    finally:
+        try:
+            _db_rec.close()
+        except Exception:
+            pass
+
+    # ── Bitrix fallback for vehicle name ──────────────────────────────────
+    if vehicle_name == f"Pojazd #{deal_id}" and bitrix_ready:
+        try:
+            raw_b = await gateway.call("crm.deal.get", {"ID": deal_id, "select": ["*", "UF_*"]})
+            if raw_b:
+                make  = _safe_str(raw_b.get(VEHICLE_FIELDS["make"]))
+                model = _safe_str(raw_b.get(VEHICLE_FIELDS["model"]))
+                year  = _safe_str(raw_b.get(VEHICLE_FIELDS["year"]))
+                name  = " ".join(p for p in [make, model, year] if p)
+                if name.strip():
+                    vehicle_name = name
+                if not inspection_date:
+                    inspection_date = (
+                        _safe_str(raw_b.get("UF_CRM_1772108256983")) or
+                        _safe_str(raw_b.get("BEGINDATE")) or ""
+                    )
+        except Exception:
+            pass
+
+    # ── Load all media from DB ────────────────────────────────────────────
+    media_items: List[dict] = []
+
+    try:
+        _db = SessionLocal()
+        db_rows = _db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == deal_id
+        ).order_by(InspectionPhoto.id).all()
+
+        if not db_rows and _rec is None:
+            raise HTTPException(status_code=404, detail=f"No media found for deal {deal_id}")
+
+        for row in db_rows:
+            try:
+                is_video = row.slot_id.startswith("video_")
+                label = PHOTO_LABELS.get(row.slot_id, row.slot_id.replace("_", " ").title())
+
+                # Determine category
+                if is_video:
+                    category = "videos"
+                elif row.slot_id in BODY_SLOTS:
+                    category = "exterior"
+                elif row.slot_id in INTERIOR_SLOTS:
+                    category = "interior"
+                elif row.slot_id in ENGINE_SLOTS:
+                    category = "engine"
+                elif row.slot_id in DOCUMENT_SLOTS:
+                    category = "documents"
+                elif row.slot_id.startswith("photo_optional_"):
+                    category = "damages"
+                else:
+                    category = "other"
+
+                if is_video:
+                    mime = _detect_video_mime(row.photo_bytes[:12] if row.photo_bytes else b"")
+                    uri = f"data:{mime};base64," + _b64.b64encode(row.photo_bytes).decode()
+                else:
+                    uri = "data:image/jpeg;base64," + _b64.b64encode(row.photo_bytes).decode()
+
+                media_items.append({
+                    "slot_id":  row.slot_id,
+                    "label":    label,
+                    "category": category,
+                    "is_video": is_video,
+                    "url":      uri,
+                })
+            except Exception:
+                pass
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[Gallery] Error loading media for deal {deal_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load gallery media")
+    finally:
+        try:
+            _db.close()
+        except Exception:
+            pass
+
+    if not media_items:
+        raise HTTPException(status_code=404, detail=f"No media found for deal {deal_id}")
+
+    return {
+        "deal_id":        deal_id,
+        "vehicle_name":   vehicle_name,
+        "inspection_date": inspection_date,
+        "total_photos":   sum(1 for m in media_items if not m["is_video"]),
+        "total_videos":   sum(1 for m in media_items if m["is_video"]),
+        "media":          media_items,
+    }
+

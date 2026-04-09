@@ -41,10 +41,6 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string; order: numb
 
 const LOGO_URL = 'https://i.postimg.cc/VsgMRGYH/SPROWADZENIE-SAMOCHODOW-Z-USAPOD-DOM-500-x-500-px-800-x-500-px-700-x-300-px-2.png';
 
-const API_BASE = typeof window !== 'undefined'
-  ? (window.location.hostname === 'localhost' ? 'http://localhost:8000' : '')
-  : '';
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function downloadMedia(url: string, filename: string) {
@@ -84,7 +80,7 @@ export default function GalleryPage({ params }: { params: { dealId: string } }) 
     }
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/gallery/${dealId}`);
+        const res = await fetch(`/api/gallery/${dealId}`);
         if (!res.ok) {
           const msg = res.status === 404
             ? 'Nie znaleziono materiałów dla tego zlecenia.'
@@ -324,32 +320,32 @@ function Lightbox({
 
 function LoadingScreen() {
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', background: '#0F0F1A', color: '#fff',
-      fontFamily: "'Inter',system-ui,sans-serif",
-    }}>
-      <div style={{
-        width: 48, height: 48, border: '3px solid rgba(255,255,255,0.1)',
-        borderTopColor: '#B71C1C', borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-      }} />
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
       <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { to { transform: rotate(360deg); } }' }} />
-      <p style={{ marginTop: 20, color: '#9CA3AF', fontSize: 14 }}>Ładowanie galerii...</p>
+      <header style={{ background: '#1A1A2E', padding: '20px 24px', position: 'relative', textAlign: 'center' }}>
+        <img src={LOGO_URL} alt="Zaufaj Rzeczoznawcy" style={{ height: 44, width: 'auto' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#B71C1C' }} />
+      </header>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F5F5F7', gap: 16 }}>
+        <div style={{ width: 44, height: 44, border: '3px solid #E8E8ED', borderTopColor: '#B71C1C', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: '#86868B', fontSize: 14, fontWeight: 500 }}>Ładowanie galerii...</p>
+      </div>
     </div>
   );
 }
 
 function ErrorScreen({ message }: { message: string }) {
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', background: '#0F0F1A', color: '#fff',
-      fontFamily: "'Inter',system-ui,sans-serif", padding: 24, textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Wystąpił problem</h2>
-      <p style={{ color: '#9CA3AF', fontSize: 14, maxWidth: 400 }}>{message}</p>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <header style={{ background: '#1A1A2E', padding: '20px 24px', position: 'relative', textAlign: 'center' }}>
+        <img src={LOGO_URL} alt="Zaufaj Rzeczoznawcy" style={{ height: 44, width: 'auto' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#B71C1C' }} />
+      </header>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F5F5F7', padding: 32, textAlign: 'center', gap: 12 }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>⚠️</div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1D1D1F', margin: 0 }}>Wystąpił problem</h2>
+        <p style={{ color: '#86868B', fontSize: 14, maxWidth: 400, margin: 0 }}>{message}</p>
+      </div>
     </div>
   );
 }
@@ -357,110 +353,123 @@ function ErrorScreen({ message }: { message: string }) {
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 
 const GLOBAL_CSS = `
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { font-family: 'Inter', system-ui, sans-serif; background: #0F0F1A; color: #E5E7EB;
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #F5F5F7 !important; color: #1D1D1F !important;
   overflow-x: hidden; width: 100%; max-width: 100vw; -webkit-font-smoothing: antialiased; }
 
 /* ─── Header ─── */
 .gal-header {
-  background: linear-gradient(135deg, #1A1A2E 0%, #16213E 100%);
+  background: #1A1A2E;
   border-bottom: 3px solid #B71C1C;
-  padding: 32px 24px 0;
+  padding: 28px 24px 0;
+  position: relative;
 }
 .gal-header-inner {
   max-width: 1100px; margin: 0 auto;
   display: flex; align-items: center; gap: 20px;
   padding-bottom: 24px;
 }
-.gal-logo { height: 56px; width: auto; flex-shrink: 0; border-radius: 8px; }
-.gal-title { font-size: 24px; font-weight: 800; color: #fff; line-height: 1.2; }
-.gal-subtitle { font-size: 13px; color: #9CA3AF; margin-top: 4px; }
+.gal-logo { height: 50px; width: auto; flex-shrink: 0; }
+.gal-header-text { flex: 1; min-width: 0; }
+.gal-title { font-size: 22px; font-weight: 800; color: #fff; line-height: 1.25; }
+.gal-subtitle { font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 3px; }
 .gal-stats-bar {
   max-width: 1100px; margin: 0 auto;
-  display: flex; gap: 0; padding: 16px 0;
+  display: flex; gap: 0; padding: 14px 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
 .gal-stat {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
-.gal-stat-num { font-size: 22px; font-weight: 800; color: #B71C1C; }
-.gal-stat-label { font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
-.gal-stat-divider { width: 1px; background: rgba(255,255,255,0.1); margin: 4px 0; }
+.gal-stat-num { font-size: 20px; font-weight: 800; color: #B71C1C; }
+.gal-stat-label { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.gal-stat-divider { width: 1px; background: rgba(255,255,255,0.1); margin: 2px 0; }
 
 /* ─── Main ─── */
 .gal-main {
-  max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px;
+  max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px;
+  display: flex; flex-direction: column; gap: 16px;
 }
 
 /* ─── Section ─── */
 .gal-section {
-  margin-bottom: 20px; border-radius: 14px; overflow: hidden;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px; overflow: hidden;
+  background: #fff; border: 1px solid #E8E8ED;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .gal-section-header {
   width: 100%; display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 20px; cursor: pointer;
-  background: rgba(255,255,255,0.04); border: none; color: #E5E7EB;
-  font-family: inherit; transition: background 0.2s;
+  padding: 18px 22px; cursor: pointer;
+  background: #fff; border: none; color: #1D1D1F;
+  font-family: inherit; transition: background 0.2s; position: relative;
 }
-.gal-section-header:hover { background: rgba(255,255,255,0.07); }
-.gal-section-title-row { display: flex; align-items: center; gap: 10px; }
-.gal-section-icon { font-size: 20px; }
-.gal-section-title { font-size: 16px; font-weight: 700; color: #fff; }
+.gal-section-header::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: #B71C1C; border-radius: 0 3px 3px 0;
+}
+.gal-section-header:hover { background: #FAFAFA; }
+.gal-section-title-row { display: flex; align-items: center; gap: 12px; }
+.gal-section-icon { font-size: 18px; }
+.gal-section-title { font-size: 15px; font-weight: 700; color: #1D1D1F; }
 .gal-section-count {
   background: #B71C1C; color: #fff; font-size: 11px; font-weight: 700;
   padding: 2px 8px; border-radius: 10px; min-width: 24px; text-align: center;
 }
 .gal-chevron {
-  font-size: 12px; color: #6B7280; transition: transform 0.3s;
+  font-size: 11px; color: #86868B; transition: transform 0.3s;
 }
 .gal-chevron.open { transform: rotate(180deg); }
 
 /* ─── Grid ─── */
 .gal-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px; padding: 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px; padding: 16px; border-top: 1px solid #E8E8ED;
+  background: #F5F5F7;
 }
 
 /* ─── Card ─── */
 .gal-card {
-  border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px; overflow: hidden; background: #fff;
+  border: 1px solid #E8E8ED;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .gal-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.10);
 }
 .gal-card-media {
   position: relative; aspect-ratio: 4/3; overflow: hidden; cursor: pointer;
-  background: #1A1A2E;
+  background: #E8E8ED;
 }
 .gal-card-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
   transition: transform 0.3s;
 }
-.gal-card:hover .gal-card-img { transform: scale(1.05); }
+.gal-card:hover .gal-card-img { transform: scale(1.04); }
 .gal-card-video {
-  width: 100%; height: 100%; object-fit: cover; display: block; background: #000;
+  width: 100%; height: 100%; object-fit: cover; display: block; background: #1A1A2E;
 }
 .gal-card-overlay {
-  position: absolute; inset: 0; background: rgba(0,0,0,0.4);
+  position: absolute; inset: 0; background: rgba(0,0,0,0.35);
   display: flex; align-items: center; justify-content: center;
   opacity: 0; transition: opacity 0.2s;
 }
 .gal-card:hover .gal-card-overlay { opacity: 1; }
-.gal-zoom-icon { font-size: 28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.gal-zoom-icon { font-size: 26px; }
 .gal-card-info {
-  padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;
+  gap: 6px; background: #fff;
 }
 .gal-card-label {
-  font-size: 12px; font-weight: 600; color: #D1D5DB; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  font-size: 11px; font-weight: 600; color: #3C3C43; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0; line-height: 1.3;
 }
 .gal-card-dl {
-  flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px;
-  background: rgba(183,28,28,0.15); border: 1px solid rgba(183,28,28,0.3);
-  color: #EF4444; font-size: 14px; cursor: pointer; display: flex;
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 6px;
+  background: #FEF2F2; border: 1px solid #FECACA;
+  color: #B71C1C; font-size: 13px; cursor: pointer; display: flex;
   align-items: center; justify-content: center; transition: all 0.2s;
 }
 .gal-card-dl:hover {
@@ -469,51 +478,49 @@ html, body { font-family: 'Inter', system-ui, sans-serif; background: #0F0F1A; c
 
 /* ─── Footer ─── */
 .gal-footer {
-  text-align: center; padding: 32px 24px; border-top: 1px solid rgba(255,255,255,0.06);
-  color: #6B7280; font-size: 12px;
+  text-align: center; padding: 28px 24px; border-top: 1px solid #E8E8ED;
+  color: #86868B; font-size: 12px; background: #fff;
 }
-.gal-footer-logo { height: 36px; margin-bottom: 12px; border-radius: 6px; opacity: 0.7; }
+.gal-footer-logo { height: 32px; margin-bottom: 10px; }
 
 /* ─── Lightbox ─── */
 .lb-overlay {
-  position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.92);
+  position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.93);
   display: flex; align-items: center; justify-content: center;
-  animation: fadeIn 0.2s;
+  animation: lbFadeIn 0.2s;
 }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
 .lb-content {
   position: relative; max-width: 90vw; max-height: 90vh;
   display: flex; flex-direction: column; align-items: center;
 }
 .lb-img {
-  max-width: 90vw; max-height: 75vh; object-fit: contain; border-radius: 8px;
-  box-shadow: 0 0 60px rgba(0,0,0,0.5);
+  max-width: 90vw; max-height: 75vh; object-fit: contain; border-radius: 6px;
+  box-shadow: 0 0 60px rgba(0,0,0,0.6);
 }
 .lb-close {
   position: fixed; top: 16px; right: 16px; z-index: 10001;
-  width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1);
-  border: none; color: #fff; font-size: 20px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.2s;
+  width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.12);
+  border: none; color: #fff; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background 0.2s;
 }
 .lb-close:hover { background: #B71C1C; }
 .lb-prev, .lb-next {
   position: fixed; top: 50%; transform: translateY(-50%);
-  width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.1); color: #fff; font-size: 24px;
+  width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 24px;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: background 0.2s; z-index: 10001;
 }
 .lb-prev { left: 16px; }
 .lb-next { right: 16px; }
-.lb-prev:hover, .lb-next:hover { background: rgba(183,28,28,0.6); }
-.lb-prev:disabled, .lb-next:disabled { opacity: 0.3; cursor: default; }
+.lb-prev:hover, .lb-next:hover { background: rgba(183,28,28,0.7); }
+.lb-prev:disabled, .lb-next:disabled { opacity: 0.25; cursor: default; }
 .lb-info {
-  margin-top: 16px; display: flex; align-items: center; gap: 16px;
-  color: #D1D5DB; font-size: 13px;
+  margin-top: 14px; display: flex; align-items: center; gap: 14px; color: rgba(255,255,255,0.8); font-size: 13px;
 }
 .lb-label { font-weight: 600; }
-.lb-counter { color: #6B7280; }
+.lb-counter { color: rgba(255,255,255,0.4); }
 .lb-download {
   padding: 6px 14px; border-radius: 6px; background: #B71C1C;
   border: none; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -523,28 +530,28 @@ html, body { font-family: 'Inter', system-ui, sans-serif; background: #0F0F1A; c
 
 /* ─── Mobile ─── */
 @media (max-width: 768px) {
-  .gal-header { padding: 20px 16px 0; }
-  .gal-header-inner { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .gal-logo { height: 40px; }
-  .gal-title { font-size: 20px; }
+  .gal-header { padding: 18px 16px 0; }
+  .gal-header-inner { flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 18px; }
+  .gal-logo { height: 38px; }
+  .gal-title { font-size: 18px; }
   .gal-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 12px; }
   .gal-section-header { padding: 14px 16px; }
   .gal-section-title { font-size: 14px; }
-  .gal-card-label { font-size: 11px; }
+  .gal-card-label { font-size: 10px; }
   .lb-prev, .lb-next { width: 36px; height: 36px; font-size: 20px; }
   .lb-info { flex-direction: column; gap: 8px; }
 }
 @media (max-width: 480px) {
   .gal-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 8px; }
-  .gal-stat-num { font-size: 18px; }
-  .gal-card-info { padding: 8px 10px; }
+  .gal-stat-num { font-size: 17px; }
+  .gal-card-info { padding: 7px 8px; }
+  .gal-main { padding: 16px 12px 48px; gap: 12px; }
 }
 
 /* ─── Print ─── */
 @media print {
   .gal-card-dl, .gal-card-overlay, .lb-overlay { display: none !important; }
   body { background: #fff !important; color: #000 !important; }
-  .gal-header { background: #fff !important; border-color: #000 !important; }
   .gal-section { break-inside: avoid; }
   .gal-card { break-inside: avoid; }
 }

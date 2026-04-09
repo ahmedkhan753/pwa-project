@@ -192,6 +192,17 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         except Exception as url_err:
             logger.warning(f"[BG] Could not save report URL to Bitrix deal {deal_id} (non-fatal): {url_err}")
 
+        # 8. Write gallery URL to Bitrix field UF_CRM_1775683960588
+        try:
+            gallery_url = f"https://app.zaufajrzeczoznawcy.pl/gallery/{deal_id}"
+            await gateway.call("crm.deal.update", {
+                "ID": deal_id,
+                "fields": {"UF_CRM_1775683960588": gallery_url}
+            })
+            logger.info(f"[BG] Gallery URL saved to Bitrix deal {deal_id}: {gallery_url}")
+        except Exception as gallery_err:
+            logger.warning(f"[BG] Could not save gallery URL to Bitrix deal {deal_id} (non-fatal): {gallery_err}")
+
         _update_status('done')
         logger.info(f"[BG] ✅ Background submission complete for deal {deal_id}")
 
