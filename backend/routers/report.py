@@ -517,15 +517,15 @@ async def get_report(deal_id: int, request: Request):
         for i, d in enumerate(lst, 1):
             if not isinstance(d, dict):
                 continue
-            t   = d.get("type") or d.get("damageType") or d.get("rodzaj", "")
-            loc = d.get("location") or d.get("part") or d.get("element") or d.get("miejsce", "")
+            t   = _safe_str(d.get("type") or d.get("damageType") or d.get("rodzaj") or "")
+            loc = _safe_str(d.get("location") or d.get("part") or d.get("element") or d.get("miejsce") or "")
             out.append({
                 "index":       i,
                 "type":        t,
                 "location":    loc,
-                "size":        d.get("size") or d.get("rozmiar", ""),
-                "severity":    d.get("severity", "cosmetic"),
-                "description": d.get("description") or d.get("notes") or d.get("opis", ""),
+                "size":        _safe_str(d.get("size") or d.get("rozmiar") or ""),
+                "severity":    _safe_str(d.get("severity") or "cosmetic"),
+                "description": _safe_str(d.get("description") or d.get("notes") or d.get("opis") or ""),
             })
         return out
 

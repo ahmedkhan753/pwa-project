@@ -608,8 +608,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           documents_check:    Array.isArray(d.documents_check)    ? d.documents_check    : [],
           tires:              Array.isArray(d.tires)              ? d.tires              : [],
           paint_measurements: Array.isArray(d.paint_measurements) ? d.paint_measurements : [],
-          damages:            Array.isArray(d.damages)            ? d.damages            : [],
-          interior_damages:   Array.isArray(d.interior_damages)   ? d.interior_damages   : [],
+          damages:            Array.isArray(d.damages)            ? d.damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||'') })) : [],
+          interior_damages:   Array.isArray(d.interior_damages)   ? d.interior_damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||'') })) : [],
+          notes:              d.notes != null && typeof d.notes !== 'string' ? String(d.notes) : (d.notes ?? ''),
           damage_summary:     d.damage_summary  ?? { cosmetic:0, structural:0, bodywork:0 },
           quick_stats:        d.quick_stats     ?? {},
           photos: {
