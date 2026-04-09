@@ -611,8 +611,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           damages:            Array.isArray(d.damages)            ? d.damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||'') })) : [],
           interior_damages:   Array.isArray(d.interior_damages)   ? d.interior_damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||'') })) : [],
           notes:              d.notes != null && typeof d.notes !== 'string' ? String(d.notes) : (d.notes ?? ''),
+          vehicle: d.vehicle ? Object.fromEntries(Object.entries(d.vehicle).map(([k,v]) => [k, v == null || typeof v === 'object' ? (typeof v === 'boolean' ? v : '') : v])) : d.vehicle,
           damage_summary:     d.damage_summary  ?? { cosmetic:0, structural:0, bodywork:0 },
-          quick_stats:        d.quick_stats     ?? {},
+          quick_stats:        d.quick_stats ? Object.fromEntries(Object.entries(d.quick_stats).map(([k,v]) => [k, v == null || typeof v === 'object' ? '' : v])) : {},
           photos: {
             standard:  Array.isArray(d.photos?.standard)  ? d.photos.standard  : [],
             body:      Array.isArray(d.photos?.body)      ? d.photos.body      : [],

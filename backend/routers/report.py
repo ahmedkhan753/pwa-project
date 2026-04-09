@@ -398,20 +398,20 @@ async def get_report(deal_id: int, request: Request):
         iv = insp_rec_vehicle
         bi = iv.get("basicInfo") or {}
         _fallbacks = {
-            "vin":                     iv.get("vin", ""),
-            "make":                    iv.get("make", ""),
-            "model":                   iv.get("model", ""),
-            "year":                    str(iv.get("year", "")),
-            "color":                   iv.get("color", ""),
-            "engine_capacity_cc":      str(iv.get("engineCapacity", "")),
-            "engine_power_hp":         str(iv.get("enginePower", "")),
-            "fuel_type":               iv.get("fuelType", ""),
-            "body_type":               iv.get("bodyType", ""),
-            "transmission":            iv.get("gearboxType", ""),
-            "drive_type":              iv.get("driveType", ""),
-            "registration_plate":      iv.get("registrationPlates", ""),
-            "first_registration_date": iv.get("firstRegistration", ""),
-            "mileage":                 str(iv.get("mileage", "")),
+            "vin":                     _safe_str(iv.get("vin")),
+            "make":                    _safe_str(iv.get("make")),
+            "model":                   _safe_str(iv.get("model")),
+            "year":                    _safe_str(iv.get("year")),
+            "color":                   _safe_str(iv.get("color")),
+            "engine_capacity_cc":      _safe_str(iv.get("engineCapacity")),
+            "engine_power_hp":         _safe_str(iv.get("enginePower")),
+            "fuel_type":               _safe_str(iv.get("fuelType")),
+            "body_type":               _safe_str(iv.get("bodyType")),
+            "transmission":            _safe_str(iv.get("gearboxType")),
+            "drive_type":              _safe_str(iv.get("driveType")),
+            "registration_plate":      _safe_str(iv.get("registrationPlates")),
+            "first_registration_date": _safe_str(iv.get("firstRegistration")),
+            "mileage":                 _safe_str(iv.get("mileage")),
         }
         for k, v in _fallbacks.items():
             if not vehicle.get(k) and v:
@@ -705,7 +705,7 @@ async def get_report(deal_id: int, request: Request):
         elif isinstance(mech_raw, dict):
             mechanical = mech_raw
 
-    warning_lights = _safe_str(raw.get("UF_CRM_1772613819989")) or mechanical.get("warningLights", "")
+    warning_lights = _safe_str(raw.get("UF_CRM_1772613819989")) or _safe_str(mechanical.get("warningLights"))
     ac_raw = mechanical.get("acWorking")
 
     # ── Notes — DB record first ───────────────────────────────────────────
