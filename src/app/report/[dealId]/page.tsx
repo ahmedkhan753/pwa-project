@@ -465,20 +465,20 @@ function TireCard({ tire }: { tire: ReportData['tires'][0] }) {
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:6 }}>
           {tire.brand && (<>
             <div><div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.3px',fontWeight:600 }}>Marka</div>
-              <div style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.brand}</div></div>
+              <div className="tire-val" style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.brand}</div></div>
             <div><div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.3px',fontWeight:600 }}>Model</div>
-              <div style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.model || '—'}</div></div>
+              <div className="tire-val" style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.model || '—'}</div></div>
           </>)}
           {tire.size && (<>
             <div><div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.3px',fontWeight:600 }}>Rozmiar</div>
-              <div style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.size}</div></div>
+              <div className="tire-val" style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.size}</div></div>
             <div><div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.3px',fontWeight:600 }}>DOT</div>
-              <div style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.dot || '—'}</div></div>
+              <div className="tire-val" style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.dot || '—'}</div></div>
           </>)}
           {tire.season && (
             <div style={{ gridColumn:'1/-1' }}>
               <div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.3px',fontWeight:600 }}>Sezon</div>
-              <div style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.season}</div>
+              <div className="tire-val" style={{ fontSize:13,color:'#1D1D1F',fontWeight:600,marginBottom:4 }}>{tire.season}</div>
             </div>
           )}
         </div>
@@ -633,6 +633,48 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
     setLightbox({ photos, idx });
   }, []);
 
+  // ⚠️ ALL HOOKS MUST BE DECLARED BEFORE EARLY RETURNS — Rules of Hooks (React #310)
+  const handlePrint = useCallback(() => {
+    // Force-open all collapsibles BEFORE print so content/images render.
+    // The CSS @media print overrides also do this, but adding the class
+    // applies it earlier so images get a chance to actually render to the
+    // browser's print layout pipeline.
+    document.body.classList.add('force-print-open');
+
+    const cleanup = () => document.body.classList.remove('force-print-open');
+    window.addEventListener('afterprint', cleanup, { once: true });
+
+    const doPrint = () => {
+      try { window.print(); }
+      finally {
+        // Safety: some browsers don't fire afterprint reliably
+        setTimeout(cleanup, 1000);
+      }
+    };
+
+    // Wait for all images to finish loading before printing so none appear blank.
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img'));
+    const pending = imgs.filter(img => !img.complete);
+    if (pending.length === 0) {
+      // Defer one frame so the force-print-open layout takes effect
+      requestAnimationFrame(() => requestAnimationFrame(doPrint));
+      return;
+    }
+    let settled = 0;
+    const onSettle = () => {
+      settled++;
+      if (settled >= pending.length) {
+        requestAnimationFrame(() => requestAnimationFrame(doPrint));
+      }
+    };
+    pending.forEach(img => {
+      img.addEventListener('load',  onSettle, { once: true });
+      img.addEventListener('error', onSettle, { once: true });
+    });
+    // Fallback: print anyway after 5s even if some images fail
+    setTimeout(doPrint, 5000);
+  }, []);
+
   if (loading) return <LoadingScreen />;
 
   if (error || !data) {
@@ -663,27 +705,6 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
   const allStandardPhotos = data.photos.standard.filter(p => p.url).map(p => ({ label: p.label, url: p.url! }));
 
-  const handlePrint = useCallback(() => {
-    // Wait for all images to finish loading before printing so none appear blank.
-    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img'));
-    const pending = imgs.filter(img => !img.complete);
-    if (pending.length === 0) {
-      window.print();
-      return;
-    }
-    let settled = 0;
-    const onSettle = () => {
-      settled++;
-      if (settled >= pending.length) window.print();
-    };
-    pending.forEach(img => {
-      img.addEventListener('load',  onSettle, { once: true });
-      img.addEventListener('error', onSettle, { once: true });
-    });
-    // Fallback: print anyway after 5s even if some images fail
-    setTimeout(window.print.bind(window), 5000);
-  }, []);
-
   return (
     <>
       <style>{`
@@ -709,10 +730,14 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         .sections-stack .section-card{transition:box-shadow 0.3s,transform 0.3s;}
         .sections-stack .section-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.06);}
 
-        .summary-bar{display:flex;align-items:stretch;gap:24px;flex-wrap:wrap;}
+        .summary-bar{display:flex;align-items:stretch;gap:24px;flex-wrap:wrap;min-width:0;}
         .summary-specs{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
-          padding-right:24px;border-right:1px solid #E8E8ED;min-width:200px;}
+          padding-right:24px;border-right:1px solid #E8E8ED;min-width:0;}
+        .summary-specs > span{max-width:100%;overflow:hidden;text-overflow:ellipsis;}
         .summary-damages{display:flex;gap:12px;flex-shrink:0;align-items:stretch;flex-wrap:wrap;}
+        /* Defensive overflow safety — long enum labels (e.g., body type) won't break layout */
+        .field-val,.tire-val{word-break:break-word;overflow-wrap:anywhere;min-width:0;}
+        .stat-val{word-break:break-word;overflow-wrap:anywhere;hyphens:auto;}
 
         @media(max-width:1024px){
           .rg-4{grid-template-columns:repeat(3,minmax(0,1fr));}
@@ -746,6 +771,19 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .field-val{word-break:break-word;overflow-wrap:anywhere;font-size:14px!important;}
           .sections-stack{gap:10px;}
         }
+
+        /* ── .force-print-open: applied to <body> just before window.print()
+              so collapsed sections expand BEFORE the print dialog opens.
+              Otherwise images inside hidden grid rows may not render. ── */
+        body.force-print-open .section-body,
+        body.force-print-open .gal-sub-body{
+          display:grid!important;grid-template-rows:1fr!important;overflow:visible!important;
+        }
+        body.force-print-open .sec-body-inner{
+          opacity:1!important;padding:20px!important;overflow:visible!important;
+          border-top:1px solid #E8E8ED!important;
+        }
+        body.force-print-open .gal-sub-inner{overflow:visible!important;}
 
         @media print {
           .no-print{display:none!important;}
@@ -877,7 +915,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform=''; (e.currentTarget as HTMLDivElement).style.boxShadow='0 1px 3px rgba(0,0,0,0.04)'; }}
               >
                 <div style={{ fontSize:20,color:'#B71C1C',marginBottom:6 }}><i className={s.icon}/></div>
-                <div style={{ fontSize:17,fontWeight:700,color:'#1D1D1F',lineHeight:1.2 }}>{String(s.value)}</div>
+                <div className="stat-val" style={{ fontSize:17,fontWeight:700,color:'#1D1D1F',lineHeight:1.2 }}>{String(s.value)}</div>
                 <div style={{ fontSize:10,color:'#86868B',textTransform:'uppercase',letterSpacing:'0.5px',fontWeight:500,marginTop:2 }}>{s.label}</div>
               </div>
             ))}
@@ -900,7 +938,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               ].filter(s => s.val).map(s => (
                 <span key={s.label} style={{ display:'inline-flex',alignItems:'center',gap:5,
                   background:'#F5F5F7',color:'#1D1D1F',fontSize:13,fontWeight:500,
-                  padding:'5px 12px',borderRadius:6,border:'1px solid #E8E8ED',whiteSpace:'nowrap' }}>
+                  padding:'5px 12px',borderRadius:6,border:'1px solid #E8E8ED',
+                  maxWidth:'100%',wordBreak:'break-word',overflowWrap:'anywhere' }}>
                   <span style={{ color:'#86868B',fontWeight:600,fontSize:11,textTransform:'uppercase',letterSpacing:'0.3px' }}>{s.label}</span>
                   {' '}{String(s.val)}
                 </span>

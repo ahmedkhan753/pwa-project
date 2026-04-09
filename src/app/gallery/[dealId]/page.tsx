@@ -261,19 +261,42 @@ export default function GalleryPage({ params }: { params: { dealId: string } }) 
 
 function MediaCard({ item, dealId, onOpen }: { item: MediaItem; dealId: number; onOpen: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoErr, setVideoErr] = useState(false);
 
   return (
     <div className="gal-card">
-      <div className="gal-card-media" onClick={() => !item.is_video && onOpen()}>
+      <div
+        className={`gal-card-media${item.is_video ? ' is-video' : ''}`}
+        onClick={() => !item.is_video && onOpen()}
+      >
         {item.is_video ? (
-          <video
-            ref={videoRef}
-            src={item.url}
-            controls
-            playsInline
-            preload="metadata"
-            className="gal-card-video"
-          />
+          videoErr ? (
+            <div style={{
+              width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 8, color: '#fff',
+              background: '#1A1A2E', padding: 12, textAlign: 'center',
+            }}>
+              <span style={{ fontSize: 32 }}>🎬</span>
+              <span style={{ fontSize: 12 }}>Nie można odtworzyć w przeglądarce</span>
+              <a href={item.url} download={formatFilename(item, dealId)}
+                 style={{ fontSize: 11, color: '#B71C1C', fontWeight: 700, textDecoration: 'underline' }}>
+                Pobierz wideo
+              </a>
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              src={item.url}
+              controls
+              playsInline
+              preload="metadata"
+              className="gal-card-video"
+              onError={() => setVideoErr(true)}
+            >
+              <source src={item.url} type="video/mp4" />
+              <source src={item.url} type="video/webm" />
+            </video>
+          )
         ) : (
           <img
             src={item.url}
@@ -483,13 +506,17 @@ html, body { font-family: 'Inter', system-ui, -apple-system, sans-serif;
   position: relative; aspect-ratio: 4/3; overflow: hidden; cursor: pointer;
   background: #E8E8ED;
 }
+.gal-card-media.is-video {
+  /* Videos need more vertical room for native controls; cover crops them in some browsers */
+  aspect-ratio: 16/10; cursor: default;
+}
 .gal-card-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
   transition: transform 0.3s;
 }
 .gal-card:hover .gal-card-img { transform: scale(1.04); }
 .gal-card-video {
-  width: 100%; height: 100%; object-fit: cover; display: block; background: #1A1A2E;
+  width: 100%; height: 100%; object-fit: contain; display: block; background: #1A1A2E;
 }
 .gal-card-overlay {
   position: absolute; inset: 0; background: rgba(0,0,0,0.35);

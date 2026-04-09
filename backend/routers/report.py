@@ -393,7 +393,13 @@ async def get_report(deal_id: int, request: Request):
         "version":               _f("version"),
     }
 
-    # ── DB fallback: overwrite empty vehicle fields from InspectionRecord ─
+    # ── Vehicle field reconciliation with InspectionRecord ──────────────
+    #
+    # Bitrix returns enum fields (fuel_type, body_type, transmission, drive_type)
+    # as numeric item IDs (e.g. "316") rather than human labels. The frontend
+    # InspectionRecord stores the original dropdown labels (e.g. "Benzyna"), so
+    # for enum fields we PREFER the DB record over Bitrix. For all other fields
+    # we fall back to DB only when Bitrix is empty.
     if insp_rec_vehicle:
         iv = insp_rec_vehicle
         bi = iv.get("basicInfo") or {}
@@ -413,9 +419,15 @@ async def get_report(deal_id: int, request: Request):
             "first_registration_date": _safe_str(iv.get("firstRegistration")),
             "mileage":                 _safe_str(iv.get("mileage")),
         }
+        # Enum fields where DB record (label) takes priority over Bitrix (numeric ID)
+        _prefer_db = {"fuel_type", "body_type", "transmission", "drive_type"}
         for k, v in _fallbacks.items():
-            if not vehicle.get(k) and v:
-                vehicle[k] = v
+            if k in _prefer_db:
+                if v:                           # DB has a value → use it
+                    vehicle[k] = v
+            else:
+                if not vehicle.get(k) and v:    # Bitrix empty → fall back to DB
+                    vehicle[k] = v
         # Recompute kw if hp was filled from DB
         if vehicle.get("engine_power_hp") and not vehicle.get("engine_power_kw"):
             _hp = str(vehicle["engine_power_hp"])
@@ -566,28 +578,42 @@ async def get_report(deal_id: int, request: Request):
         s = str(v).strip()
         return s if s not in ("null", "None") else ""
 
-    # Enrich Bitrix tire data with tread depths from InspectionRecord
-    WHEEL_CODES = ["fl", "fr", "rl", "rr"]
-    tread_from_rec: dict = {}
+    # Enrich Bitrix tire data with brand/size/depth/type from InspectionRecord
+    # The DB record stores per-wheel dicts with: brand, size, treadDepth, type, etc.
+    tire_from_rec: dict = {}
     if insp_rec_tires and isinstance(insp_rec_tires, dict):
         for wk, wd in insp_rec_tires.items():
             # wk: frontLeft | frontRight | rearLeft | rearRight
             code = {"frontLeft": "fl", "frontRight": "fr", "rearLeft": "rl", "rearRight": "rr"}.get(wk)
             if code and isinstance(wd, dict):
-                depth_val = _safe_float(wd.get("treadDepth"))
-                if depth_val:
-                    tread_from_rec[code] = depth_val
+                tire_from_rec[code] = {
+                    "brand":     _safe_str(wd.get("brand") or wd.get("manufacturer")),
+                    "size":      _safe_str(wd.get("size") or wd.get("dimension")),
+                    "type":      _safe_str(wd.get("type") or wd.get("season")),
+                    "tread":     _safe_float(wd.get("treadDepth") or wd.get("tread") or wd.get("depth")),
+                }
 
     for code, position, brand_field, size_field, type_field in TIRE_WHEELS:
+        # Bitrix first
         brand = _safe_str(raw.get(brand_field))
         size  = _safe_str(raw.get(size_field))
         type_ = _safe_str(raw.get(type_field))
-        depth = tread_from_rec.get(code) or _safe_float(raw.get(size_field))
+        depth = _safe_float(raw.get(size_field))
+
+        # Overlay with DB record (DB takes priority for any fields it has)
+        rec = tire_from_rec.get(code) or {}
+        if rec.get("brand"): brand = rec["brand"]
+        if rec.get("size"):  size  = rec["size"]
+        if rec.get("type"):  type_ = rec["type"]
+        if rec.get("tread"): depth = rec["tread"]
+
+        # Last resort: parse depth from size string ("205/55 R16 4.5mm")
         if size and not depth:
             import re
             m = re.search(r'(\d+(?:[.,]\d+)?)\s*mm', size, re.IGNORECASE)
             if m:
                 depth = _safe_float(m.group(1))
+
         if brand or size or depth:
             tires.append({
                 "position": position, "code": code,
