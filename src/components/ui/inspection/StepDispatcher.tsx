@@ -17,19 +17,27 @@ import { SummaryStep } from "./steps/SummaryStep";
 export function StepDispatcher() {
     const { currentStep } = useInspectionStore();
 
+    // Wrapping in a keyed div forces React to fully unmount the previous
+    // step's DOM tree before mounting the new one.  This avoids the iOS
+    // WebKit "insertBefore / removeChild" crash that occurs when React
+    // tries to patch the DOM in-place across very different component trees.
+    let content: React.ReactNode;
     switch (currentStep) {
-        case 1: return <VehicleDataStep />;
-        case 2: return <EquipmentStep />;
-        case 3: return <FullEquipmentStep />;
-        case 4: return <PaintStep />;
-        case 5: return <TiresStep />;
-        case 6: return <PhotosStep />;
-        case 7: return <ExteriorDamageStep />;
-        case 8: return <InteriorDamageStep />;
-        case 9: return <MechanicalStep />;
-        case 10: return <NotesStep />;
-        case 11: return <ValidationStep />;
-        case 12: return <SummaryStep />;
-        default: return <VehicleDataStep />;
+        case 1:  content = <VehicleDataStep />;      break;
+        case 2:  content = <EquipmentStep />;        break;
+        case 3:  content = <FullEquipmentStep />;    break;
+        case 4:  content = <PaintStep />;            break;
+        case 5:  content = <TiresStep />;            break;
+        case 6:  content = <PhotosStep />;           break;
+        case 7:  content = <ExteriorDamageStep />;   break;
+        case 8:  content = <InteriorDamageStep />;   break;
+        case 9:  content = <MechanicalStep />;       break;
+        case 10: content = <NotesStep />;            break;
+        case 11: content = <ValidationStep />;       break;
+        case 12: content = <SummaryStep />;          break;
+        default: content = <VehicleDataStep />;      break;
     }
+
+    return <div key={`step-${currentStep}`}>{content}</div>;
 }
+
