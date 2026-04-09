@@ -234,10 +234,19 @@ export function PhotosStep() {
         if (!dealId || !token) return;
         const isImage = base64.startsWith('data:image');
         const isVideo = base64.startsWith('data:video');
-        if (!isImage && !isVideo) return;
+        if (!isImage && !isVideo) {
+            console.error(`[upload] ${slotId}: unrecognised data type — starts with: ${base64.slice(0, 30)}`);
+            return;
+        }
         const b64 = base64.split(',')[1];
-        if (!b64) return;
+        if (!b64) {
+            console.error(`[upload] ${slotId}: base64 split failed — no comma in data URI`);
+            return;
+        }
         const ext = isVideo ? 'mp4' : 'jpg';
+        const sizeKB = Math.round(b64.length * 0.75 / 1024);
+        console.log(`[upload] ${slotId} (${isVideo ? 'VIDEO' : 'photo'}) deal=${dealId} ~${sizeKB}KB — sending…`);
+
         fetch(`${apiUrl}/files/upload-json`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -247,7 +256,30 @@ export function PhotosStep() {
                 file_base64: b64,
                 filename: `${slotId}.${ext}`,
             }),
-        }).catch(() => { /* non-fatal — base64 is still in store */ });
+        })
+        .then(async (res) => {
+            if (!res.ok) {
+                const body = await res.text().catch(() => '(no body)');
+                console.error(`[upload] ${slotId} HTTP ${res.status}: ${body}`);
+                // Report error to backend so it shows in server logs
+                fetch(`${apiUrl}/files/upload-error-log`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deal_id: Number(dealId), slot_id: slotId, http_status: res.status, error: body, size_kb: sizeKB }),
+                }).catch(() => {});
+            } else {
+                console.log(`[upload] ${slotId} ✅ success`);
+            }
+        })
+        .catch((err) => {
+            console.error(`[upload] ${slotId} fetch failed (network/CORS/size?): ${err}`);
+            // Report network error to backend
+            fetch(`${apiUrl}/files/upload-error-log`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deal_id: Number(dealId), slot_id: slotId, http_status: 0, error: String(err), size_kb: sizeKB }),
+            }).catch(() => {});
+        });
     };
 
     const updatePhotoSlot = (slotId: string, base64: string) => {

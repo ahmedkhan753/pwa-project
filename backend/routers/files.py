@@ -126,6 +126,36 @@ async def debug_raw(request: Request):
     return {"ok": True, "body_len": len(body), "content_type": ct}
 
 
+class UploadErrorLog(BaseModel):
+    deal_id: int
+    slot_id: str
+    http_status: int
+    error: str
+    size_kb: int = 0
+
+
+@router.post("/upload-error-log")
+async def upload_error_log(payload: UploadErrorLog):
+    """
+    POST /files/upload-error-log
+    Frontend reports upload failures here so they appear in server logs.
+    Called when the fetch() in uploadToBackend() gets a non-2xx or network error.
+    """
+    is_video = payload.slot_id.startswith("video_")
+    kind = "VIDEO" if is_video else "photo"
+    if payload.http_status == 0:
+        logger.error(
+            f"[upload-error] ❌ {kind} '{payload.slot_id}' deal={payload.deal_id} "
+            f"~{payload.size_kb}KB — NETWORK/FETCH ERROR (Nginx body limit? CORS?): {payload.error}"
+        )
+    else:
+        logger.error(
+            f"[upload-error] ❌ {kind} '{payload.slot_id}' deal={payload.deal_id} "
+            f"~{payload.size_kb}KB — HTTP {payload.http_status}: {payload.error}"
+        )
+    return {"received": True}
+
+
 @router.post("/upload-json", response_model=FileUploadResult)
 async def upload_file_json(request: Request):
     """
@@ -149,24 +179,33 @@ async def upload_file_json(request: Request):
         field_key = data.get("field_key", "")
         file_base64 = data.get("file_base64", "")
         filename = data.get("filename", "photo.jpg")
+        is_video = field_key.startswith("video_")
+        kind = "VIDEO" if is_video else "photo"
 
-        print(f"[files/upload-json] deal_id={deal_id}, field_key={field_key}, filename={filename}, b64_len={len(file_base64)}", flush=True)
+        print(f"[files/upload-json] {kind} deal_id={deal_id}, field_key={field_key}, filename={filename}, b64_len={len(file_base64)}", flush=True)
 
         if not deal_id or not field_key or not file_base64:
+            logger.error(f"[upload-json] ❌ Missing fields: deal_id={deal_id}, field_key={field_key!r}, has_b64={bool(file_base64)}")
             raise HTTPException(status_code=422, detail="Missing required fields: deal_id, field_key, file_base64")
 
         try:
             file_bytes = base64.b64decode(file_base64)
-        except Exception:
+        except Exception as b64_err:
+            logger.error(f"[upload-json] ❌ {kind} '{field_key}' deal={deal_id} — base64 decode failed: {b64_err}")
             raise HTTPException(status_code=400, detail="Invalid base64 data")
 
+        size_mb = len(file_bytes) / 1024 / 1024
         if len(file_bytes) > MAX_FILE_SIZE:
+            logger.error(
+                f"[upload-json] ❌ {kind} '{field_key}' deal={deal_id} — "
+                f"file too large: {size_mb:.1f}MB (limit {MAX_FILE_SIZE // 1024 // 1024}MB)"
+            )
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large: {len(file_bytes) / 1024 / 1024:.1f}MB. Max: {MAX_FILE_SIZE // 1024 // 1024}MB.",
+                detail=f"File too large: {size_mb:.1f}MB. Max: {MAX_FILE_SIZE // 1024 // 1024}MB.",
             )
 
-        logger.info(f"[upload-json] {field_key} deal={deal_id} size={len(file_bytes)}B")
+        logger.info(f"[upload-json] ▶ {kind} '{field_key}' deal={deal_id} size={len(file_bytes)}B ({size_mb:.2f}MB)")
 
         # ── Step 1: Save to DB (ALWAYS — DB is source of truth, Bitrix is best-effort) ──
         db_saved = False
@@ -177,17 +216,19 @@ async def upload_file_json(request: Request):
             ).first()
             if existing:
                 existing.photo_bytes = file_bytes
+                logger.info(f"[upload-json] DB updated (overwrite): {kind} '{field_key}' deal={deal_id}")
             else:
                 db.add(InspectionPhoto(
                     deal_id=int(deal_id),
                     slot_id=field_key,
                     photo_bytes=file_bytes,
                 ))
+                logger.info(f"[upload-json] DB inserted: {kind} '{field_key}' deal={deal_id}")
             db.commit()
             db_saved = True
-            logger.info(f"[upload-json] DB saved: {field_key} deal={deal_id}")
+            logger.info(f"[upload-json] ✅ DB saved: {kind} '{field_key}' deal={deal_id}")
         except Exception as db_err:
-            logger.warning(f"[upload-json] DB save failed for {field_key}: {db_err}")
+            logger.error(f"[upload-json] ❌ DB save FAILED for {kind} '{field_key}' deal={deal_id}: {db_err}")
         finally:
             try:
                 db.close()
@@ -206,21 +247,21 @@ async def upload_file_json(request: Request):
                     file_bytes=file_bytes,
                     filename=filename,
                 )
-                logger.info(f"[upload-json] Bitrix result for {field_key}: {result}")
+                logger.info(f"[upload-json] Bitrix result for {kind} '{field_key}': {result}")
             except Exception as bitrix_err:
-                logger.warning(f"[upload-json] Bitrix upload failed for {field_key} (non-fatal): {bitrix_err}")
+                logger.warning(f"[upload-json] Bitrix upload failed for {kind} '{field_key}' (non-fatal): {bitrix_err}")
         else:
-            logger.info(f"[upload-json] Bitrix not ready — skipping Bitrix upload for {field_key} (DB saved={db_saved})")
+            logger.warning(f"[upload-json] Bitrix not ready — skipping Bitrix for {kind} '{field_key}' (DB saved={db_saved})")
 
         return FileUploadResult(
             field_key=field_key,
             file_id=result.get("file_id") or filename,
             url=result.get("url"),
-            success=True,  # always true if we got here; DB save is what matters
+            success=True,
         )
 
     except ClientDisconnect:
-        logger.warning(f"[upload-json] Client disconnected before body was fully received — body too large for connection?")
+        logger.error(f"[upload-json] ❌ Client disconnected mid-upload — body likely too large for Nginx (check client_max_body_size)")
         raise HTTPException(status_code=499, detail="Client disconnected")
     except HTTPException as e:
         logger.error(f"❌ upload-json HTTPException {e.status_code}: {e.detail}")
