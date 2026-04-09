@@ -948,13 +948,81 @@ def _detect_video_mime(data: bytes) -> str:
     return "video/mp4"
 
 
+@router.get("/gallery/{deal_id}/media/{slot_id}")
+async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
+    """
+    GET /api/gallery/{deal_id}/media/{slot_id}
+    Stream a single photo or video binary.
+    Supports HTTP Range requests so browsers can seek inside videos.
+    """
+    import re as _re
+    from fastapi.responses import Response as _Resp
+
+    _db = None
+    try:
+        _db = SessionLocal()
+        row = _db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == deal_id,
+            InspectionPhoto.slot_id == slot_id,
+        ).first()
+        if not row or not row.photo_bytes:
+            raise HTTPException(status_code=404, detail="Media not found")
+
+        data: bytes = row.photo_bytes
+        is_video = slot_id.startswith("video_")
+        mime = _detect_video_mime(data[:12]) if is_video else "image/jpeg"
+        total = len(data)
+
+        range_header = request.headers.get("range")
+        if range_header:
+            m = _re.match(r"bytes=(\d*)-(\d*)", range_header)
+            if m:
+                start = int(m.group(1)) if m.group(1) else 0
+                end   = int(m.group(2)) if m.group(2) else total - 1
+                end   = min(end, total - 1)
+                chunk = data[start : end + 1]
+                return _Resp(
+                    content=chunk,
+                    status_code=206,
+                    media_type=mime,
+                    headers={
+                        "Content-Range":  f"bytes {start}-{end}/{total}",
+                        "Accept-Ranges":  "bytes",
+                        "Content-Length": str(len(chunk)),
+                        "Cache-Control":  "public, max-age=3600",
+                    },
+                )
+
+        return _Resp(
+            content=data,
+            media_type=mime,
+            headers={
+                "Content-Length": str(total),
+                "Accept-Ranges":  "bytes",
+                "Cache-Control":  "public, max-age=3600",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[Gallery] Error streaming {slot_id} for deal {deal_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to stream media")
+    finally:
+        if _db:
+            try:
+                _db.close()
+            except Exception:
+                pass
+
+
 @router.get("/gallery/{deal_id}")
 async def get_gallery(deal_id: int, request: Request):
     """
     GET /api/gallery/{deal_id}
     Public — no authentication required.
-    Returns all inspection media (photos + videos) as base64 data URIs,
-    organized by category.
+    Returns gallery metadata with URL paths (no base64 blobs).
+    Each media item points to /api/gallery/{deal_id}/media/{slot_id}
+    which streams the binary with proper Content-Type and Range support.
     """
     gateway = request.app.state.gateway
     bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
@@ -1043,18 +1111,16 @@ async def get_gallery(deal_id: int, request: Request):
                 else:
                     category = "other"
 
-                if is_video:
-                    mime = _detect_video_mime(row.photo_bytes[:12] if row.photo_bytes else b"")
-                    uri = f"data:{mime};base64," + _b64.b64encode(row.photo_bytes).decode()
-                else:
-                    uri = "data:image/jpeg;base64," + _b64.b64encode(row.photo_bytes).decode()
+                # Return a URL path — browser fetches binary lazily, no base64 bloat
+                media_url = f"/api/gallery/{deal_id}/media/{row.slot_id}"
 
                 media_items.append({
-                    "slot_id":  row.slot_id,
-                    "label":    label,
-                    "category": category,
-                    "is_video": is_video,
-                    "url":      uri,
+                    "slot_id":    row.slot_id,
+                    "label":      label,
+                    "category":   category,
+                    "is_video":   is_video,
+                    "url":        media_url,
+                    "size_bytes": len(row.photo_bytes) if row.photo_bytes else 0,
                 })
             except Exception:
                 pass

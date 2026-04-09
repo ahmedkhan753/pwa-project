@@ -43,13 +43,21 @@ const LOGO_URL = 'https://i.postimg.cc/VsgMRGYH/SPROWADZENIE-SAMOCHODOW-Z-USAPOD
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function downloadMedia(url: string, filename: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+async function downloadMedia(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 }
 
 function formatFilename(item: MediaItem, dealId: number) {
