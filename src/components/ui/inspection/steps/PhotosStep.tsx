@@ -257,28 +257,42 @@ export function PhotosStep() {
         return () => { cancelled = true; };
     }, [dealId, token, apiUrl]);
 
-    // ── Subscribe to IndexedDB queue changes ─────────────────────────
+    // ── Subscribe to IndexedDB queue changes (debounced) ───────────
     useEffect(() => {
         if (!dealId) return;
-        const refresh = async () => {
-            const items = await photoQueue.getByDeal(dealId);
-            setPendingCount(items.filter(i => i.status === 'pending' || i.status === 'uploading').length);
-            setFailedCount(items.filter(i => i.status === 'failed').length);
-            // Any item that was uploaded (removed from queue) means the
-            // backend list endpoint would return it — refresh uploaded set.
-            // Cheap: re-fetch the list periodically as queue drains.
-            try {
-                const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
-                    headers: { 'Authorization': `Bearer ${token || ''}` },
-                });
-                if (res.ok) {
-                    const json = await res.json();
-                    setUploadedSlots(new Set(json.uploaded_slots || []));
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let prevQueueSize = -1;
+
+        const refresh = () => {
+            // Debounce: collapse rapid-fire notifications into one check
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(async () => {
+                const items = await photoQueue.getByDeal(dealId);
+                const pending = items.filter(i => i.status === 'pending' || i.status === 'uploading').length;
+                const failed = items.filter(i => i.status === 'failed').length;
+                setPendingCount(pending);
+                setFailedCount(failed);
+
+                // Only re-fetch the backend list when queue shrank (an upload finished)
+                const currentSize = items.length;
+                if (currentSize < prevQueueSize || prevQueueSize === -1) {
+                    try {
+                        const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
+                            headers: { 'Authorization': `Bearer ${token || ''}` },
+                        });
+                        if (res.ok) {
+                            const json = await res.json();
+                            setUploadedSlots(new Set(json.uploaded_slots || []));
+                        }
+                    } catch { /* ignore */ }
                 }
-            } catch { /* ignore */ }
+                prevQueueSize = currentSize;
+            }, 1500);
         };
+
         refresh();
-        return photoQueue.subscribe(refresh);
+        const unsub = photoQueue.subscribe(refresh);
+        return () => { unsub(); if (timer) clearTimeout(timer); };
     }, [dealId, token, apiUrl]);
 
     // ── Enqueue to IndexedDB instead of fire-and-forget ──────────────
