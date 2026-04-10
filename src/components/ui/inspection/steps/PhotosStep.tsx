@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useInspectionStore, PhotoSlot } from "@/store/useInspectionStore";
 import { PhotoUploadSlot } from "../PhotoUploadSlot";
-import { Camera, CheckCircle2, ChevronDown, Plus, Video, RotateCcw, Check, X } from "lucide-react";
+import { Camera, CheckCircle2, ChevronDown, Plus, Video, RotateCcw, Check, X, CloudUpload, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { photoQueue } from "@/lib/photoUploadQueue";
 
 // ── Video Record Slot: 6-second auto-stop with countdown ──────────────
 function VideoRecordSlot({
@@ -217,74 +218,84 @@ export function PhotosStep() {
     const photoSlots = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
+    // ── Upload queue status (IndexedDB ground truth) ─────────────────
+    const [pendingCount, setPendingCount] = useState(0);
+    const [failedCount, setFailedCount] = useState(0);
+    const [uploadedSlots, setUploadedSlots] = useState<Set<string>>(new Set());
+
     const requiredSlots = photoSlots.slice(0, 34);
     const optionalSlots = photoSlots.slice(34);
 
     const required = requiredSlots.filter((p) => p.required);
-    const filledCount = photoSlots.filter((p) => p.base64).length;
-    const requiredFilledCount = required.filter((p) => p.base64).length;
+    // Count a slot as "filled" if it has local base64 OR is confirmed uploaded
+    const filledCount = photoSlots.filter((p) => p.base64 || uploadedSlots.has(p.id)).length;
+    const requiredFilledCount = required.filter((p) => p.base64 || uploadedSlots.has(p.id)).length;
 
     const dealId = jobs?.currentJobId;
     const token = auth?.token;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-    // Upload photo to backend DB immediately on capture so photos survive
-    // any page reload that clears base64 from in-memory state.
-    const uploadToBackend = (slotId: string, base64: string) => {
+    // ── On mount: fetch which slots are already in the DB ────────────
+    // This restores the "uploaded" markers after an iOS crash/reload
+    // where Zustand base64 was wiped but the backend has the photos.
+    useEffect(() => {
         if (!dealId || !token) return;
-        const isImage = base64.startsWith('data:image');
-        const isVideo = base64.startsWith('data:video');
-        if (!isImage && !isVideo) {
-            console.error(`[upload] ${slotId}: unrecognised data type — starts with: ${base64.slice(0, 30)}`);
-            return;
-        }
-        const b64 = base64.split(',')[1];
-        if (!b64) {
-            console.error(`[upload] ${slotId}: base64 split failed — no comma in data URI`);
-            return;
-        }
-        const ext = isVideo ? 'mp4' : 'jpg';
-        const sizeKB = Math.round(b64.length * 0.75 / 1024);
-        console.log(`[upload] ${slotId} (${isVideo ? 'VIDEO' : 'photo'}) deal=${dealId} ~${sizeKB}KB — sending…`);
-
-        fetch(`${apiUrl}/files/upload-json`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                deal_id: Number(dealId),
-                field_key: slotId,
-                file_base64: b64,
-                filename: `${slotId}.${ext}`,
-            }),
-        })
-        .then(async (res) => {
-            if (!res.ok) {
-                const body = await res.text().catch(() => '(no body)');
-                console.error(`[upload] ${slotId} HTTP ${res.status}: ${body}`);
-                // Report error to backend so it shows in server logs
-                fetch(`${apiUrl}/files/upload-error-log`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deal_id: Number(dealId), slot_id: slotId, http_status: res.status, error: body, size_kb: sizeKB }),
-                }).catch(() => {});
-            } else {
-                console.log(`[upload] ${slotId} ✅ success`);
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!res.ok || cancelled) return;
+                const json = await res.json();
+                const slots: string[] = json.uploaded_slots || [];
+                if (!cancelled) setUploadedSlots(new Set(slots));
+            } catch {
+                // network error — non-fatal, slots will just show as empty
             }
-        })
-        .catch((err) => {
-            console.error(`[upload] ${slotId} fetch failed (network/CORS/size?): ${err}`);
-            // Report network error to backend
-            fetch(`${apiUrl}/files/upload-error-log`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deal_id: Number(dealId), slot_id: slotId, http_status: 0, error: String(err), size_kb: sizeKB }),
-            }).catch(() => {});
-        });
-    };
+        })();
+        return () => { cancelled = true; };
+    }, [dealId, token, apiUrl]);
 
+    // ── Subscribe to IndexedDB queue changes ─────────────────────────
+    useEffect(() => {
+        if (!dealId) return;
+        const refresh = async () => {
+            const items = await photoQueue.getByDeal(dealId);
+            setPendingCount(items.filter(i => i.status === 'pending' || i.status === 'uploading').length);
+            setFailedCount(items.filter(i => i.status === 'failed').length);
+            // Any item that was uploaded (removed from queue) means the
+            // backend list endpoint would return it — refresh uploaded set.
+            // Cheap: re-fetch the list periodically as queue drains.
+            try {
+                const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
+                    headers: { 'Authorization': `Bearer ${token || ''}` },
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    setUploadedSlots(new Set(json.uploaded_slots || []));
+                }
+            } catch { /* ignore */ }
+        };
+        refresh();
+        return photoQueue.subscribe(refresh);
+    }, [dealId, token, apiUrl]);
+
+    // ── Enqueue to IndexedDB instead of fire-and-forget ──────────────
     const updatePhotoSlot = (slotId: string, base64: string) => {
         setPhotoSlot(slotId, base64);
-        uploadToBackend(slotId, base64);
+        if (!dealId) return;
+        const isVideo = base64.startsWith('data:video');
+        const ext = isVideo ? 'mp4' : 'jpg';
+        photoQueue.enqueue({
+            id: `${dealId}__${slotId}`,
+            dealId,
+            slotId,
+            base64,
+            filename: `${slotId}.${ext}`,
+        }).catch((err) => {
+            console.error(`[PhotosStep] queue enqueue failed for ${slotId}:`, err);
+        });
     };
 
     const handleVideoCapture = (e: React.ChangeEvent<HTMLInputElement>, slotId: string) => {
@@ -340,6 +351,34 @@ export function PhotosStep() {
                 </div>
             </div>
 
+            {/* Upload Queue Status Banner */}
+            {(pendingCount > 0 || failedCount > 0) && (
+                <div className={cn(
+                    "rounded-2xl p-4 flex items-center gap-3 border shadow-sm",
+                    failedCount > 0
+                        ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                        : "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
+                )}>
+                    {failedCount > 0 ? (
+                        <AlertTriangle size={20} className="text-red-500 flex-shrink-0" />
+                    ) : (
+                        <CloudUpload size={20} className="text-blue-500 flex-shrink-0 animate-pulse" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                        {pendingCount > 0 && (
+                            <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300">
+                                Wysyłanie {pendingCount} {pendingCount === 1 ? 'pliku' : 'plików'}... Nie zamykaj aplikacji.
+                            </p>
+                        )}
+                        {failedCount > 0 && (
+                            <p className="text-[11px] font-bold text-red-600 dark:text-red-400">
+                                {failedCount} {failedCount === 1 ? 'plik' : 'plików'} nie udało się wysłać — ponawiam automatycznie.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Photo Grid — first 34 slots */}
             <div className="grid grid-cols-2 xs:grid-cols-3 gap-3">
                 {requiredSlots.map((slot) => (
@@ -357,6 +396,7 @@ export function PhotosStep() {
                             label={slot.label}
                             base64={slot.base64}
                             required={slot.required}
+                            uploaded={uploadedSlots.has(slot.id)}
                             onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
                             onClear={() => clearPhotoSlot(slot.id)}
                         />
@@ -398,6 +438,7 @@ export function PhotosStep() {
                                 label={slot.label}
                                 base64={slot.base64}
                                 required={false}
+                                uploaded={uploadedSlots.has(slot.id)}
                                 onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
                                 onClear={() => clearPhotoSlot(slot.id)}
                             />

@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/ui/Logo";
+import { startUploadWorker, stopUploadWorker } from "@/lib/uploadWorker";
+import { photoQueue } from "@/lib/photoUploadQueue";
 
 const STEPS = [
     { num: 1, short: "Dane", label: "Dane Pojazdu" },
@@ -31,6 +33,19 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
+
+    // ── Start the IndexedDB-backed upload worker ──────────────────
+    // Survives iOS crashes: on reload, the worker picks up any queued
+    // photos from IndexedDB and resumes uploading automatically.
+    useEffect(() => {
+        const store = useInspectionStore.getState();
+        const tok = store.auth?.token;
+        const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        if (tok) {
+            startUploadWorker(tok, url);
+        }
+        return () => { stopUploadWorker(); };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Scroll to top on step change — covers both the inner scroll container
     // and window/document for browsers where the page itself scrolls.
@@ -138,6 +153,10 @@ async function compressImage(base64: string): Promise<string> {
 
         // Mark uploading so dashboard card shows progress badge immediately
         useInspectionStore.getState().setSubmissionStatus(dealId, 'uploading');
+
+        // Clear the IndexedDB upload queue for this deal — photos are already
+        // in the backend DB (the worker uploaded them during step 6).
+        photoQueue.clearDeal(dealId).catch(() => {});
 
         // Clear wizard — DashboardPage renders <Dashboard /> instantly.
         // This is a React state change (no URL navigation), so iOS WebKit

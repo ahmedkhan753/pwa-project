@@ -1,0 +1,224 @@
+/**
+ * IndexedDB-backed photo upload queue.
+ * ─────────────────────────────────────
+ * Survives:
+ *   - Page reload (user navigation, hard refresh)
+ *   - iOS WebKit DOM crash (the tab restart that wipes Zustand state)
+ *   - Network outage / backend cold start
+ *   - User closing the tab and reopening hours later
+ *
+ * Why IndexedDB and not localStorage:
+ *   - localStorage caps at ~5 MB on iOS Safari and store's `partialize`
+ *     intentionally strips photo base64 to stay under that cap.
+ *   - IndexedDB has a much larger quota (50 MB-1 GB depending on storage
+ *     pressure), enough to safely buffer the 28 photos + 6-second engine
+ *     video while uploads are in flight.
+ *
+ * Lifecycle of a queued item:
+ *   enqueue (status='pending')
+ *     → worker picks it up
+ *     → markUploading (status='uploading')
+ *     → POST /files/upload-json
+ *     → markUploaded → row deleted (queue stays small)
+ *     OR markFailed (status='failed') → retried with exponential backoff
+ *
+ * The worker is a separate module (`uploadWorker.ts`) so this file stays
+ * pure storage primitives.
+ */
+
+export interface QueueItem {
+  id: string;            // `${dealId}__${slotId}`
+  dealId: string;
+  slotId: string;
+  base64: string;        // full data:image/...;base64,... or data:video/...
+  filename: string;
+  status: 'pending' | 'uploading' | 'uploaded' | 'failed';
+  attempts: number;
+  lastError?: string;
+  enqueuedAt: number;
+  lastTriedAt?: number;
+}
+
+const DB_NAME = 'inspection-uploads';
+const DB_VERSION = 1;
+const STORE = 'queue';
+
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+function openDb(): Promise<IDBDatabase> {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB not available'));
+      return;
+    }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        const store = db.createObjectStore(STORE, { keyPath: 'id' });
+        store.createIndex('byDeal', 'dealId');
+        store.createIndex('byStatus', 'status');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error('IndexedDB blocked'));
+  });
+  return dbPromise.catch((err) => {
+    dbPromise = null; // allow retry next call
+    throw err;
+  });
+}
+
+function reqToPromise<T>(r: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+
+async function withStore<T>(
+  mode: IDBTransactionMode,
+  fn: (store: IDBObjectStore) => Promise<T>
+): Promise<T> {
+  const db = await openDb();
+  const t = db.transaction(STORE, mode);
+  const store = t.objectStore(STORE);
+  const result = await fn(store);
+  return new Promise<T>((resolve, reject) => {
+    t.oncomplete = () => resolve(result);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+
+// ── Subscribers (UI re-render hooks) ─────────────────────────────────
+const listeners = new Set<() => void>();
+function notify() {
+  listeners.forEach((fn) => {
+    try { fn(); } catch { /* ignore */ }
+  });
+}
+
+// ── Public API ───────────────────────────────────────────────────────
+
+export const photoQueue = {
+  /**
+   * Add (or overwrite — same id) a photo for upload.
+   * Always resets status to 'pending' and attempts to 0 so a re-enqueue
+   * (e.g. user re-takes a photo) gets a fresh upload cycle.
+   */
+  async enqueue(
+    item: Pick<QueueItem, 'id' | 'dealId' | 'slotId' | 'base64' | 'filename'>
+  ): Promise<void> {
+    try {
+      const full: QueueItem = {
+        ...item,
+        status: 'pending',
+        attempts: 0,
+        enqueuedAt: Date.now(),
+      };
+      await withStore('readwrite', async (store) => {
+        store.put(full);
+      });
+      notify();
+    } catch (err) {
+      console.error('[photoQueue] enqueue failed:', err);
+      throw err;
+    }
+  },
+
+  async markUploading(id: string): Promise<void> {
+    try {
+      await withStore('readwrite', async (store) => {
+        const item = (await reqToPromise(store.get(id))) as QueueItem | undefined;
+        if (!item) return;
+        item.status = 'uploading';
+        item.lastTriedAt = Date.now();
+        store.put(item);
+      });
+      notify();
+    } catch (err) {
+      console.warn('[photoQueue] markUploading:', err);
+    }
+  },
+
+  async markUploaded(id: string): Promise<void> {
+    try {
+      await withStore('readwrite', async (store) => {
+        store.delete(id);
+      });
+      notify();
+    } catch (err) {
+      console.warn('[photoQueue] markUploaded:', err);
+    }
+  },
+
+  async markFailed(id: string, error: string): Promise<void> {
+    try {
+      await withStore('readwrite', async (store) => {
+        const item = (await reqToPromise(store.get(id))) as QueueItem | undefined;
+        if (!item) return;
+        item.status = 'failed';
+        item.attempts = (item.attempts || 0) + 1;
+        item.lastError = error.slice(0, 500);
+        item.lastTriedAt = Date.now();
+        store.put(item);
+      });
+      notify();
+    } catch (err) {
+      console.warn('[photoQueue] markFailed:', err);
+    }
+  },
+
+  async getAllPending(): Promise<QueueItem[]> {
+    try {
+      return await withStore('readonly', async (store) => {
+        const all = (await reqToPromise(store.getAll())) as QueueItem[];
+        return (all || []).filter((i) => i.status !== 'uploaded');
+      });
+    } catch (err) {
+      console.warn('[photoQueue] getAllPending:', err);
+      return [];
+    }
+  },
+
+  async getByDeal(dealId: string): Promise<QueueItem[]> {
+    if (!dealId) return [];
+    try {
+      return await withStore('readonly', async (store) => {
+        const all = (await reqToPromise(store.getAll())) as QueueItem[];
+        return (all || []).filter((i) => i.dealId === dealId);
+      });
+    } catch (err) {
+      console.warn('[photoQueue] getByDeal:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Drop everything for a deal — call this after a successful submit so the
+   * queue does not hold stale base64 forever.
+   */
+  async clearDeal(dealId: string): Promise<void> {
+    if (!dealId) return;
+    try {
+      await withStore('readwrite', async (store) => {
+        const all = (await reqToPromise(store.getAll())) as QueueItem[];
+        for (const i of all || []) {
+          if (i.dealId === dealId) store.delete(i.id);
+        }
+      });
+      notify();
+    } catch (err) {
+      console.warn('[photoQueue] clearDeal:', err);
+    }
+  },
+
+  /** UI re-render subscription. Returns an unsubscribe function. */
+  subscribe(fn: () => void): () => void {
+    listeners.add(fn);
+    return () => { listeners.delete(fn); };
+  },
+};

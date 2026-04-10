@@ -271,6 +271,32 @@ async def upload_file_json(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/list/{deal_id}")
+async def list_uploaded_slots(deal_id: int):
+    """
+    GET /files/list/{deal_id}
+    Returns the list of slot_ids that have already been uploaded for this deal.
+    Used by the wizard to restore "uploaded" markers after an iOS WebKit crash
+    or page reload — so the inspector can see which photos are safe in the DB
+    even when the in-memory base64 has been wiped.
+    """
+    try:
+        db = SessionLocal()
+        rows = db.query(InspectionPhoto.slot_id).filter(
+            InspectionPhoto.deal_id == int(deal_id)
+        ).all()
+        slot_ids = sorted({r[0] for r in rows if r and r[0]})
+        return {"deal_id": int(deal_id), "uploaded_slots": slot_ids, "count": len(slot_ids)}
+    except Exception as e:
+        logger.error(f"[files/list] failed for deal {deal_id}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
 @router.post("/upload-batch", response_model=BatchUploadResult)
 async def upload_batch(
     request: Request,

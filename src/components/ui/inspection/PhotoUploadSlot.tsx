@@ -9,11 +9,12 @@ interface PhotoUploadSlotProps {
     label: string;
     base64: string;
     required: boolean;
+    uploaded?: boolean;  // true if backend DB confirmed this slot
     onCapture: (base64: string) => void;
     onClear: () => void;
 }
 
-export function PhotoUploadSlot({ label, base64, required, onCapture, onClear }: PhotoUploadSlotProps) {
+export function PhotoUploadSlot({ label, base64, required, uploaded, onCapture, onClear }: PhotoUploadSlotProps) {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,6 +55,20 @@ export function PhotoUploadSlot({ label, base64, required, onCapture, onClear }:
                         {label}
                     </span>
                 </div>
+            ) : uploaded ? (
+                /* Slot has no local base64 (e.g. after crash/reload) but the
+                   backend DB confirmed this photo was already uploaded. Show a
+                   reassuring "saved" badge instead of a scary empty red slot. */
+                <button
+                    onClick={() => inputRef.current?.click()}
+                    className="photo-slot w-full flex-col gap-1 border-success/50 bg-success/5"
+                >
+                    <ImageIcon size={20} className="text-success" />
+                    <span className="text-[10px] font-medium text-secondary text-center leading-tight px-1">
+                        {label}
+                    </span>
+                    <span className="text-[8px] text-success font-bold">ZAPISANO</span>
+                </button>
             ) : (
                 <button
                     onClick={() => inputRef.current?.click()}
