@@ -336,7 +336,7 @@ import base64 as _base64
 import io as _io
 import numpy as _np
 
-def _try_zxingcpp(img) -> dict | None:
+def _try_zxingcpp(img) -> "dict | None":
     """Try zxing-cpp first — supports Aztec, QR, DataMatrix, etc."""
     try:
         import zxingcpp
@@ -365,7 +365,7 @@ def _try_zxingcpp(img) -> dict | None:
         _qr_dbg_log.info(f"[ZXING-CPP] Error: {e}")
         return None
 
-def _try_pyzbar(img) -> dict | None:
+def _try_pyzbar(img) -> "dict | None":
     """Fallback to pyzbar — handles QR, EAN, Code128 but NOT Aztec."""
     try:
         from pyzbar.pyzbar import decode as pyzbar_decode
