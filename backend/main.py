@@ -331,48 +331,95 @@ async def debug_qr(payload: QRDebugPayload):
     return {"ok": True}
 
 
-# ─── Server-side barcode decode (pyzbar fallback) ─────────────
+# ─── Server-side barcode decode ───────────────────────────────
 import base64 as _base64
 import io as _io
+import numpy as _np
+
+def _try_zxingcpp(img) -> dict | None:
+    """Try zxing-cpp first — supports Aztec, QR, DataMatrix, etc."""
+    try:
+        import zxingcpp
+    except ImportError:
+        return None
+    try:
+        img_array = _np.array(img)
+        results = zxingcpp.read_barcodes(img_array)
+        if not results:
+            return None
+        code = results[0]
+        raw_bytes = code.bytes
+        raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
+        code_type = str(code.format).replace("BarcodeFormat.", "")
+        _qr_dbg_log.info(
+            f"[ZXING-CPP] Found {code_type}: "
+            f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
+        )
+        return {
+            "found": True,
+            "type": code_type,
+            "raw_bytes_b64": raw_b64,
+            "raw_string": raw_bytes.decode("latin-1", errors="replace"),
+        }
+    except Exception as e:
+        _qr_dbg_log.info(f"[ZXING-CPP] Error: {e}")
+        return None
+
+def _try_pyzbar(img) -> dict | None:
+    """Fallback to pyzbar — handles QR, EAN, Code128 but NOT Aztec."""
+    try:
+        from pyzbar.pyzbar import decode as pyzbar_decode
+    except ImportError:
+        return None
+    try:
+        codes = pyzbar_decode(img)
+        if not codes:
+            return None
+        code = codes[0]
+        raw_bytes = code.data
+        raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
+        _qr_dbg_log.info(
+            f"[PYZBAR] Found {code.type} in image: "
+            f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
+        )
+        return {
+            "found": True,
+            "type": code.type,
+            "raw_bytes_b64": raw_b64,
+            "raw_string": raw_bytes.decode("latin-1", errors="replace"),
+        }
+    except Exception as e:
+        _qr_dbg_log.info(f"[PYZBAR] Error: {e}")
+        return None
 
 @app.post("/decode-barcode")
 async def decode_barcode_server(file: UploadFile):
     """
-    Decode a barcode/QR/Aztec from an uploaded image using pyzbar (libzbar).
-    Returns raw bytes as base64 so the frontend NRV2E decoder can use them directly,
-    bypassing all JS string-encoding issues.
+    Decode a barcode/QR/Aztec from an uploaded image.
+    Tries zxing-cpp first (supports Aztec), falls back to pyzbar.
+    Returns raw bytes as base64 for the frontend decoder.
     """
-    try:
-        from PIL import Image
-        from pyzbar.pyzbar import decode as pyzbar_decode
-    except ImportError:
-        raise HTTPException(status_code=501, detail="pyzbar not installed")
+    from PIL import Image
 
     content = await file.read()
     try:
         img = Image.open(_io.BytesIO(content))
-        img = img.convert("RGB")  # ensure consistent mode
+        img = img.convert("RGB")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Cannot open image: {e}")
 
-    codes = pyzbar_decode(img)
-    if not codes:
-        _qr_dbg_log.info(f"[PYZBAR] No barcode found in {file.filename} ({len(content)//1024} KB)")
-        return {"found": False}
+    # Try zxing-cpp first (supports Aztec + all formats)
+    result = _try_zxingcpp(img)
+    if result:
+        return result
 
-    code = codes[0]
-    raw_bytes = code.data
-    raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
-    _qr_dbg_log.info(
-        f"[PYZBAR] Found {code.type} in {file.filename}: "
-        f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
-    )
-    return {
-        "found": True,
-        "type": code.type,           # "AZTEC", "QRCODE", "CODE128", etc.
-        "raw_bytes_b64": raw_b64,    # base64-encoded raw bytes — use directly in NRV2E decoder
-        "raw_string": raw_bytes.decode("latin-1"),  # best-effort text fallback
-    }
+    # Fall back to pyzbar (QR, EAN, Code128 — no Aztec)
+    result = _try_pyzbar(img)
+    if result:
+        return result
+
+    _qr_dbg_log.info(f"[DECODE] No barcode found in {file.filename} ({len(content)//1024} KB)")
+    return {"found": False}
 
 
 # ─── Pydantic Models ─────────────────────────────────────────
