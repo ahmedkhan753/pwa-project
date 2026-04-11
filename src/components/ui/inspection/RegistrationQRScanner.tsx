@@ -5,105 +5,8 @@ import { X, QrCode, Loader2, CheckCircle2, AlertCircle, Keyboard, ImagePlus } fr
 import { cn } from "@/lib/utils";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Browser-compatible NRV2E decompressor  (no Buffer / Node.js needed)
-   Reimplemented from nrv2e-decompress using Uint8Array.
+   Types
    ═══════════════════════════════════════════════════════════════════════ */
-
-class BitReader {
-    private buf: Uint8Array;
-    private bBits: number;
-    private off = 0;
-    private cBit = 0;
-    private cBuf = 0;
-
-    constructor(buffer: Uint8Array, bufferBits = 8) {
-        this.buf = buffer;
-        this.bBits = bufferBits;
-    }
-
-    get ended(): boolean {
-        return this.off >= this.buf.length && this.cBit === 0;
-    }
-
-    readBit(): number {
-        if (this.cBit === 0) {
-            this.cBuf = 0;
-            for (let b = this.bBits / 8 - 1; b >= 0; b--) {
-                this.cBuf += this.readByte() << (8 * b);
-            }
-            this.cBit = this.bBits;
-        }
-        return (this.cBuf >> --this.cBit) & 1;
-    }
-
-    readByte(): number {
-        return this.buf[this.off++] ?? 0;
-    }
-}
-
-function nrv2eDecompress(input: Uint8Array, output: Uint8Array): number {
-    const bits = new BitReader(input, 8);
-    let oPos = 0;
-    let lastOff = 1;
-
-    while (!bits.ended) {
-        if (bits.readBit() === 1) {
-            if (oPos >= output.length) break;
-            output[oPos++] = bits.readByte();
-        } else {
-            let off = 1;
-            let len = 0;
-
-            for (;;) {
-                off = off * 2 + bits.readBit();
-                if (bits.readBit() === 1) break;
-                off = (off - 1) * 2 + bits.readBit();
-            }
-
-            if (off === 2) {
-                off = lastOff;
-                len = bits.readBit();
-            } else {
-                off = (off - 3) * 0x100 + bits.readByte();
-                if (off === 0xffffffff) break;
-                len = (off ^ 0xffffffff) & 1;
-                off >>= 1;
-                lastOff = ++off;
-            }
-
-            if (len) {
-                len = 1 + bits.readBit();
-            } else if (bits.readBit() === 1) {
-                len = 3 + bits.readBit();
-            } else {
-                len++;
-                do { len = len * 2 + bits.readBit(); } while (bits.readBit() === 0);
-                len += 3;
-            }
-
-            if (off > 0x500) len++;
-
-            let cur = oPos - off;
-            if (cur < 0 || off > oPos) break;
-
-            for (let i = 0; i <= len; i++) {
-                if (oPos >= output.length || cur >= output.length) break;
-                output[oPos++] = output[cur++];
-            }
-        }
-    }
-    return oPos;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   Field mapping  (indexes from the official decoder library)
-   ═══════════════════════════════════════════════════════════════════════ */
-
-const FUEL_MAP: Record<string, string> = {
-    P: "BENZYNA", D: "DIESEL", M: "BENZYNA", LPG: "LPG",
-    CNG: "LPG", H: "WODÓR", LNG: "LPG", BD: "DIESEL",
-    E85: "BENZYNA", EE: "ELEKTRYCZNY", "999": "NIE DOTYCZY",
-};
 
 export interface DecodedVehicleData {
     vin?: string;
@@ -120,6 +23,29 @@ export interface DecodedVehicleData {
     firstRegistration?: string;
     /** Raw QR text — set when the QR was decoded but no structured fields could be extracted */
     rawText?: string;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Convert raw scanner output (string) to Base64.
+ * Scanners (ZXing / BarcodeDetector) represent binary Aztec payloads as
+ * Latin-1 strings — each charCode IS the byte value (0-255).
+ */
+function rawToBase64(raw: string): string {
+    // Build bytes from charCodes (Latin-1)
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i) & 0xff;
+    // Convert to Base64 in chunks (avoid stack overflow for large payloads)
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = Array.from(bytes.slice(i, i + chunkSize));
+        binary += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binary);
 }
 
 /**
@@ -160,57 +86,50 @@ function parsePlainTextQR(text: string): DecodedVehicleData {
 }
 
 /**
- * Decode raw Aztec barcode bytes from a Polish registration certificate.
- * Supports both new (XX…) and old format documents.
+ * Send Base64 payload to the Next.js API route for server-side decoding
+ * using the polish-vehicle-registration-certificate-decoder npm package.
  */
-function decodeRegistrationBytes(raw: Uint8Array): DecodedVehicleData {
-    // 4-byte LE header = decompressed output size
-    const outLen = raw[0] | (raw[1] << 8) | (raw[2] << 16) | (raw[3] << 24);
-    if (outLen <= 0 || outLen > 100_000) throw new Error("Invalid header");
-
-    const out = new Uint8Array(outLen);
-    nrv2eDecompress(raw.slice(4), out);
-
-    const text = new TextDecoder("utf-16le").decode(out);
-    const fields = text.split(/\||\r?\n/);
-
-    const isNew = fields[0]?.startsWith("XX");
-    const g = (nIdx: number, oIdx = -1): string => {
-        const i = isNew ? nIdx : oIdx;
-        return i >= 0 && i < fields.length ? fields[i].trim() : "";
-    };
-
-    const result: DecodedVehicleData = {};
-
-    result.vin = g(13, 11) || undefined;
-    result.registrationPlates = g(7, 5) || undefined;
-    result.make = g(8, 6) || undefined;
-    result.model = g(12, 10) || undefined;
-    result.year = g(56, 41) || undefined;
-    result.engineCapacity = g(48, 32).replace(/[^0-9]/g, "") || undefined;
-
-    const kwStr = g(49, 33);
-    if (kwStr) {
-        const kw = parseFloat(kwStr.replace(",", "."));
-        if (!isNaN(kw)) result.enginePower = String(Math.round(kw * 1.36));
+async function decodeViaAPI(base64: string): Promise<DecodedVehicleData | null> {
+    try {
+        const res = await fetch("/api/decode-registration", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ aztecBase64: base64 }),
+        });
+        if (!res.ok) return null;
+        const json = await res.json();
+        if (!json.ok || !json.result) return null;
+        const r = json.result;
+        const data: DecodedVehicleData = {};
+        if (r.vin) data.vin = r.vin;
+        if (r.registrationPlates) data.registrationPlates = r.registrationPlates;
+        if (r.make) data.make = r.make;
+        if (r.model) data.model = r.model;
+        if (r.year) data.year = r.year;
+        if (r.engineCapacity) data.engineCapacity = r.engineCapacity;
+        if (r.enginePower) data.enginePower = r.enginePower;
+        if (r.fuelType) data.fuelType = r.fuelType;
+        if (r.ownWeight) data.ownWeight = r.ownWeight;
+        if (r.totalWeight) data.totalWeight = r.totalWeight;
+        if (r.seatsCount) data.seatsCount = r.seatsCount;
+        if (r.firstRegistration) data.firstRegistration = r.firstRegistration;
+        return data;
+    } catch {
+        return null;
     }
+}
 
-    const fuel = g(50, 34);
-    if (fuel) result.fuelType = FUEL_MAP[fuel] || undefined;
-
-    result.ownWeight = g(41, 25).replace(/[^0-9]/g, "") || undefined;
-    result.totalWeight = g(39, 23).replace(/[^0-9]/g, "") || undefined;
-    result.seatsCount = g(52, 37) || undefined;
-
-    const regDate = g(51, 36);
-    if (regDate?.includes("-")) {
-        const [y, m, d] = regDate.split("-");
-        result.firstRegistration = `${d}.${m}.${y}`;
-    } else if (regDate) {
-        result.firstRegistration = regDate;
+/**
+ * Heuristic: does this string look like binary Aztec data (not readable text)?
+ */
+function looksLikeBinary(text: string): boolean {
+    if (text.length < 20) return false;
+    let controlChars = 0;
+    for (let i = 0; i < Math.min(text.length, 50); i++) {
+        const c = text.charCodeAt(i);
+        if (c < 32 || c > 126) controlChars++;
     }
-
-    return result;
+    return controlChars > 5;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -224,7 +143,7 @@ interface RegistrationQRScannerProps {
 
 export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScannerProps) {
     const [status, setStatus] = useState<"scanning" | "success" | "error">("scanning");
-    const [message, setMessage] = useState("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
+    const [message, setMessage] = useState("Nakieruj kamer\u0119 na kod Aztec lub QR z dowodu rejestracyjnego");
     const [decoded, setDecoded] = useState<DecodedVehicleData | null>(null);
     const [showManual, setShowManual] = useState(false);
     const [manualText, setManualText] = useState("");
@@ -238,99 +157,78 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
         console.log("[QR-DBG]", line);
     }, []);
 
-    /* ── scan callback ── */
+    /* ── Process decoded text (from any source: camera, file, manual) ── */
     const handleSuccess = useCallback(
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         async (decodedText: string) => {
             if (doneRef.current) return;
             doneRef.current = true;
 
-            const preview = JSON.stringify(decodedText.slice(0, 60));
-            dbg(`Detected! len=${decodedText.length} text=${preview}`);
-            console.log("[QR] handleSuccess — raw text:", JSON.stringify(decodedText));
+            dbg(`Detected! len=${decodedText.length} preview="${decodedText.slice(0, 60)}"`);
 
             let data: DecodedVehicleData | null = null;
 
-            // Path 1: Polish registration Aztec (NRV2E-compressed binary)
-            // BarcodeDetector may encode binary bytes as Latin-1 OR UTF-8 when building the DOMString.
-            // Try both encodings so we recover the original Aztec bytes regardless.
-            const byteCandidates: [string, Uint8Array][] = [
-                [
-                    "latin1",
-                    // Latin-1: each char code IS the byte value (charCode 0-255)
-                    (() => {
-                        const b = new Uint8Array(decodedText.length);
-                        for (let i = 0; i < decodedText.length; i++) b[i] = decodedText.charCodeAt(i) & 0xff;
-                        return b;
-                    })(),
-                ],
-                [
-                    "utf8",
-                    // UTF-8: re-encode the DOMString back to UTF-8 bytes — recovers original bytes
-                    // if the browser converted the Aztec binary via UTF-8 when building rawValue.
-                    new TextEncoder().encode(decodedText),
-                ],
-            ];
-
-            for (const [enc, bytes] of byteCandidates) {
-                if (data) break;
-                try {
-                    const aztecData = decodeRegistrationBytes(bytes);
-                    if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
-                        data = aztecData;
-                        dbg(`Path1 Aztec OK (${enc}) — VIN:${aztecData.vin ?? "?"} make:${aztecData.make ?? "?"}`);
-                        console.log(`[QR] Decoded as Aztec NRV2E (${enc})`, data);
-                    } else {
-                        dbg(`Path1 Aztec (${enc}) — decoded but no VIN/make/plates`);
+            // Path 1: Binary Aztec → decode via server-side API
+            if (looksLikeBinary(decodedText)) {
+                dbg("Looks like binary Aztec — sending to /api/decode-registration");
+                const base64 = rawToBase64(decodedText);
+                dbg(`Base64 payload: ${base64.length} chars`);
+                data = await decodeViaAPI(base64);
+                if (data && (data.vin || data.make || data.registrationPlates)) {
+                    dbg(`API decode OK — VIN:${data.vin ?? "?"} make:${data.make ?? "?"}`);
+                } else {
+                    dbg("API decode returned no useful fields — trying UTF-8 encoding");
+                    // Try UTF-8 re-encoding (some browsers encode binary via UTF-8)
+                    const utf8Bytes = new TextEncoder().encode(decodedText);
+                    let utf8Binary = "";
+                    const chunkSize = 8192;
+                    for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+                        const chunk = Array.from(utf8Bytes.slice(i, i + chunkSize));
+                        utf8Binary += String.fromCharCode.apply(null, chunk);
                     }
-                } catch (e: any) {
-                    dbg(`Path1 Aztec (${enc}) failed: ${e?.message ?? e}`);
+                    const utf8Base64 = btoa(utf8Binary);
+                    data = await decodeViaAPI(utf8Base64);
+                    if (data && (data.vin || data.make || data.registrationPlates)) {
+                        dbg(`API decode OK (UTF-8) — VIN:${data.vin ?? "?"}`);
+                    } else {
+                        data = null;
+                        dbg("API decode failed for both encodings");
+                    }
                 }
             }
 
-            // Path 2: Plain text QR (VIN, JSON, etc.)
+            // Path 2: Might be Base64 already (e.g. from another scanner)
+            if (!data && /^[A-Za-z0-9+/=]{20,}$/.test(decodedText.trim())) {
+                dbg("Looks like Base64 — trying direct API decode");
+                data = await decodeViaAPI(decodedText.trim());
+                if (data && (data.vin || data.make || data.registrationPlates)) {
+                    dbg(`Direct Base64 decode OK — VIN:${data.vin ?? "?"}`);
+                } else {
+                    data = null;
+                }
+            }
+
+            // Path 3: Plain text QR (VIN, JSON, etc.)
             if (!data) {
                 const plainData = parsePlainTextQR(decodedText);
                 if (plainData.vin || plainData.make || plainData.registrationPlates) {
                     data = plainData;
-                    dbg(`Path2 plain OK — VIN:${plainData.vin ?? "?"} plates:${plainData.registrationPlates ?? "?"}`);
-                    console.log("[QR] Decoded as plain text", data);
-                } else {
-                    dbg(`Path2 plain — no VIN/make/plates in: "${decodedText.slice(0, 80)}"`);
+                    dbg(`Plain text OK — VIN:${plainData.vin ?? "?"} plates:${plainData.registrationPlates ?? "?"}`);
                 }
             }
 
-            // Path 3: Unknown format — accept raw text so user sees it was scanned
+            // Path 4: Unknown format — show raw text
             if (!data) {
-                dbg(`Path3 rawText — "${decodedText.slice(0, 80)}"`);
-                console.log("[QR] No structured data — passing raw text");
+                dbg(`No structured data — rawText: "${decodedText.slice(0, 80)}"`);
                 data = { rawText: decodedText.slice(0, 200) };
             }
 
             setDecoded(data);
             setStatus("success");
-            setMessage(data.rawText && !data.vin && !data.make ? "Zeskanowano — sprawdź dane poniżej" : "Dane odczytane pomyślnie!");
-
-            // ── Send decode diagnostics to backend for server-side logging ──
-            try {
-                const latin1Bytes = Array.from({ length: Math.min(30, decodedText.length) }, (_, i) => decodedText.charCodeAt(i) & 0xff);
-                const utf8Bytes = Array.from(new TextEncoder().encode(decodedText).slice(0, 30));
-                const pathTaken = data.vin || data.make ? (decodedText.length > 20 && decodedText.charCodeAt(0) < 32 ? "aztec" : "plain") : "rawtext";
-                const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-                fetch(`${BASE_URL}/debug/qr`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        raw_length: decodedText.length,
-                        first_bytes_latin1: latin1Bytes,
-                        first_bytes_utf8: utf8Bytes,
-                        path_taken: pathTaken,
-                        vin_found: data.vin ?? "",
-                        make_found: data.make ?? "",
-                        raw_preview: decodedText.slice(0, 80),
-                    }),
-                }).catch(() => {});
-            } catch { /* non-critical */ }
+            setMessage(
+                data.rawText && !data.vin && !data.make
+                    ? "Zeskanowano \u2014 sprawdź dane poniżej"
+                    : "Dane odczytane pomyślnie!",
+            );
 
             // stop camera
             try { await scannerRef.current?.stop(); } catch { /* ok */ }
@@ -352,14 +250,12 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
     const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        // reset so the same file can be re-selected if needed
         e.target.value = "";
 
         setFileScanning(true);
         dbg(`File: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)} KB)`);
-        dbg(`doneRef was: ${doneRef.current} — resetting for file decode`);
 
-        // Path 1 — native BarcodeDetector on the image (most reliable)
+        // Path 1 — native BarcodeDetector
         const BDClass = (window as any).BarcodeDetector as any;
         if (BDClass) {
             try {
@@ -369,10 +265,9 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 bitmap.close();
                 if (codes.length > 0 && codes[0].rawValue) {
                     const raw = codes[0].rawValue;
-                    dbg(`File BarcodeDetector OK: len=${raw.length} "${raw.slice(0, 60)}"`);
-                    console.log("[QR-FILE] BarcodeDetector decoded:", JSON.stringify(raw));
+                    dbg(`File BarcodeDetector OK: len=${raw.length}`);
                     setFileScanning(false);
-                    doneRef.current = false; // reset so handleSuccess isn't blocked
+                    doneRef.current = false;
                     handleSuccess(raw);
                     return;
                 }
@@ -384,7 +279,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
 
         // Path 2 — ZXing via html5-qrcode scanFile
         try {
-            dbg("ZXing scanFile…");
+            dbg("ZXing scanFile...");
             const { Html5Qrcode } = await import("html5-qrcode");
             const tmpId = `qr-tmp-${Date.now()}`;
             const tmpDiv = document.createElement("div");
@@ -394,10 +289,9 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             try {
                 const tmpScanner = new Html5Qrcode(tmpId, { verbose: false });
                 const result = await tmpScanner.scanFile(file, false);
-                dbg(`ZXing scanFile OK: len=${result.length} "${result.slice(0, 60)}"`);
-                console.log("[QR-FILE] ZXing decoded:", JSON.stringify(result));
+                dbg(`ZXing scanFile OK: len=${result.length}`);
                 setFileScanning(false);
-                doneRef.current = false; // reset so handleSuccess isn't blocked
+                doneRef.current = false;
                 handleSuccess(result);
             } finally {
                 document.body.removeChild(tmpDiv);
@@ -405,8 +299,9 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
         } catch (err: any) {
             const msg = err?.message ?? String(err);
             dbg(`ZXing scanFile error: ${msg}`);
-            // Both JS decoders failed — try server-side pyzbar (handles compressed/rotated images)
-            dbg("Trying server-side pyzbar decode…");
+
+            // Path 3 — server-side pyzbar (handles compressed/rotated images)
+            dbg("Trying server-side pyzbar decode...");
             try {
                 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
                 const form = new FormData();
@@ -416,31 +311,25 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     const json = await res.json();
                     if (json.found && json.raw_bytes_b64) {
                         dbg(`Server pyzbar OK: type=${json.type} bytes=${json.raw_bytes_b64.length}`);
-                        // Decode base64 → Uint8Array and pass directly to NRV2E decoder
-                        const binaryStr = atob(json.raw_bytes_b64);
-                        const rawBytes = new Uint8Array(binaryStr.length);
-                        for (let i = 0; i < binaryStr.length; i++) rawBytes[i] = binaryStr.charCodeAt(i);
-                        // Try Aztec NRV2E decode first, then fall back to string
-                        let decodedStr = json.raw_string ?? "";
-                        try {
-                            const aztecData = decodeRegistrationBytes(rawBytes);
-                            if (aztecData.vin || aztecData.make || aztecData.registrationPlates) {
-                                dbg(`Server Aztec OK — VIN:${aztecData.vin ?? "?"} make:${aztecData.make ?? "?"}`);
-                                setFileScanning(false);
-                                // Apply data directly without going through handleSuccess string path
-                                setDecoded(aztecData);
-                                setStatus("success");
-                                setMessage("Dane odczytane pomyślnie!");
-                                try { await scannerRef.current?.stop(); } catch { /* ok */ }
-                                setTimeout(() => { onData(aztecData); onClose(); }, 6000);
-                                return;
-                            }
-                        } catch { /* not Aztec NRV2E — use raw_string path */ }
-                        // Fall back to handleSuccess with the raw string
-                        setFileScanning(false);
-                        doneRef.current = false;
-                        handleSuccess(decodedStr);
-                        return;
+                        // Send the raw bytes Base64 directly to the decoder API
+                        const apiData = await decodeViaAPI(json.raw_bytes_b64);
+                        if (apiData && (apiData.vin || apiData.make || apiData.registrationPlates)) {
+                            dbg(`Server → API decode OK — VIN:${apiData.vin ?? "?"}`);
+                            setFileScanning(false);
+                            setDecoded(apiData);
+                            setStatus("success");
+                            setMessage("Dane odczytane pomyślnie!");
+                            try { await scannerRef.current?.stop(); } catch { /* ok */ }
+                            setTimeout(() => { onData(apiData); onClose(); }, 2500);
+                            return;
+                        }
+                        // Fall back to raw string from pyzbar
+                        if (json.raw_string) {
+                            setFileScanning(false);
+                            doneRef.current = false;
+                            handleSuccess(json.raw_string);
+                            return;
+                        }
                     }
                     dbg("Server pyzbar: no barcode found in image");
                 } else {
@@ -449,12 +338,13 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             } catch (serverErr: any) {
                 dbg(`Server pyzbar error: ${serverErr?.message ?? serverErr}`);
             }
+
             setFileScanning(false);
             setStatus("error");
-            setMessage(`Nie udało się odczytać kodu z obrazu. Spróbuj wyraźniejsze zdjęcie.`);
+            setMessage("Nie udało się odczytać kodu z obrazu. Spróbuj wyraźniejsze zdjęcie.");
             setTimeout(() => {
                 setStatus("scanning");
-                setMessage("Nakieruj kamerę na kod Aztec lub QR z dowodu rejestracyjnego");
+                setMessage("Nakieruj kamer\u0119 na kod Aztec lub QR z dowodu rejestracyjnego");
             }, 3000);
         }
     }, [dbg, handleSuccess, onData, onClose]);
@@ -478,7 +368,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 }
 
                 // 2. Load library
-                dbg("Loading html5-qrcode…");
+                dbg("Loading html5-qrcode...");
                 const { Html5Qrcode } = await import("html5-qrcode");
                 if (!alive) return;
                 dbg("Library loaded");
@@ -489,22 +379,15 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 if (!el) throw new Error("Scanner container not found in DOM");
 
                 // 4. Construct scanner
-                dbg("Constructing scanner…");
                 sc = new Html5Qrcode(idRef.current, { verbose: false });
                 scannerRef.current = sc;
-                dbg("Scanner constructed");
 
-                // 5. Start
-                dbg("Calling start()…");
+                // 5. Start camera
+                dbg("Starting camera...");
                 await sc.start(
                     { facingMode: "environment" },
                     {
                         fps: 10,
-                        // aspectRatio:1 forces a SQUARE video frame.
-                        // Without it the camera is 16:9 landscape (~390×219 px).
-                        // Any square qrbox in a 390×219 frame looks narrow — the
-                        // box is constrained by height (219), not width (390).
-                        // With a square frame the box fills ~85% of both dimensions.
                         aspectRatio: 1,
                         qrbox: (w: number, h: number) => {
                             const side = Math.floor(Math.min(w, h) * 0.9);
@@ -512,15 +395,12 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                         },
                     },
                     handleSuccess,
-                    () => { /* per-frame scan miss — normal, ignore */ },
+                    () => { /* per-frame scan miss — normal */ },
                 );
                 started = true;
-                dbg("start() OK — scanning");
+                dbg("Camera started — scanning");
 
-                // ── Parallel native BarcodeDetector loop ──────────────────────
-                // ZXing (html5-qrcode default) often fails on real-world codes.
-                // Chrome/Android's native BarcodeDetector is much more reliable.
-                // Run it in parallel: whichever detects first calls handleSuccess.
+                // ── Parallel native BarcodeDetector loop ──
                 const BDClass = (window as any).BarcodeDetector as any;
                 if (typeof BDClass !== "undefined") {
                     dbg("BarcodeDetector: available — starting parallel loop");
@@ -538,15 +418,15 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                                     handleSuccess(codes[0].rawValue);
                                     return;
                                 }
-                            } catch (e: any) {
-                                // detect() throws when no code found — normal, ignore
+                            } catch {
+                                // detect() throws when no code found — normal
                             }
                         }
                         if (alive && !doneRef.current) {
-                            setTimeout(bdLoop, 200); // ~5 fps is enough
+                            setTimeout(bdLoop, 200);
                         }
                     };
-                    setTimeout(bdLoop, 500); // give camera 500ms to warm up
+                    setTimeout(bdLoop, 500);
                 } else {
                     dbg("BarcodeDetector: NOT available — ZXing only");
                 }
@@ -557,7 +437,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 if (alive) {
                     setStatus("error");
                     if (err?._httpsError) {
-                        setMessage("Kamera wymaga połączenia HTTPS. Skontaktuj się z administratorem.");
+                        setMessage("Kamera wymaga po\u0142\u0105czenia HTTPS. Skontaktuj si\u0119 z administratorem.");
                     } else {
                         setMessage(`Błąd: ${msg}`);
                     }
@@ -569,12 +449,10 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             alive = false;
             if (sc) {
                 try {
-                    if (started) {
-                        sc.stop().catch(() => {});
-                    }
+                    if (started) sc.stop().catch(() => {});
                     sc.clear();
                 } catch {
-                    // scanner cleanup failed — safe to ignore
+                    // scanner cleanup — safe to ignore
                 }
             }
         };
@@ -600,7 +478,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 </button>
             </div>
 
-            {/* camera — takes all available vertical space */}
+            {/* camera */}
             <div className="flex-1 flex flex-col items-center justify-center min-h-0">
                 <div
                     id={idRef.current}
@@ -644,7 +522,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                             className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl text-xs font-bold text-white active:scale-95 transition-all disabled:opacity-50 flex-1"
                         >
                             {fileScanning
-                                ? <><Loader2 size={14} className="animate-spin" /> Odczytuję…</>
+                                ? <><Loader2 size={14} className="animate-spin" /> Odczytuję...</>
                                 : <><ImagePlus size={14} /> Wybierz zdjęcie</>
                             }
                         </button>

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "node scripts/fix-decoder-exports.js"
   },
   "dependencies": {
     "@types/react-signature-canvas": "^1.0.7",
