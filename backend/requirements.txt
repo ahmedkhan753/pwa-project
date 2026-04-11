@@ -15,6 +15,6 @@ aiosmtplib==3.0.1
 requests==2.31.0
 psycopg2-binary==2.9.9
 pyzbar==0.1.9
-zxing-cpp>=2.2.0
+zxing-cpp==2.3.0
 numpy
 Pillow==10.4.0
