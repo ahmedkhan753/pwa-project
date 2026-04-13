@@ -227,7 +227,13 @@ def build_dane_ogledzen(d, w):
 
 
 def build_dane_pojazdu(d, w):
-    """DANE POJAZDU — 4-column vehicle data grid matching client template."""
+    """DANE POJAZDU — 4-column vehicle data grid.
+
+    Only fields actually collected by the PWA are rendered here. Fields that
+    were in the original client template but aren't captured by the app
+    (insurance, policy number, technical inspection date, fluid levels that
+    we don't measure, etc.) have been removed so the PDF stays clean.
+    """
     fn, fnb = _fn()
     h = w / 2
     lw, vw = h * 0.40, h * 0.60
@@ -244,35 +250,24 @@ def build_dane_pojazdu(d, w):
     rows = [
         r("Numer rejestracyjny",    V("plates", "registration_plates", "registrationNumber"),
           "Marka, model",           make_model or V("TITLE")),
-        r("Rok produkcji",         V("year", "rok_produkcji"),
-          "VIN",                   V("vin", "VIN")),
-        r("Przebieg (km)",         V("mileage", "przebieg"),
-          "Data 1 rej.",           fmt_date(V("first_registration", "firstRegistration"))),
-        r("Kolor",                 V("color", "kolor"),
-          "Rodzaj paliwa/silnika", V("fuel_type", "fuelType", "rodzaj_paliwa")),
-        r("Skrzynia biegów",      V("gearbox", "skrzynia_biegow", "transmission"),
-          "Rodzaj lakieru",        V("paint_type", "rodzaj_lakieru")),
-        r("Ilość miejsc siedz.",   V("seats", "ilosc_miejsc", "seatsCount"),
-          "Napęd",                 V("drive", "naped", "driveType")),
-        r("Masa własna (kg)",      V("kerb_weight", "masa_wlasna", "ownWeight"),
-          "Liczba drzwi",          V("doors", "liczba_drzwi")),
-        r("Rodzaj nadwozia",       V("body_type", "rodzaj_nadwozia"),
-          "Moc (kW)",             V("power_kw", "moc", "enginePower")),
-        r("Towarzystwo Ubezpieczeniowe", V("insurance_company"),
-          "Pojemność",             V("engine_capacity", "pojemnosc", "engineCapacity")),
-        r("Numer polisy",          V("policy_number"),
-          "Ubezpieczenie OC -\nważne do", V("oc_valid_until")),
-        r("Data ważności badania\ntechnicznego", V("technical_inspection_date"),
-          "Dowód rejestracyjny",   V("registration_doc", "registrationCertificate")),
-        r("Klasa",                 V("vehicle_class", "klasa"),
-          "Data ostatniego przeglądu\nolejowego", V("last_oil_service")),
-        r("Stan poziomu płynu\nukładu chłodniczego", V("coolant_level", "coolantLevel"),
-          "Stan zbiornika paliwa", V("fuel_level")),
+        r("Rok produkcji",          V("year", "rok_produkcji"),
+          "VIN",                    V("vin", "VIN")),
+        r("Przebieg (km)",          V("mileage", "przebieg"),
+          "Data 1 rej.",            fmt_date(V("first_registration", "firstRegistration"))),
+        r("Kolor",                  V("color", "kolor"),
+          "Rodzaj paliwa",          V("fuel_type", "fuelType", "rodzaj_paliwa")),
+        r("Skrzynia biegów",        V("gearbox", "skrzynia_biegow", "transmission"),
+          "Napęd",                  V("drive", "naped", "driveType")),
+        r("Rodzaj nadwozia",        V("body_type", "rodzaj_nadwozia"),
+          "Liczba drzwi",           V("doors", "liczba_drzwi")),
+        r("Ilość miejsc siedz.",    V("seats", "ilosc_miejsc", "seatsCount"),
+          "Masa własna (kg)",       V("kerb_weight", "masa_wlasna", "ownWeight")),
+        r("Pojemność silnika (cm³)", V("engine_capacity", "pojemnosc", "engineCapacity"),
+          "Moc (kW)",               V("power_kw", "moc", "enginePower")),
+        r("Dowód rejestracyjny",    V("registration_doc", "registrationCertificate"),
+          "Stan poziomu oleju",     V("oil_level", "engineOilLevel")),
         r("Stan poziomu płynu\nhamulcowego", V("brake_fluid"),
-          "Stan poziomu oleju",    V("oil_level", "engineOilLevel")),
-        r("Karoseria",             V("bodywork_condition", "karoseria"),
-          "Stan poziomu płynu\nukładu wspomagania", V("power_steering_fluid")),
-        r("Stan paliwa",           V("fuel_status", "stan_paliwa"), "", ""),
+          "Stan poziomu płynu\nchłodniczego", V("coolant_level", "coolantLevel")),
     ]
     t = Table(rows, colWidths=[lw, vw, lw, vw])
     ts = _grid_ts()

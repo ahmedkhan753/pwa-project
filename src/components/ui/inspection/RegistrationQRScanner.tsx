@@ -280,18 +280,58 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
         setFileScanning(true);
         dbg(`File: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)} KB)`);
 
-        // Path 1 — ZXing @zxing/browser (best Aztec support)
+        // Path 1 — dedicated Aztec reader first (Polish registration certs are Aztec)
         try {
-            dbg("ZXing @zxing/browser decodeFromImageUrl...");
+            dbg("ZXing BrowserAztecCodeReader decodeFromImageUrl...");
+            const { BrowserAztecCodeReader } = await import("@zxing/browser");
+            const { DecodeHintType } = await import("@zxing/library");
+            const hints = new Map<any, any>();
+            hints.set(DecodeHintType.TRY_HARDER, true);
+            const aztecReader = new BrowserAztecCodeReader(hints);
+            const imgUrl = URL.createObjectURL(file);
+            try {
+                const result = await aztecReader.decodeFromImageUrl(imgUrl);
+                if (result) {
+                    const text = result.getText();
+                    const rawBytes = result.getRawBytes();
+                    dbg(`Aztec reader OK: len=${text.length} rawBytes=${rawBytes?.length ?? 0}`);
+                    setFileScanning(false);
+                    doneRef.current = false;
+                    handleSuccess(text, rawBytes ? new Uint8Array(rawBytes) : undefined);
+                    URL.revokeObjectURL(imgUrl);
+                    return;
+                }
+            } catch (err: any) {
+                dbg(`Aztec reader file miss: ${err?.message ?? err}`);
+            } finally {
+                URL.revokeObjectURL(imgUrl);
+            }
+        } catch (err: any) {
+            dbg(`Aztec reader load error: ${err?.message ?? err}`);
+        }
+
+        // Path 1b — generic multi-format with hints (QR, DataMatrix, etc.)
+        try {
+            dbg("ZXing BrowserMultiFormatReader decodeFromImageUrl (hinted)...");
             const { BrowserMultiFormatReader } = await import("@zxing/browser");
-            const reader = new BrowserMultiFormatReader();
+            const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
+            const hints = new Map<any, any>();
+            hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+                BarcodeFormat.AZTEC,
+                BarcodeFormat.QR_CODE,
+                BarcodeFormat.DATA_MATRIX,
+                BarcodeFormat.PDF_417,
+                BarcodeFormat.CODE_128,
+            ]);
+            hints.set(DecodeHintType.TRY_HARDER, true);
+            const reader = new BrowserMultiFormatReader(hints);
             const imgUrl = URL.createObjectURL(file);
             try {
                 const result = await reader.decodeFromImageUrl(imgUrl);
                 if (result) {
                     const text = result.getText();
                     const rawBytes = result.getRawBytes();
-                    dbg(`ZXing @zxing/browser OK: len=${text.length} rawBytes=${rawBytes?.length ?? 0}`);
+                    dbg(`MultiFormat file OK: len=${text.length} rawBytes=${rawBytes?.length ?? 0}`);
                     setFileScanning(false);
                     doneRef.current = false;
                     handleSuccess(text, rawBytes ? new Uint8Array(rawBytes) : undefined);
@@ -301,7 +341,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 URL.revokeObjectURL(imgUrl);
             }
         } catch (err: any) {
-            dbg(`ZXing @zxing/browser file error: ${err?.message ?? err}`);
+            dbg(`MultiFormat file error: ${err?.message ?? err}`);
         }
 
         // Path 2 — native BarcodeDetector
@@ -365,15 +405,47 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 // Use @zxing/browser for camera scanning — proper Aztec support
                 dbg("Loading @zxing/browser...");
                 const { BrowserMultiFormatReader } = await import("@zxing/browser");
+                const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
                 if (!alive) return;
 
-                const reader = new BrowserMultiFormatReader();
+                // Hints: only scan formats we care about, use TRY_HARDER for tough codes.
+                // This makes Aztec detection far more reliable on blurry phone photos
+                // of Polish vehicle registration certificates.
+                const hints = new Map<any, any>();
+                hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+                    BarcodeFormat.AZTEC,
+                    BarcodeFormat.QR_CODE,
+                    BarcodeFormat.DATA_MATRIX,
+                    BarcodeFormat.PDF_417,
+                    BarcodeFormat.CODE_128,
+                ]);
+                hints.set(DecodeHintType.TRY_HARDER, true);
+
+                const reader = new BrowserMultiFormatReader(hints, {
+                    delayBetweenScanAttempts: 100,
+                    delayBetweenScanSuccess: 500,
+                });
                 const videoEl = videoRef.current;
                 if (!videoEl) throw new Error("Video element not found");
 
+                // Prefer rear camera with high resolution for sharper Aztec decoding
+                let deviceId: string | undefined;
+                try {
+                    const devices = await (BrowserMultiFormatReader as any).listVideoInputDevices?.();
+                    if (Array.isArray(devices) && devices.length > 0) {
+                        const rear = devices.find((d: any) =>
+                            /back|rear|environment/i.test(d.label || "")
+                        );
+                        deviceId = (rear ?? devices[devices.length - 1]).deviceId;
+                        dbg(`Cameras: ${devices.length}, using ${rear ? "rear" : "last"}: "${(rear ?? devices[devices.length - 1]).label}"`);
+                    }
+                } catch (err: any) {
+                    dbg(`listVideoInputDevices err: ${err?.message ?? err}`);
+                }
+
                 dbg("Starting camera via ZXing...");
                 const controls = await reader.decodeFromVideoDevice(
-                    undefined,  // auto-select camera (prefers environment/rear)
+                    deviceId,
                     videoEl,
                     (result, error) => {
                         if (!alive || doneRef.current) return;
@@ -387,7 +459,7 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     },
                 );
                 controlsRef.current = controls;
-                dbg("Camera started — scanning with ZXing (Aztec + QR + all formats)");
+                dbg("Camera started — scanning with ZXing (Aztec + QR hinted, TRY_HARDER)");
 
                 // ── Also run native BarcodeDetector in parallel (more reliable on some devices) ──
                 const BDClass = (window as any).BarcodeDetector as any;
@@ -455,14 +527,19 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
             </div>
 
             {/* camera */}
-            <div className="flex-1 flex flex-col items-center justify-center min-h-0 bg-black">
+            <div className="flex-1 flex flex-col items-center justify-center min-h-0 bg-black relative">
                 <video
                     ref={videoRef}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                     style={{ maxHeight: "calc(100vh - 180px)" }}
                     playsInline
                     muted
+                    autoPlay
                 />
+                {/* Scan reticle to help the user frame the Aztec code */}
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="w-64 h-64 border-2 border-primary/70 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                </div>
             </div>
 
             {/* bottom bar */}
