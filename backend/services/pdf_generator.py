@@ -226,6 +226,18 @@ def build_dane_ogledzen(d, w):
     return t
 
 
+def _fluid_level(v):
+    """Translate a ToggleValue (TAK/NIE/ND) into a human-readable fluid level."""
+    s = str(v or "").strip().upper()
+    if s in ("TAK", "OK", "YES", "TRUE", "1"):
+        return "OK"
+    if s in ("NIE", "NOK", "NO", "FALSE", "0"):
+        return "Niski / do uzupełnienia"
+    if s == "ND":
+        return "Nie dotyczy"
+    return ""
+
+
 def build_dane_pojazdu(d, w):
     """DANE POJAZDU — 4-column vehicle data grid.
 
@@ -248,7 +260,7 @@ def build_dane_pojazdu(d, w):
         make_model = f"{V('make', 'vehicle_brand')} {V('model', 'vehicle_model')}".strip()
 
     rows = [
-        r("Numer rejestracyjny",    V("plates", "registration_plates", "registrationNumber"),
+        r("Numer rejestracyjny",    V("plates", "registration_plates", "registrationPlates"),
           "Marka, model",           make_model or V("TITLE")),
         r("Rok produkcji",          V("year", "rok_produkcji"),
           "VIN",                    V("vin", "VIN")),
@@ -263,11 +275,9 @@ def build_dane_pojazdu(d, w):
         r("Ilość miejsc siedz.",    V("seats", "ilosc_miejsc", "seatsCount"),
           "Masa własna (kg)",       V("kerb_weight", "masa_wlasna", "ownWeight")),
         r("Pojemność silnika (cm³)", V("engine_capacity", "pojemnosc", "engineCapacity"),
-          "Moc (kW)",               V("power_kw", "moc", "enginePower")),
-        r("Dowód rejestracyjny",    V("registration_doc", "registrationCertificate"),
-          "Stan poziomu oleju",     V("oil_level", "engineOilLevel")),
-        r("Stan poziomu płynu\nhamulcowego", V("brake_fluid"),
-          "Stan poziomu płynu\nchłodniczego", V("coolant_level", "coolantLevel")),
+          "Moc (KM)",               V("power_kw", "moc", "enginePower")),
+        r("Stan poziomu oleju",     _fluid_level(V("oil_level", "engineOilLevel")),
+          "Stan poziomu płynu\nchłodniczego", _fluid_level(V("coolant_level", "coolantLevel"))),
     ]
     t = Table(rows, colWidths=[lw, vw, lw, vw])
     ts = _grid_ts()
@@ -433,6 +443,17 @@ def build_opony(tires, w):
         ("Opona Lewa Przód",  "front_left",  "frontLeft",  "przod_lewy"),
     ]
 
+    SEASON_LABELS = {
+        "summer": "Letnie", "lato": "Letnie",
+        "winter": "Zimowe", "zima": "Zimowe",
+        "all-season": "Całoroczne", "all_season": "Całoroczne",
+        "allseason": "Całoroczne", "calorocz": "Całoroczne",
+    }
+
+    def _season(v):
+        s = str(v or "").strip().lower()
+        return SEASON_LABELS.get(s, v or "")
+
     rows = [header]
     for label, *keys in POSITIONS:
         td = None
@@ -444,19 +465,28 @@ def build_opony(tires, w):
             td = {}
 
         size_str = val(td, "size", "oznaczenie", "rozmiar", default="")
-        # Split "225/55 17 96 V" into parts
+        load_idx = val(td, "loadIndex", "load_index", default="")
+        speed_idx = val(td, "speedIndex", "speed_index", default="")
+        # Append the load+speed index to the size string if not already there, so
+        # the 4 sub-columns get populated: ["225", "55", "R17", "96V"].
+        if (load_idx or speed_idx) and not re.search(r'\d{2,3}[A-Z]', size_str):
+            size_str = f"{size_str} {load_idx}{speed_idx}".strip()
         parts = re.split(r'[\s/]+', size_str) if size_str else []
+        # Tread depth may carry a "mm" suffix or be a raw number
+        tread = val(td, "treadDepth", "profil", "profile", default="")
+        if tread and not re.search(r'(?i)mm', str(tread)):
+            tread = f"{tread} mm"
 
         rows.append([
             p(label),
             pc(val(td, "brand", "producent", "marka")),
-            pc(val(td, "type", "typ")),
+            pc(val(td, "model", "modelu", "typ")),
             pc(parts[0] if len(parts) > 0 else ""),
             pc(parts[1] if len(parts) > 1 else ""),
             pc(parts[2] if len(parts) > 2 else ""),
             pc(parts[3] if len(parts) > 3 else ""),
-            pc(val(td, "profile", "profil", "treadDepth")),
-            pc(val(td, "tire_type", "rodzaj_opon", "season")),
+            pc(tread),
+            pc(_season(val(td, "type", "tire_type", "rodzaj_opon", "season"))),
         ])
 
     t = Table(rows, colWidths=col_w)
@@ -468,7 +498,14 @@ def build_opony(tires, w):
 
 
 def build_signatures(d, w):
-    """3 signature boxes side-by-side with labels and signature images."""
+    """3 signature boxes side-by-side with labels and signature images.
+
+    Slot layout matches the client template:
+      0 — Rzeczoznawca / Ekspert mobilny  → finalSummary.signatureAppraiser
+      1 — Strona przyjmująca na plac      → finalSummary.signatureYard
+      2 — Dysponent pojazdu w chwili oględzin → finalSummary.signatureClient
+          If isAbsentRep is true, render absentRepComment instead of a signature.
+    """
     fn, fnb = _fn()
     sw = (w - 1.0 * cm) / 3
 
@@ -478,12 +515,25 @@ def build_signatures(d, w):
         "Potwierdzam zwrot pojazdu\nw stanie opisanym powyżej.\n\nPodpis dysponenta pojazdu\nw chwili oględzin",
     ]
 
-    # Try multiple key patterns for signatures
+    # Flat-keys first, then camelCase fallbacks. Yard is slot 1, client is slot 2.
     sig_keys = [
         ("signature_appraiser", "signatureAppraiser", "podpis_rzeczoznawcy"),
-        ("signature_client", "signatureClient", "podpis_przyjmujacego"),
-        ("signature_owner", "signatureYard", "signatureOwner", "podpis_dysponenta"),
+        ("signature_yard", "signatureYard", "signature_owner", "podpis_przyjmujacego"),
+        ("signature_client", "signatureClient", "podpis_dysponenta"),
     ]
+
+    summary = d.get("finalSummary", {}) or {}
+    is_absent_rep = bool(
+        d.get("is_absent_rep")
+        or d.get("isAbsentRep")
+        or summary.get("isAbsentRep")
+    )
+    absent_comment = (
+        d.get("absent_rep_comment")
+        or d.get("absentRepComment")
+        or summary.get("absentRepComment")
+        or ""
+    )
 
     cells = []
     for i in range(3):
@@ -492,20 +542,29 @@ def build_signatures(d, w):
             sig_data = d.get(k)
             if sig_data:
                 break
-
-        # Check in finalSummary sub-dict too
         if not sig_data:
-            summary = d.get("finalSummary", {})
             for k in sig_keys[i]:
                 sig_data = summary.get(k)
                 if sig_data:
                     break
 
-        sig_img = load_image(sig_data, sw - 0.8 * cm, 2.0 * cm) if sig_data else None
-
         label_style = _style(f"_sl{i}", fontSize=6, leading=8, alignment=TA_CENTER)
         cell_content = [p(labels[i], label_style), sp(0.15)]
-        cell_content.append(sig_img if sig_img else sp(2.0))
+
+        # Slot 2 (client / dysponent): if the client was absent, render the
+        # absent-rep comment in place of a signature — mirrors the in-app text
+        # note that replaces the signature pad for absent clients.
+        if i == 2 and is_absent_rep and not sig_data:
+            absent_style = _style("_sl2_abs", fontSize=6, leading=8, alignment=TA_CENTER)
+            cell_content.append(p("(Dysponent nieobecny)", absent_style))
+            cell_content.append(sp(0.1))
+            if absent_comment:
+                cell_content.append(p(str(absent_comment), absent_style))
+            else:
+                cell_content.append(sp(1.6))
+        else:
+            sig_img = load_image(sig_data, sw - 0.8 * cm, 2.0 * cm) if sig_data else None
+            cell_content.append(sig_img if sig_img else sp(2.0))
         cells.append(cell_content)
 
     t = Table([cells], colWidths=[sw, sw, sw])
@@ -599,44 +658,55 @@ def generate_inspection_pdf(deal_info: dict, inspection_data: dict, logo_path: s
     mech = inspection_data.get("mechanical", {})
     summary = inspection_data.get("finalSummary", {})
 
-    # Build flat dict with all possible keys for maximum compatibility
+    # Build flat dict with all possible keys for maximum compatibility.
+    # Bitrix deal_info fields can arrive as empty strings, so we use a
+    # "prefer non-empty" helper instead of setdefault — otherwise an empty
+    # Bitrix value silently blocks the PWA fallback and the field renders blank.
     flat = {}
     flat.update(d)
 
-    # Map old camelCase vehicle fields to snake_case
+    def _set(key, value):
+        if value is None:
+            return
+        sval = str(value).strip()
+        if not sval:
+            return
+        if not str(flat.get(key, "") or "").strip():
+            flat[key] = sval
+
     if vehicle:
-        flat.setdefault("vin", vehicle.get("vin", ""))
-        flat.setdefault("make", vehicle.get("make", ""))
-        flat.setdefault("model", vehicle.get("model", ""))
-        flat.setdefault("year", vehicle.get("year", ""))
-        flat.setdefault("mileage", vehicle.get("mileage", ""))
-        flat.setdefault("color", vehicle.get("color", ""))
-        flat.setdefault("fuel_type", vehicle.get("fuelType", ""))
-        flat.setdefault("seats", vehicle.get("seatsCount", ""))
-        flat.setdefault("drive", vehicle.get("driveType", ""))
-        flat.setdefault("kerb_weight", vehicle.get("ownWeight", ""))
-        flat.setdefault("engine_capacity", vehicle.get("engineCapacity", ""))
-        flat.setdefault("power_kw", vehicle.get("enginePower", ""))
-        flat.setdefault("first_registration", vehicle.get("firstRegistration", ""))
-        flat.setdefault("registration_doc", vehicle.get("registrationCertificate", ""))
-        flat.setdefault("plates", vehicle.get("registrationNumber", ""))
-        flat.setdefault("gearbox", vehicle.get("gearboxType", ""))
-        flat.setdefault("body_type", vehicle.get("bodyType", ""))
-        flat.setdefault("doors", vehicle.get("doorsCount", ""))
+        _set("vin",                vehicle.get("vin"))
+        _set("make",               vehicle.get("make"))
+        _set("model",              vehicle.get("model"))
+        _set("year",               vehicle.get("year"))
+        _set("mileage",            vehicle.get("mileage"))
+        _set("color",              vehicle.get("color"))
+        _set("fuel_type",          vehicle.get("fuelType"))
+        _set("seats",              vehicle.get("seatsCount"))
+        _set("drive",              vehicle.get("driveType"))
+        _set("kerb_weight",        vehicle.get("ownWeight"))
+        _set("engine_capacity",    vehicle.get("engineCapacity"))
+        _set("power_kw",           vehicle.get("enginePower"))
+        _set("first_registration", vehicle.get("firstRegistration"))
+        _set("plates",             vehicle.get("registrationPlates") or vehicle.get("registrationNumber"))
+        _set("gearbox",            vehicle.get("gearboxType"))
+        _set("body_type",          vehicle.get("bodyType"))
+        _set("doors",              vehicle.get("doorsCount"))
     if basic:
-        flat.setdefault("company_name", basic.get("companyName", ""))
-        flat.setdefault("inspection_location", basic.get("inspectionPlace", ""))
-        flat.setdefault("inspector_name", basic.get("userOwner", ""))
-        flat.setdefault("inspection_date", basic.get("inspectionDate", ""))
-        flat.setdefault("client_name", basic.get("clientName", ""))
+        _set("company_name",       basic.get("companyName"))
+        _set("inspection_location", basic.get("inspectionPlace"))
+        _set("inspector_name",     basic.get("userOwner"))
+        _set("inspection_date",    basic.get("inspectionDate"))
+        _set("client_name",        basic.get("clientName"))
     if mech:
-        flat.setdefault("coolant_level", mech.get("coolantLevel", ""))
-        flat.setdefault("oil_level", mech.get("engineOilLevel", ""))
-        flat.setdefault("brake_fluid", mech.get("brakeFluidLevel", ""))
+        _set("coolant_level",      mech.get("coolantLevel"))
+        _set("oil_level",          mech.get("engineOilLevel"))
     if summary:
-        flat.setdefault("signature_appraiser", summary.get("signatureAppraiser", ""))
-        flat.setdefault("signature_client", summary.get("signatureClient", ""))
-        flat.setdefault("signature_owner", summary.get("signatureYard", ""))
+        _set("signature_appraiser", summary.get("signatureAppraiser"))
+        _set("signature_client",    summary.get("signatureClient"))
+        _set("signature_yard",      summary.get("signatureYard"))
+        _set("is_absent_rep",       summary.get("isAbsentRep"))
+        _set("absent_rep_comment",  summary.get("absentRepComment"))
 
     # Order number
     order_number = val(flat, "order_number", "nr_zlecenia", "deal_number", "title", default="ZR/2025/XXXXX")

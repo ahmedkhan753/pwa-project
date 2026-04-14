@@ -1056,31 +1056,12 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
 
 
-        {/* ── SECTION 02: WYPOSAŻENIE ── */}
-        {data.equipment.length > 0 && (
-          <>
-            <CollapsibleSection id="wyposazenie" icon="fas fa-list-check" num="02 / Wyposażenie" title="Wyposażenie">
-              <div className="rg-4" style={{ gap:10 }}>
-                {data.equipment.filter(e => e.present).map((eq, i) => (
-                  <div key={i} style={{ display:'flex',alignItems:'center',gap:10,padding:'14px 16px',
-                    borderRadius:8,background:'#F5F5F7',transition:'all 0.3s',border:'1px solid transparent' }}
-                    onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.background='#fff'; el.style.borderColor='#E8E8ED'; el.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)'; }}
-                    onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.background='#F5F5F7'; el.style.borderColor='transparent'; el.style.boxShadow=''; }}
-                  >
-                    <div style={{ width:24,height:24,borderRadius:'50%',
-                      background:'linear-gradient(135deg,#22C55E,#16a34a)',
-                      display:'flex',alignItems:'center',justifyContent:'center',
-                      color:'#fff',fontSize:11,flexShrink:0 }}>
-                      <i className="fas fa-check"/>
-                    </div>
-                    <span style={{ fontSize:14,color:'#1D1D1F',fontWeight:500 }}>{eq.name}</span>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-
-          </>
-        )}
+        {/*
+          SECTION 02 (Wyposażenie) intentionally removed from the Condition Report.
+          The VIN-decoder / Stage 1 manual checklist was unreliable as an equipment
+          source. Equipment will be sourced from the Stage 2 appraiser's uploaded
+          PDF in a future iteration; until then nothing is shown here.
+        */}
 
         {/* ── SECTION 03: ZDJĘCIA PODSTAWOWE ── */}
         <CollapsibleSection id="zdjecia-podstawowe" icon="fas fa-camera" num="03 / Zdjęcia podstawowe" title="Zdjęcia podstawowe">
