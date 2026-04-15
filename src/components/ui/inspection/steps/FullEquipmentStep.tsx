@@ -158,34 +158,12 @@ const EQUIPMENT_GROUPS = [
     },
 ];
 
-const TOTAL_ITEMS = EQUIPMENT_GROUPS.reduce((n, g) => n + g.items.length, 0);
-
 export function FullEquipmentStep() {
     const { data, updateField } = useInspectionStore();
     const eq = data.fullEquipment;
 
-    const filledCount = EQUIPMENT_GROUPS.reduce((n, g) => {
-        return n + g.items.filter((i) => eq[i.key]).length;
-    }, 0);
-
     return (
         <div className="space-y-4 animate-fade-in">
-            <div className="section-card">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
-                        Pełne wyposażenie pojazdu
-                    </h3>
-                    <span className="text-[11px] font-semibold text-muted">
-                        {filledCount}/{TOTAL_ITEMS}
-                    </span>
-                </div>
-                <p className="mt-2 text-[11px] text-muted leading-relaxed">
-                    Zaznacz wyposażenie zgodnie z lista klienta (108 pozycji).
-                    Wartości zapisywane są jako TAK / NIE i trafiają do Bitrix24
-                    jako pole <code>UF_CRM_FULL_EQUIP</code>.
-                </p>
-            </div>
-
             {EQUIPMENT_GROUPS.map((group) => {
                 const groupFilled = group.items.filter((i) => eq[i.key]).length;
                 return (
