@@ -105,48 +105,141 @@ export interface EquipmentCompleteness {
 }
 
 // ─── Step 3: Full Equipment List ───────────────────────────
+// Canonical 108-item catalogue sourced from client Excel sheet
+// "wyposażenie" (Feb 2025). Keys kept in camelCase; legacy keys
+// from earlier releases are preserved so in-progress inspections
+// do not lose previously toggled values on upgrade.
 export interface FullEquipment {
-  // Safety
+  // ── Bezpieczeństwo ──────────────────────────────────────
   abs: ToggleValue;
   esp: ToggleValue;
-  airbagDriver: ToggleValue;
+  asr: ToggleValue;
+  alarm: ToggleValue;
+  airbagDriver: ToggleValue;        // legacy — not on client list, kept
   airbagPassenger: ToggleValue;
-  airbagSide: ToggleValue;
+  airbagSide: ToggleValue;          // legacy generic — kept
+  airbagSideFront: ToggleValue;
+  airbagSideRear: ToggleValue;
   airbagCurtain: ToggleValue;
-  tractionControl: ToggleValue;
-  // Comfort
-  airConditioning: ToggleValue;
-  automaticAC: ToggleValue;
-  heatedSeats: ToggleValue;
-  electricWindows: ToggleValue;
-  electricMirrors: ToggleValue;
-  heatedMirrors: ToggleValue;
-  powerSteering: ToggleValue;
-  cruiseControl: ToggleValue;
-  parkingSensors: ToggleValue;
-  rearCamera: ToggleValue;
+  airbagKnee: ToggleValue;
+  tractionControl: ToggleValue;     // legacy — kept
+  blindSpotAssist: ToggleValue;
+  laneChangeAssist: ToggleValue;
+  nightVisionAssist: ToggleValue;
+  vehicleAssist: ToggleValue;
+  activeParkingSystem: ToggleValue;
+  tirePressureSensor: ToggleValue;
   rainSensors: ToggleValue;
   lightSensors: ToggleValue;
-  centralLocking: ToggleValue;
+  trafficSignRecognition: ToggleValue;
+  // ── Komfort / fotele / kierownica ──────────────────────
+  manualAC: ToggleValue;
+  automaticAC: ToggleValue;
+  airConditioning: ToggleValue;     // legacy generic — kept
+  heatedSeats: ToggleValue;         // legacy → treated as "przednie"
+  heatedRearSeats: ToggleValue;
+  ventilatedFrontSeats: ToggleValue;
+  ventilatedRearSeats: ToggleValue;
+  massageFrontSeats: ToggleValue;
+  massageRearSeats: ToggleValue;
+  electricFrontSeats: ToggleValue;
+  adjustableRearSeats: ToggleValue;
+  sportSeats: ToggleValue;
+  driverSeatMemory: ToggleValue;
+  passengerSeatMemory: ToggleValue;
+  thirdRowSeats: ToggleValue;
+  armrestFront: ToggleValue;
+  armrestRear: ToggleValue;
+  leatherSteeringWheel: ToggleValue;
+  multifunctionSteeringWheel: ToggleValue;
+  heatedSteeringWheel: ToggleValue;
+  paddleShifters: ToggleValue;
+  electricSteeringColumn: ToggleValue;
+  cruiseControl: ToggleValue;
+  activeCruiseControl: ToggleValue;
+  powerSteering: ToggleValue;
+  comfortAccess: ToggleValue;
   keylessEntry: ToggleValue;
-  startStop: ToggleValue;
-  // Electronics
-  navigation: ToggleValue;
-  bluetooth: ToggleValue;
-  usb: ToggleValue;
-  multimediaScreen: ToggleValue;
-  soundSystem: ToggleValue;
+  centralLocking: ToggleValue;
+  startStop: ToggleValue;           // legacy — kept
+  headUpDisplay: ToggleValue;
+  virtualCockpit: ToggleValue;
   onboardComputer: ToggleValue;
-  // Exterior
+  // ── Parkowanie i kamery ─────────────────────────────────
+  parkingSensors: ToggleValue;      // legacy generic — kept
+  parkingSensorsFrontRear: ToggleValue;
+  parkingSensorsRear: ToggleValue;
+  parkingCamera: ToggleValue;
+  rearCamera: ToggleValue;
+  camera360: ToggleValue;
+  // ── Multimedia ──────────────────────────────────────────
+  radio: ToggleValue;
+  radioUsb: ToggleValue;
+  radioSd: ToggleValue;
+  navigation: ToggleValue;
+  dvdPlayerWithMonitor: ToggleValue;
+  headrestMonitors: ToggleValue;
+  tvTuner: ToggleValue;
+  bluetooth: ToggleValue;           // legacy — kept
+  usb: ToggleValue;                 // legacy — kept
+  multimediaScreen: ToggleValue;    // legacy — kept
+  soundSystem: ToggleValue;         // legacy — kept
+  // ── Oświetlenie ─────────────────────────────────────────
+  daytimeRunningLights: ToggleValue;
+  daytimeRunningLightsLed: ToggleValue;
   ledLights: ToggleValue;
+  fullLedLights: ToggleValue;
   xenonLights: ToggleValue;
+  laserLights: ToggleValue;
   fogLights: ToggleValue;
-  roofRails: ToggleValue;
-  sunroof: ToggleValue;
+  corneringLights: ToggleValue;
+  bendLighting: ToggleValue;
+  headlightWashers: ToggleValue;
+  // ── Nadwozie / dach / szyby / lusterka ─────────────────
+  sunroof: ToggleValue;             // legacy — kept
+  electricOpeningRoof: ToggleValue;
+  solarOpeningRoof: ToggleValue;
   panoramicRoof: ToggleValue;
+  roofRails: ToggleValue;
+  metallicPaint: ToggleValue;
+  heatedFrontWindshield: ToggleValue;
+  electricWindows: ToggleValue;     // legacy generic — kept
+  electricWindowsFront: ToggleValue;
+  electricWindowsRear: ToggleValue;
+  sunBlindRear: ToggleValue;
+  sunBlindSide: ToggleValue;
+  tintedWindows: ToggleValue;       // legacy — kept
+  electricMirrors: ToggleValue;
+  heatedMirrors: ToggleValue;
+  foldingElectricMirrors: ToggleValue;
+  autoDimmingExtMirrors: ToggleValue;
+  autoDimmingIntMirror: ToggleValue;
+  electricClosingDoors: ToggleValue;
+  electricTailgate: ToggleValue;
   towBar: ToggleValue;
   alloyWheels: ToggleValue;
-  tintedWindows: ToggleValue;
+  structuralWheels: ToggleValue;
+  alloySpareWheel: ToggleValue;
+  compactSpareWheel: ToggleValue;
+  // ── Tapicerka / wykończenie wnętrza ─────────────────────
+  leatherUpholstery: ToggleValue;
+  alcantaraUpholstery: ToggleValue;
+  fabricLeatherUpholstery: ToggleValue;
+  velourUpholstery: ToggleValue;
+  blackHeadliner: ToggleValue;
+  interiorTrimAluminum: ToggleValue;
+  interiorTrimWood: ToggleValue;
+  interiorTrimCarbon: ToggleValue;
+  // ── Pozostałe / dodatkowe ───────────────────────────────
+  fridge: ToggleValue;
+  foldingTables: ToggleValue;
+  powerSocket230vTrunk: ToggleValue;
+  airSuspension: ToggleValue;
+  ceramicBrakes: ToggleValue;
+  lpgSystem: ToggleValue;
+  webasto: ToggleValue;
+  tachograph: ToggleValue;
+  winch: ToggleValue;
   [key: string]: ToggleValue;
 }
 
@@ -474,18 +567,62 @@ const initialData: StepData = {
     vinMatchesDocs: null, additionalEquipment: '',
   },
   fullEquipment: {
-    abs: null, esp: null, airbagDriver: null, airbagPassenger: null,
-    airbagSide: null, airbagCurtain: null, tractionControl: null,
-    airConditioning: null, automaticAC: null, heatedSeats: null,
-    electricWindows: null, electricMirrors: null, heatedMirrors: null,
-    powerSteering: null, cruiseControl: null, parkingSensors: null,
-    rearCamera: null, rainSensors: null, lightSensors: null,
-    centralLocking: null, keylessEntry: null, startStop: null,
-    navigation: null, bluetooth: null, usb: null,
-    multimediaScreen: null, soundSystem: null, onboardComputer: null,
-    ledLights: null, xenonLights: null, fogLights: null,
-    roofRails: null, sunroof: null, panoramicRoof: null,
-    towBar: null, alloyWheels: null, tintedWindows: null,
+    // Bezpieczeństwo
+    abs: null, esp: null, asr: null, alarm: null,
+    airbagDriver: null, airbagPassenger: null,
+    airbagSide: null, airbagSideFront: null, airbagSideRear: null,
+    airbagCurtain: null, airbagKnee: null,
+    tractionControl: null,
+    blindSpotAssist: null, laneChangeAssist: null,
+    nightVisionAssist: null, vehicleAssist: null,
+    activeParkingSystem: null, tirePressureSensor: null,
+    rainSensors: null, lightSensors: null, trafficSignRecognition: null,
+    // Komfort / fotele / kierownica
+    manualAC: null, automaticAC: null, airConditioning: null,
+    heatedSeats: null, heatedRearSeats: null,
+    ventilatedFrontSeats: null, ventilatedRearSeats: null,
+    massageFrontSeats: null, massageRearSeats: null,
+    electricFrontSeats: null, adjustableRearSeats: null, sportSeats: null,
+    driverSeatMemory: null, passengerSeatMemory: null, thirdRowSeats: null,
+    armrestFront: null, armrestRear: null,
+    leatherSteeringWheel: null, multifunctionSteeringWheel: null,
+    heatedSteeringWheel: null, paddleShifters: null, electricSteeringColumn: null,
+    cruiseControl: null, activeCruiseControl: null, powerSteering: null,
+    comfortAccess: null, keylessEntry: null, centralLocking: null,
+    startStop: null, headUpDisplay: null, virtualCockpit: null,
+    onboardComputer: null,
+    // Parkowanie i kamery
+    parkingSensors: null, parkingSensorsFrontRear: null, parkingSensorsRear: null,
+    parkingCamera: null, rearCamera: null, camera360: null,
+    // Multimedia
+    radio: null, radioUsb: null, radioSd: null, navigation: null,
+    dvdPlayerWithMonitor: null, headrestMonitors: null, tvTuner: null,
+    bluetooth: null, usb: null, multimediaScreen: null, soundSystem: null,
+    // Oświetlenie
+    daytimeRunningLights: null, daytimeRunningLightsLed: null,
+    ledLights: null, fullLedLights: null, xenonLights: null, laserLights: null,
+    fogLights: null, corneringLights: null, bendLighting: null,
+    headlightWashers: null,
+    // Nadwozie / dach / szyby / lusterka
+    sunroof: null, electricOpeningRoof: null, solarOpeningRoof: null,
+    panoramicRoof: null, roofRails: null, metallicPaint: null,
+    heatedFrontWindshield: null,
+    electricWindows: null, electricWindowsFront: null, electricWindowsRear: null,
+    sunBlindRear: null, sunBlindSide: null, tintedWindows: null,
+    electricMirrors: null, heatedMirrors: null,
+    foldingElectricMirrors: null, autoDimmingExtMirrors: null, autoDimmingIntMirror: null,
+    electricClosingDoors: null, electricTailgate: null,
+    towBar: null, alloyWheels: null, structuralWheels: null,
+    alloySpareWheel: null, compactSpareWheel: null,
+    // Tapicerka / wykończenie
+    leatherUpholstery: null, alcantaraUpholstery: null,
+    fabricLeatherUpholstery: null, velourUpholstery: null,
+    blackHeadliner: null,
+    interiorTrimAluminum: null, interiorTrimWood: null, interiorTrimCarbon: null,
+    // Pozostałe / dodatkowe
+    fridge: null, foldingTables: null, powerSocket230vTrunk: null,
+    airSuspension: null, ceramicBrakes: null,
+    lpgSystem: null, webasto: null, tachograph: null, winch: null,
   },
   paintMeasurement: {
     hood: { ...emptyZone }, roof: { ...emptyZone }, trunk: { ...emptyZone },
