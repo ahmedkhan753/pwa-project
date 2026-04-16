@@ -180,6 +180,33 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         except Exception as pdf_upload_err:
             logger.warning(f"[BG] PDF upload to Bitrix failed for deal {deal_id} (non-fatal, PDF is in DB): {pdf_upload_err}")
 
+        # 6b. Build Protokół Wycena (appraisal) PDF and upload to UF_CRM_1776326624394
+        # Reuses the same report payload pipeline as /report/{id}/pdf.
+        try:
+            from routers.report import get_report
+            from services.protokol_wycena_pdf import build_protokol_wycena_pdf
+            from types import SimpleNamespace
+
+            # get_report only uses request.app.state.{gateway,bitrix_ready}
+            stub_request = SimpleNamespace(
+                app=SimpleNamespace(
+                    state=SimpleNamespace(gateway=gateway, bitrix_ready=True)
+                )
+            )
+            report_payload = await get_report(deal_id, stub_request)
+            wycena_bytes = build_protokol_wycena_pdf(report_payload)
+            wycena_b64 = b64_module.b64encode(wycena_bytes).decode('utf-8')
+            wycena_filename = f"Protokol_wycena_{deal_id}.pdf"
+            await gateway.call("crm.deal.update", {
+                "ID": deal_id,
+                "fields": {
+                    "UF_CRM_1776326624394": {"fileData": [wycena_filename, wycena_b64]}
+                }
+            })
+            logger.info(f"[BG] Protokół Wycena PDF uploaded to Bitrix deal {deal_id} ({len(wycena_bytes)} bytes)")
+        except Exception as wycena_err:
+            logger.warning(f"[BG] Protokół Wycena upload failed for deal {deal_id} (non-fatal): {wycena_err}", exc_info=True)
+
         # 7. Write public report URL to Bitrix field UF_CRM_1775247032324
         # Non-blocking: failure here must never abort the core submit flow
         try:
