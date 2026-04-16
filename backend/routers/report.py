@@ -310,6 +310,7 @@ async def get_report(deal_id: int, request: Request):
     insp_rec_vehicle: dict = {}
     insp_rec_tires: dict = {}
     insp_rec_mechanical: dict = {}
+    insp_rec_paint: dict = {}
     _rec = None
 
     try:
@@ -335,6 +336,7 @@ async def get_report(deal_id: int, request: Request):
             insp_rec_vehicle     = _jload(_rec.vehicle_json)
             insp_rec_tires       = _jload(_rec.tires_json)
             insp_rec_mechanical  = _jload(_rec.mechanical_json)
+            insp_rec_paint       = _jload(getattr(_rec, "paint_json", None))
             logger.info(f"[Report] InspectionRecord found for deal {deal_id}")
         else:
             logger.warning(f"[Report] No InspectionRecord in DB for deal {deal_id}")
@@ -499,22 +501,65 @@ async def get_report(deal_id: int, request: Request):
                 hero_photo_url = url
             photos_standard.append({"label": label, "url": url, "position": pos_idx})
 
-    # ── Paint measurements ────────────────────────────────────────────────
+    # ── Paint measurements — canonical 19-panel protocol order ──────────────
+    # Prefers the DB-persisted paintMeasurement blob; falls back to individual
+    # Bitrix fields for older submissions. Bumper fields share IDs with hood /
+    # trunk in Bitrix (known legacy bug), so we only surface bumper values
+    # when DB data is present — otherwise we show "Brak danych" to avoid
+    # misleading duplicate readings.
+    PAINT_PANELS_19 = [
+        ("hood",             "Pokrywa przednia",           "UF_CRM_1772608834"),
+        ("leftFrontFender",  "Błotnik przedni lewy",       "UF_CRM_1772609211"),
+        ("rightFrontFender", "Błotnik przedni prawy",      "UF_CRM_1772610496"),
+        ("leftFrontDoor",    "Drzwi przednie lewe",        "UF_CRM_1772609231"),
+        ("rightFrontDoor",   "Drzwi przednie prawe",       "UF_CRM_1772610483"),
+        ("leftRearDoor",     "Drzwi tylne lewe",           "UF_CRM_1772610262"),
+        ("rightRearDoor",    "Drzwi tylne prawe",          "UF_CRM_1772610362"),
+        ("leftRearFender",   "Błotnik tylny lewy",         "UF_CRM_1772610277"),
+        ("rightRearFender",  "Błotnik tylny prawy",        "UF_CRM_1772610341"),
+        ("trunk",            "Pokrywa tylna / klapa",      "UF_CRM_1772610306"),
+        ("roof",             "Dach",                       "UF_CRM_1772610511"),
+        ("leftAColumn",      "Słupek przedni lewy",        "UF_CRM_1772609246"),
+        ("rightAColumn",     "Słupek przedni prawy",       "UF_CRM_1772610470"),
+        ("leftBColumn",      "Słupek środkowy lewy",       None),  # DB only
+        ("rightBColumn",     "Słupek środkowy prawy",      None),  # DB only
+        ("leftSill",         "Próg lewy",                  "UF_CRM_1772610293"),
+        ("rightSill",        "Próg prawy",                 "UF_CRM_1772610320"),
+        ("frontBumper",      "Zderzak przedni",            None),  # DB only (shares field)
+        ("rearBumper",       "Zderzak tylny",              None),  # DB only (shares field)
+    ]
+
     paint_measurements = []
     repaint_count = 0
 
-    for idx, (key, label, field_id) in enumerate(PAINT_PANELS, 1):
-        val = _safe_float(raw.get(field_id))
+    def _paint_val_from_record(key: str) -> Optional[float]:
+        zone = insp_rec_paint.get(key) if isinstance(insp_rec_paint, dict) else None
+        if isinstance(zone, dict):
+            return _safe_float(zone.get("value"))
+        return _safe_float(zone)
+
+    for idx, (key, label, field_id) in enumerate(PAINT_PANELS_19, 1):
+        val = _paint_val_from_record(key)
+        if (val is None or val <= 0) and field_id:
+            val = _safe_float(raw.get(field_id))
         if val and val > 0:
             status = _paint_status(val)
             if status in ("repainted", "repair"):
                 repaint_count += 1
             paint_measurements.append({
-                "point": idx,
-                "key": key,
-                "name": label,
+                "point":    idx,
+                "key":      key,
+                "name":     label,
                 "value_um": val,
-                "status": status,
+                "status":   status,
+            })
+        else:
+            paint_measurements.append({
+                "point":    idx,
+                "key":      key,
+                "name":     label,
+                "value_um": None,
+                "status":   "unknown",
             })
 
     tires: List[dict] = []   # populated later with InspectionRecord depth enrichment
@@ -836,6 +881,7 @@ async def get_report(deal_id: int, request: Request):
         "damages":            damages,
         "interior_damages":   interior_damages,
         "equipment":          equipment,
+        "full_equipment":     insp_rec_full_eq or {},
         "documents_check":    documents_check,
 
         "mechanical": {

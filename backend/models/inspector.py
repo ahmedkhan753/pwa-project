@@ -96,5 +96,6 @@ class InspectionRecord(Base):
     vehicle_json        = Column(Text, nullable=True)   # vehicleData
     tires_json          = Column(Text, nullable=True)   # tires
     mechanical_json     = Column(Text, nullable=True)   # mechanical
+    paint_json          = Column(Text, nullable=True)   # paintMeasurement (19 panels)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())

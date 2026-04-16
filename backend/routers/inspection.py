@@ -151,6 +151,7 @@ async def _background_submit(gateway, deal_id: int, body: dict):
                 "vehicle_json":         _json_mod.dumps(body.get("vehicleData") or {}),
                 "tires_json":           _json_mod.dumps(body.get("tires") or {}),
                 "mechanical_json":      _json_mod.dumps(body.get("mechanical") or {}),
+                "paint_json":           _json_mod.dumps(body.get("paintMeasurement") or {}),
             }
             if rec:
                 for k, v in rec_data.items():
@@ -382,10 +383,10 @@ PAINT_PANEL_MAP = {
     'rightSill': 'paint_sill_right',
     'leftAColumn': 'paint_pillar_a_left',
     'rightAColumn': 'paint_pillar_a_right',
-    'leftBColumn': 'paint_pillar_a_left',
-    'rightBColumn': 'paint_pillar_a_right',
-    'leftCColumn': 'paint_pillar_a_left',
-    'rightCColumn': 'paint_pillar_a_right',
+    # B-pillar and C-pillar have no dedicated Bitrix fields — they are
+    # persisted in the DB (InspectionRecord.paint_json) and rendered from
+    # there by the report / Protokół Wycena pipeline. Do NOT remap them onto
+    # the A-pillar fields; that silently clobbers A-pillar data.
     'frontBumper': 'paint_bumper_front',
     'rearBumper': 'paint_bumper_rear',
 }

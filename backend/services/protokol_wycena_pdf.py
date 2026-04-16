@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from reportlab.lib import colors
@@ -465,11 +465,16 @@ def _section_paint(report: Dict[str, Any]) -> List[Any]:
     else:
         for m in measurements:
             val = m.get("value_um")
-            label_txt, label_color = _paint_status_label(val)
+            if isinstance(val, (int, float)) and val > 0:
+                label_txt, label_color = _paint_status_label(val)
+                val_str = f"{val:.0f}"
+            else:
+                label_txt, label_color = "Brak danych", GRAY_MUTED
+                val_str = "-"
             rows.append([
                 pc(str(m.get("point", "")), bold=True),
                 p(_or_dash(m.get("name"))),
-                pc(f"{val:.0f}" if isinstance(val, (int, float)) else "-"),
+                pc(val_str),
                 pc(label_txt, color=label_color, bold=True),
             ])
 
@@ -480,50 +485,227 @@ def _section_paint(report: Dict[str, Any]) -> List[Any]:
     return [_section_header("3. Pomiary lakieru"), sp(0.15), t, sp(0.5)]
 
 
-def _section_equipment(report: Dict[str, Any]) -> List[Any]:
-    eq = report.get("equipment") or []
-    if not eq:
-        return [
-            _section_header("4. Wyposażenie"), sp(0.15),
-            p("Brak danych o wyposażeniu pojazdu.",
-              _style("_x", textColor=GRAY_MUTED)),
-            sp(0.5),
-        ]
+# Full 108-item catalogue, grouped and ordered identically to the PWA's
+# FullEquipmentStep. Each group lists (fullEquipment-key, Polish label).
+FULL_EQUIPMENT_GROUPS: List[Tuple[str, List[Tuple[str, str]]]] = [
+    ("Bezpieczeństwo / Asystenci", [
+        ("abs", "ABS"),
+        ("esp", "ESP"),
+        ("asr", "ASR"),
+        ("alarm", "Alarm"),
+        ("airbagPassenger", "Airbag pasażera"),
+        ("airbagSideFront", "Airbag boczny przód"),
+        ("airbagSideRear", "Airbag boczny tył"),
+        ("airbagKnee", "Airbag nóg"),
+        ("airbagCurtain", "Kurtyny powietrzne"),
+        ("activeParkingSystem", "Aktywny system parkowania"),
+        ("nightVisionAssist", "Asystent jazdy nocnej"),
+        ("blindSpotAssist", "Asystent martwego punktu"),
+        ("vehicleAssist", "Asystent pojazdu"),
+        ("laneChangeAssist", "Asystent zmiany pasa ruchu"),
+        ("tirePressureSensor", "Czujnik ciśnienia w oponach"),
+        ("rainSensors", "Czujnik deszczu"),
+        ("lightSensors", "Czujnik zmierzchu"),
+        ("trafficSignRecognition", "System rozpoznawania znaków"),
+    ]),
+    ("Komfort — Fotele / Kierownica", [
+        ("manualAC", "Klimatyzacja manualna"),
+        ("automaticAC", "Klimatyzacja automatyczna"),
+        ("electricFrontSeats", "Fotele przednie ust. elektrycznie"),
+        ("massageFrontSeats", "Fotele przednie z masażem"),
+        ("adjustableRearSeats", "Fotele tylne regulowane"),
+        ("massageRearSeats", "Siedzenia tylne z masażem"),
+        ("sportSeats", "Siedzenia sportowe"),
+        ("thirdRowSeats", "Trzeci rząd siedzeń"),
+        ("heatedSeats", "Ogrzewanie przednich foteli"),
+        ("heatedRearSeats", "Ogrzewanie tylnych siedzeń"),
+        ("ventilatedFrontSeats", "Wentylacja foteli przód"),
+        ("ventilatedRearSeats", "Wentylacja foteli tył"),
+        ("driverSeatMemory", "Pamięć ust. fotela kierowcy"),
+        ("passengerSeatMemory", "Pamięć ust. fotela pasażera"),
+        ("armrestFront", "Podłokietnik przód"),
+        ("armrestRear", "Podłokietnik tył"),
+        ("leatherSteeringWheel", "Kierownica skórzana"),
+        ("multifunctionSteeringWheel", "Kierownica wielofunkcyjna"),
+        ("heatedSteeringWheel", "Podgrzewana kierownica"),
+        ("paddleShifters", "Kierownica z funkcją zmiany biegów"),
+        ("electricSteeringColumn", "Kolumna kierownicy regul. elek."),
+        ("powerSteering", "Wspomaganie kierownicy"),
+        ("cruiseControl", "Tempomat"),
+        ("activeCruiseControl", "Tempomat aktywny"),
+        ("comfortAccess", "Dostęp komfortowy"),
+        ("keylessEntry", "Zestaw bezkluczykowy"),
+        ("centralLocking", "Zamek centralny"),
+        ("headUpDisplay", "Head Up Display"),
+        ("virtualCockpit", "Wirtualny kokpit"),
+        ("onboardComputer", "Komputer pokładowy"),
+    ]),
+    ("Parkowanie i kamery", [
+        ("parkingSensorsFrontRear", "Czujnik parkowania przód + tył"),
+        ("parkingSensorsRear", "Czujnik parkowania tył"),
+        ("parkingCamera", "Kamera parkowania"),
+        ("camera360", "Kamera 360"),
+    ]),
+    ("Multimedia / Elektronika", [
+        ("radio", "Radioodbiornik"),
+        ("radioUsb", "Radioodbiornik USB"),
+        ("radioSd", "Radioodbiornik SD"),
+        ("navigation", "Nawigacja"),
+        ("dvdPlayerWithMonitor", "Odtwarzacz DVD z monitorem"),
+        ("headrestMonitors", "Zestaw monitorów w zagłówkach"),
+        ("tvTuner", "TV Tuner"),
+    ]),
+    ("Oświetlenie", [
+        ("daytimeRunningLights", "Światła do jazdy dziennej"),
+        ("daytimeRunningLightsLed", "Światła do jazdy dziennej LED"),
+        ("ledLights", "Reflektory LED"),
+        ("fullLedLights", "Reflektory Full LED"),
+        ("xenonLights", "Reflektory ksenonowe"),
+        ("laserLights", "Reflektory laserowe"),
+        ("fogLights", "Światła przeciwmgielne"),
+        ("corneringLights", "Reflektory skrętne"),
+        ("bendLighting", "Reflektory z doświetlaniem zakrętów"),
+        ("headlightWashers", "Spryskiwacze reflektorów"),
+    ]),
+    ("Nadwozie / Dach / Szyby / Lusterka", [
+        ("electricOpeningRoof", "Dach otwierany el."),
+        ("solarOpeningRoof", "Dach otwierany z baterią słoneczną"),
+        ("panoramicRoof", "Dach panoramiczny"),
+        ("roofRails", "Relingi dachowe"),
+        ("metallicPaint", "Lakier metalik"),
+        ("heatedFrontWindshield", "Szyba przednia ogrzewana"),
+        ("electricWindowsFront", "Szyby pod. el. przód"),
+        ("electricWindowsRear", "Szyby pod. el. tył"),
+        ("sunBlindRear", "Roleta p. słoneczna tylna"),
+        ("sunBlindSide", "Roleta p. słoneczna boczne"),
+        ("heatedMirrors", "Lusterka ogrzewane"),
+        ("autoDimmingExtMirrors", "Lusterka zew. przyciemniające się"),
+        ("electricMirrors", "Lusterka reg. elektrycznie"),
+        ("foldingElectricMirrors", "Lusterka składane elektr."),
+        ("autoDimmingIntMirror", "Lusterko wst. przyciemniające się"),
+        ("electricClosingDoors", "Drzwi domykane elektryczne"),
+        ("electricTailgate", "Pokrywa tylna otw./zam. elekt."),
+        ("towBar", "Hak"),
+        ("alloyWheels", "Felgi aluminiowe"),
+        ("structuralWheels", "Felgi strukturalne"),
+        ("alloySpareWheel", "Koło zapasowe alu."),
+        ("compactSpareWheel", "Koło dojazdowe"),
+    ]),
+    ("Tapicerka / Wnętrze", [
+        ("leatherUpholstery", "Tapicerka skórzana"),
+        ("alcantaraUpholstery", "Tapicerka alkantara"),
+        ("fabricLeatherUpholstery", "Tapicerka materiał-skórzana"),
+        ("velourUpholstery", "Tapicerka welurowa"),
+        ("blackHeadliner", "Podsufitka czarna"),
+        ("interiorTrimAluminum", "Wykończenie wnętrza aluminium"),
+        ("interiorTrimWood", "Wykończenie wnętrza drewno"),
+        ("interiorTrimCarbon", "Wykończenie wnętrza karbon"),
+    ]),
+    ("Pozostałe / Dodatkowe", [
+        ("fridge", "Lodówka"),
+        ("foldingTables", "Składane stoliki"),
+        ("powerSocket230vTrunk", "Gniazdo 230V w bagażniku"),
+        ("airSuspension", "Zawieszenie pneumatyczne"),
+        ("ceramicBrakes", "Hamulce ceramiczne"),
+        ("lpgSystem", "Instalacja gazowa"),
+        ("webasto", "Webasto"),
+        ("tachograph", "Tachograf"),
+        ("winch", "Wyciągarka"),
+    ]),
+]
 
-    # 3-column layout: each cell "☑ Item" / "☐ Item"
+
+def _is_equipped(v: Any) -> Optional[bool]:
+    """TAK/true/1 → True, NIE/false/0 → False, anything else (ND, '', None) → None."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    s = str(v).strip().upper()
+    if s in ("TAK", "TRUE", "1", "YES", "Y"):
+        return True
+    if s in ("NIE", "FALSE", "0", "NO", "N"):
+        return False
+    return None
+
+
+def _section_equipment(report: Dict[str, Any]) -> List[Any]:
+    full_eq = report.get("full_equipment") or {}
+
+    # Fallback: old flat list payload — render it as a single ungrouped block.
+    if not full_eq:
+        legacy = report.get("equipment") or []
+        if not legacy:
+            return [
+                _section_header("4. Wyposażenie"), sp(0.15),
+                p("Brak danych o wyposażeniu pojazdu.",
+                  _style("_x", textColor=GRAY_MUTED)),
+                sp(0.5),
+            ]
+        full_eq = {
+            (item.get("name") or ""): ("TAK" if item.get("present") else "NIE")
+            for item in legacy if item.get("name")
+        }
+
     GREEN_HEX = "#0B8043"
     GRAY_HEX  = "#86868B"
-    def _cell(item: Dict[str, Any]) -> Paragraph:
-        present = bool(item.get("present"))
-        mark  = "☑" if present else "☐"
-        color = GREEN_HEX if present else GRAY_HEX
-        name  = (item.get("name") or "").replace("&", "&amp;").replace("<", "&lt;")
-        return p(f"<font color='{color}'><b>{mark}</b></font> {name}",
-                 _style("_eq", fontSize=9, leading=13))
+
+    def _cell(key: str, label: str) -> Paragraph:
+        present = _is_equipped(full_eq.get(key))
+        if present is True:
+            mark, color = "☑", GREEN_HEX
+        elif present is False:
+            mark, color = "☐", GRAY_HEX
+        else:
+            mark, color = "—", GRAY_HEX
+        safe = label.replace("&", "&amp;").replace("<", "&lt;")
+        return p(
+            f"<font color='{color}'><b>{mark}</b></font> {safe}",
+            _style("_eq", fontSize=8.5, leading=11),
+        )
+
+    story: List[Any] = [_section_header("4. Wyposażenie"), sp(0.15)]
 
     cols = 3
-    rows_out: List[List[Paragraph]] = []
-    current: List[Paragraph] = []
-    for item in eq:
-        current.append(_cell(item))
-        if len(current) == cols:
-            rows_out.append(current)
-            current = []
-    if current:
-        while len(current) < cols:
-            current.append(p(""))
-        rows_out.append(current)
-
     col_w = CONTENT_W / cols
-    t = Table(rows_out, colWidths=[col_w] * cols)
-    t.setStyle(TableStyle([
-        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
-        ("TOPPADDING",    (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-    ]))
-    return [_section_header("4. Wyposażenie"), sp(0.15), t, sp(0.5)]
+
+    _fn_reg, _fn_bold = _fn()
+    for group_title, items in FULL_EQUIPMENT_GROUPS:
+        # Group sub-header
+        story.append(sp(0.10))
+        story.append(p(
+            group_title,
+            _style("_eqh", fontSize=10, leading=12,
+                   textColor=NAVY, fontName=_fn_bold),
+        ))
+        story.append(sp(0.05))
+
+        rows_out: List[List[Paragraph]] = []
+        current: List[Paragraph] = []
+        for key, label in items:
+            current.append(_cell(key, label))
+            if len(current) == cols:
+                rows_out.append(current)
+                current = []
+        if current:
+            while len(current) < cols:
+                current.append(p(""))
+            rows_out.append(current)
+
+        t = Table(rows_out, colWidths=[col_w] * cols)
+        t.setStyle(TableStyle([
+            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+            ("TOPPADDING",    (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(t)
+
+    story.append(sp(0.5))
+    return story
 
 
 def _section_documents(report: Dict[str, Any]) -> List[Any]:

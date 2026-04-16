@@ -44,8 +44,9 @@ def migrate_db(engine_instance) -> None:
 
     try:
         inspector = sa_inspect(engine_instance)
-        existing_cols = {col["name"] for col in inspector.get_columns("inspectors")}
 
+        # ── inspectors table ──
+        existing_cols = {col["name"] for col in inspector.get_columns("inspectors")}
         pending = {
             "bitrix_list_id": "VARCHAR(20)",
         }
@@ -58,6 +59,22 @@ def migrate_db(engine_instance) -> None:
                     log.info(f"Migration: added column inspectors.{col_name}")
                 else:
                     log.debug(f"Migration: inspectors.{col_name} already exists — skip")
+
+        # ── inspection_records table ──
+        try:
+            ir_cols = {col["name"] for col in inspector.get_columns("inspection_records")}
+        except Exception:
+            ir_cols = set()  # table not yet created (create_all will handle it fresh)
+
+        ir_pending = {
+            "paint_json": "TEXT",
+        }
+        with engine_instance.connect() as conn:
+            for col_name, col_type in ir_pending.items():
+                if ir_cols and col_name not in ir_cols:
+                    conn.execute(text(f"ALTER TABLE inspection_records ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                    log.info(f"Migration: added column inspection_records.{col_name}")
 
     except Exception as e:
         log.error(f"Migration error: {e}")
