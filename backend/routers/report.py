@@ -872,6 +872,37 @@ async def get_report(deal_id: int, request: Request):
         },
     }
 
+
+# ─── Protokół Wycena (appraisal) PDF ──────────────────────────────────────────
+
+@router.get("/protokol/{deal_id}/pdf")
+async def get_protokol_wycena_pdf(deal_id: int, request: Request):
+    """
+    GET /api/protokol/{deal_id}/pdf
+    Public — no authentication required.
+    Returns the Protokół Wycena (text-only appraisal) PDF for the given deal.
+
+    Data comes from the same pipeline as the public Condition Report
+    (get_report above): Bitrix24 with a DB fallback via InspectionRecord.
+    """
+    from io import BytesIO
+    from services.protokol_wycena_pdf import build_protokol_wycena_pdf
+
+    report_payload = await get_report(deal_id, request)
+    pdf_bytes = build_protokol_wycena_pdf(report_payload)
+
+    filename = f"protokol_wycena_{deal_id}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 # ─── Document upload / download endpoints ─────────────────────────────────────
 # Bitrix24 CRM file fields cannot be downloaded via webhooks (requires OAuth).
 # Instead, we store PDFs on our server and serve them directly.
