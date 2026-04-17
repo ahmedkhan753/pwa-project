@@ -506,9 +506,23 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     dbg(`listVideoInputDevices err: ${err?.message ?? err}`);
                 }
 
-                dbg("Starting camera via ZXing...");
-                const controls = await reader.decodeFromVideoDevice(
-                    deviceId,
+                dbg("Starting camera via ZXing (HD constraints)...");
+                // Request HD+ resolution — default SD (480x640) is too low for
+                // Aztec codes shot from a laptop screen or phone distance.
+                const videoConstraints: MediaTrackConstraints = {
+                    width: { ideal: 1920, min: 1280 },
+                    height: { ideal: 1080, min: 720 },
+                    frameRate: { ideal: 30, min: 15 },
+                };
+                if (deviceId) {
+                    (videoConstraints as any).deviceId = { exact: deviceId };
+                } else {
+                    (videoConstraints as any).facingMode = { ideal: "environment" };
+                }
+                const mediaConstraints: MediaStreamConstraints = { video: videoConstraints, audio: false };
+
+                const controls = await reader.decodeFromConstraints(
+                    mediaConstraints,
                     videoEl,
                     (result /*, error*/) => {
                         if (!alive || doneRef.current) return;
@@ -521,7 +535,19 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                     },
                 );
                 controlsRef.current = controls;
-                dbg("Camera ready — scanning");
+
+                // Log the actual negotiated resolution so we can see in debug
+                // overlay whether the browser honoured the HD request.
+                setTimeout(() => {
+                    const vw = videoEl.videoWidth;
+                    const vh = videoEl.videoHeight;
+                    dbg(`Camera ready — negotiated ${vw}x${vh}`);
+                    try {
+                        const track = (videoEl.srcObject as MediaStream)?.getVideoTracks?.()[0];
+                        const settings: any = track?.getSettings?.();
+                        if (settings) dbg(`Track settings: ${settings.width}x${settings.height}@${settings.frameRate}fps`);
+                    } catch { /* ignore */ }
+                }, 500);
 
                 // Backend frame-decode fallback — if ZXing-JS hasn't caught
                 // anything after a couple of seconds, capture the current
