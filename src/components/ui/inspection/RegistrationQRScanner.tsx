@@ -161,6 +161,67 @@ async function decodeImageServerSide(file: File, dbg: (s: string) => void): Prom
     }
 }
 
+/**
+ * Capture the current frame of a <video> element as a JPEG Blob, POST it to
+ * the backend /decode-barcode (which runs zxing-cpp with multiple binarizers),
+ * and return the decoded DecodedVehicleData if the barcode was recognised.
+ *
+ * This is the "heavy artillery" fallback for when in-browser ZXing can't lock
+ * on to the Aztec — e.g. phone camera pointed at a laptop screen, moiré, glare.
+ */
+async function decodeCurrentFrameOnBackend(
+    video: HTMLVideoElement,
+    dbg: (s: string) => void,
+): Promise<DecodedVehicleData | null> {
+    try {
+        const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+        if (!BASE_URL) return null;
+        if (!video || video.readyState < 2) return null;
+
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) return null;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(video, 0, 0, w, h);
+
+        const blob: Blob | null = await new Promise(resolve =>
+            canvas.toBlob(b => resolve(b), "image/jpeg", 0.92),
+        );
+        if (!blob) return null;
+
+        dbg(`Frame → backend: ${w}x${h}, ${(blob.size / 1024).toFixed(0)} KB`);
+
+        const form = new FormData();
+        form.append("file", blob, "frame.jpg");
+        const res = await fetch(`${BASE_URL}/decode-barcode`, { method: "POST", body: form });
+        if (!res.ok) {
+            dbg(`Backend frame decode HTTP ${res.status}`);
+            return null;
+        }
+        const json = await res.json();
+        if (!json.found) return null;
+        dbg(`Backend frame decode OK: ${json.type}${json.variant ? ` via ${json.variant}` : ""}`);
+
+        if (json.raw_bytes_b64) {
+            const apiData = await decodeViaAPI({ aztecBase64: json.raw_bytes_b64 }, dbg);
+            if (hasUsefulFields(apiData)) return apiData;
+        }
+        if (json.raw_string) {
+            const plain = parsePlainTextQR(json.raw_string);
+            if (hasUsefulFields(plain)) return plain;
+        }
+        return null;
+    } catch (err: any) {
+        dbg(`Backend frame decode error: ${err?.message ?? err}`);
+        return null;
+    }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Component
    ═══════════════════════════════════════════════════════════════════════ */
@@ -461,6 +522,29 @@ export function RegistrationQRScanner({ onData, onClose }: RegistrationQRScanner
                 );
                 controlsRef.current = controls;
                 dbg("Camera ready — scanning");
+
+                // Backend frame-decode fallback — if ZXing-JS hasn't caught
+                // anything after a couple of seconds, capture the current
+                // video frame and POST it to the backend (which runs
+                // zxing-cpp with multiple binarizers + preprocessing).
+                const BACKEND_POLL_MS = 2500;
+                const backendFallback = async () => {
+                    if (!alive || doneRef.current) return;
+                    const data = await decodeCurrentFrameOnBackend(videoEl, dbg);
+                    if (!alive || doneRef.current) return;
+                    if (data && hasUsefulFields(data)) {
+                        doneRef.current = true;
+                        try { controlsRef.current?.stop(); } catch { /* ok */ }
+                        setDecoded(data);
+                        setStatus("success");
+                        setMessage("Dane odczytane pomyślnie!");
+                        setTimeout(() => { onData(data); onClose(); }, 2500);
+                        return;
+                    }
+                    if (alive && !doneRef.current) setTimeout(backendFallback, BACKEND_POLL_MS);
+                };
+                // First attempt after 3s — gives ZXing the first shot.
+                setTimeout(backendFallback, 3000);
 
                 // Run native BarcodeDetector in parallel (faster on Android Chrome).
                 const BDClass = (window as any).BarcodeDetector as any;

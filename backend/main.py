@@ -347,6 +347,62 @@ except ImportError as e:
 except Exception as e:
     _qr_dbg_log.warning(f"[STARTUP] zxing-cpp load error: {e}")
 
+def _zxing_try(img_obj, label: str, **kwargs):
+    """Try zxing-cpp.read_barcodes with given kwargs, return first hit or None."""
+    try:
+        img_array = _np.array(img_obj)
+        results = _zxingcpp.read_barcodes(img_array, **kwargs)
+        if results:
+            code = results[0]
+            raw_bytes = bytes(code.bytes)
+            code_type = str(code.format).replace("BarcodeFormat.", "")
+            _qr_dbg_log.info(
+                f"[ZXING-CPP:{label}] Found {code_type}: "
+                f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
+            )
+            return code, raw_bytes, code_type
+    except Exception as e:
+        _qr_dbg_log.warning(f"[ZXING-CPP:{label}] Error: {e}")
+    return None
+
+
+def _preprocess_variants(img):
+    """
+    Yield (label, PIL_image) variants that give the decoder a fighting chance
+    on noisy, rotated, low-contrast phone shots of an Aztec code.
+    """
+    from PIL import ImageOps, ImageEnhance
+    yield "original", img
+
+    gray = img.convert("L")
+    yield "grayscale", gray
+
+    try:
+        yield "autocontrast", ImageOps.autocontrast(gray, cutoff=2)
+    except Exception:
+        pass
+
+    try:
+        yield "contrast+2x", ImageEnhance.Contrast(gray).enhance(2.0)
+    except Exception:
+        pass
+
+    try:
+        yield "inverted", ImageOps.invert(gray)
+    except Exception:
+        pass
+
+    # Downscale huge images — zxing-cpp sometimes does better on ~1000px wide.
+    w, h = img.size
+    if max(w, h) > 1400:
+        scale = 1200 / max(w, h)
+        new_size = (int(w * scale), int(h * scale))
+        try:
+            yield f"resized-{new_size[0]}x{new_size[1]}", img.resize(new_size)
+        except Exception:
+            pass
+
+
 @app.post("/decode-barcode")
 async def decode_barcode_server(file: UploadFile):
     """
@@ -365,30 +421,48 @@ async def decode_barcode_server(file: UploadFile):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Cannot open image: {e}")
 
-    # Try zxing-cpp first (supports Aztec + all formats)
+    # Try zxing-cpp with a matrix of (image variant) × (binarizer) combinations.
+    # The defaults often miss Aztec on phone shots — iterating through
+    # binarizers + preprocessing dramatically improves hit rate.
     if _has_zxingcpp:
         try:
-            img_array = _np.array(img)
-            results = _zxingcpp.read_barcodes(img_array)
-            if results:
-                code = results[0]
-                raw_bytes = code.bytes
-                raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
-                code_type = str(code.format).replace("BarcodeFormat.", "")
-                _qr_dbg_log.info(
-                    f"[ZXING-CPP] Found {code_type}: "
-                    f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
-                )
-                return {
-                    "found": True,
-                    "type": code_type,
-                    "raw_bytes_b64": raw_b64,
-                    "raw_string": raw_bytes.decode("latin-1", errors="replace"),
-                }
-            else:
-                _qr_dbg_log.info(f"[ZXING-CPP] No barcode found in {file.filename}")
+            aztec_formats = (
+                _zxingcpp.BarcodeFormat.Aztec
+                | _zxingcpp.BarcodeFormat.QRCode
+                | _zxingcpp.BarcodeFormat.DataMatrix
+                | _zxingcpp.BarcodeFormat.PDF417
+            )
+            binarizers = [
+                ("LocalAverage", _zxingcpp.Binarizer.LocalAverage),
+                ("GlobalHistogram", _zxingcpp.Binarizer.GlobalHistogram),
+                ("FixedThreshold", _zxingcpp.Binarizer.FixedThreshold),
+            ]
+
+            for variant_label, variant in _preprocess_variants(img):
+                for bin_label, binarizer in binarizers:
+                    label = f"{variant_label}/{bin_label}"
+                    hit = _zxing_try(
+                        variant,
+                        label,
+                        formats=aztec_formats,
+                        try_rotate=True,
+                        try_downscale=True,
+                        binarizer=binarizer,
+                        text_mode=_zxingcpp.TextMode.Plain,
+                    )
+                    if hit:
+                        _code, raw_bytes, code_type = hit
+                        raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
+                        return {
+                            "found": True,
+                            "type": code_type,
+                            "variant": label,
+                            "raw_bytes_b64": raw_b64,
+                            "raw_string": raw_bytes.decode("latin-1", errors="replace"),
+                        }
+            _qr_dbg_log.info(f"[ZXING-CPP] All variants failed for {file.filename}")
         except Exception as e:
-            _qr_dbg_log.warning(f"[ZXING-CPP] Decode error: {e}")
+            _qr_dbg_log.warning(f"[ZXING-CPP] Outer error: {e}")
     else:
         _qr_dbg_log.info("[DECODE] Skipping zxing-cpp (not available)")
 
