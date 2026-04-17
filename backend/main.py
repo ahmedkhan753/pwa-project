@@ -370,12 +370,37 @@ def _preprocess_variants(img):
     """
     Yield (label, PIL_image) variants that give the decoder a fighting chance
     on noisy, rotated, low-contrast phone shots of an Aztec code.
+
+    Strategy:
+    - Try the raw image (fast path).
+    - Try grayscale + contrast variants for glare/low-light shots.
+    - Try CENTER-CROPS — phone cameras frame the code in the middle of the
+      viewfinder, and cropping to the center ~60% effectively zooms in,
+      giving the decoder more pixels per module.
+    - Try sharpened + upscaled variants for when the code is small/blurry
+      (laptop-screen shots, phone held too far back).
+    - Try OpenCV adaptive-threshold variants for uneven lighting.
     """
-    from PIL import ImageOps, ImageEnhance
+    from PIL import ImageOps, ImageEnhance, ImageFilter
+
     yield "original", img
 
     gray = img.convert("L")
     yield "grayscale", gray
+
+    w, h = img.size
+
+    # Center crops — 70% and 50% — huge impact when the code occupies only
+    # the center of the frame (which is always the case with our UI overlay).
+    for frac, tag in [(0.70, "center70"), (0.50, "center50")]:
+        cw, ch = int(w * frac), int(h * frac)
+        x0, y0 = (w - cw) // 2, (h - ch) // 2
+        try:
+            crop = gray.crop((x0, y0, x0 + cw, y0 + ch))
+            yield tag, crop
+            yield f"{tag}+autocontrast", ImageOps.autocontrast(crop, cutoff=2)
+        except Exception:
+            pass
 
     try:
         yield "autocontrast", ImageOps.autocontrast(gray, cutoff=2)
@@ -388,12 +413,30 @@ def _preprocess_variants(img):
         pass
 
     try:
+        yield "sharpen", gray.filter(ImageFilter.SHARPEN)
+    except Exception:
+        pass
+
+    try:
+        yield "unsharp-mask", gray.filter(ImageFilter.UnsharpMask(radius=2, percent=200, threshold=3))
+    except Exception:
+        pass
+
+    try:
         yield "inverted", ImageOps.invert(gray)
     except Exception:
         pass
 
+    # Upscale small crops — if the code occupies only ~300px in original,
+    # upscaling gives zxing-cpp more to work with.
+    if max(w, h) < 1400:
+        try:
+            up = gray.resize((w * 2, h * 2))
+            yield f"upscaled-{w*2}x{h*2}", up
+        except Exception:
+            pass
+
     # Downscale huge images — zxing-cpp sometimes does better on ~1000px wide.
-    w, h = img.size
     if max(w, h) > 1400:
         scale = 1200 / max(w, h)
         new_size = (int(w * scale), int(h * scale))
@@ -401,6 +444,35 @@ def _preprocess_variants(img):
             yield f"resized-{new_size[0]}x{new_size[1]}", img.resize(new_size)
         except Exception:
             pass
+
+    # OpenCV-based adaptive threshold variants — great for screen-shot Aztec
+    # with moiré bands and uneven illumination.
+    try:
+        import cv2  # type: ignore
+        arr = _np.array(gray)
+        # Center crop first for adaptive threshold (most of the work is on the code).
+        cw, ch = int(w * 0.70), int(h * 0.70)
+        x0, y0 = (w - cw) // 2, (h - ch) // 2
+        cc = arr[y0:y0 + ch, x0:x0 + cw]
+
+        at = cv2.adaptiveThreshold(
+            cc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 7
+        )
+        from PIL import Image as _PILImage
+        yield "center70+adaptive", _PILImage.fromarray(at)
+
+        at2 = cv2.adaptiveThreshold(
+            arr, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 9
+        )
+        yield "full+adaptiveMean", _PILImage.fromarray(at2)
+
+        # Otsu on center crop — strong global binarization
+        _, otsu = cv2.threshold(cc, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        yield "center70+otsu", _PILImage.fromarray(otsu)
+    except ImportError:
+        pass
+    except Exception as e:
+        _qr_dbg_log.debug(f"[preprocess] OpenCV variant error: {e}")
 
 
 @app.post("/decode-barcode")

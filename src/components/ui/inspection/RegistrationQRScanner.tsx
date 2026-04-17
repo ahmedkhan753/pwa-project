@@ -182,19 +182,28 @@ async function decodeCurrentFrameOnBackend(
         const h = video.videoHeight;
         if (!w || !h) return null;
 
+        // Center-crop to a square that matches the scan-guide overlay
+        // (the UI tells users to aim the code at the centre). This
+        // effectively digital-zooms in on the barcode so each Aztec module
+        // gets more pixels, dramatically improving decode rate on shots
+        // taken off a laptop screen or from far away.
+        const side = Math.min(w, h);
+        const sx = Math.floor((w - side) / 2);
+        const sy = Math.floor((h - side) / 2);
+
         const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = side;
+        canvas.height = side;
         const ctx = canvas.getContext("2d");
         if (!ctx) return null;
-        ctx.drawImage(video, 0, 0, w, h);
+        ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
 
         const blob: Blob | null = await new Promise(resolve =>
-            canvas.toBlob(b => resolve(b), "image/jpeg", 0.92),
+            canvas.toBlob(b => resolve(b), "image/jpeg", 0.95),
         );
         if (!blob) return null;
 
-        dbg(`Frame → backend: ${w}x${h}, ${(blob.size / 1024).toFixed(0)} KB`);
+        dbg(`Frame → backend: ${side}x${side} (from ${w}x${h}), ${(blob.size / 1024).toFixed(0)} KB`);
 
         const form = new FormData();
         form.append("file", blob, "frame.jpg");
