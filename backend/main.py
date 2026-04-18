@@ -357,14 +357,22 @@ except ImportError:
     _qr_dbg_log.warning("[STARTUP] OpenCV NOT available — adaptive-threshold / bilateral / ROI preprocessing disabled")
 
 def _zxing_try(img_obj, label: str, **kwargs):
-    """Try zxing-cpp.read_barcodes with given kwargs, return first hit or None."""
+    """
+    Try zxing-cpp.read_barcodes with given kwargs, return first *real* hit or None.
+
+    zxing-cpp occasionally returns a bogus result with format=NONE and 0 bytes
+    when is_pure=True is given a non-barcode image — we filter those out so
+    they don't short-circuit the rest of the variant loop.
+    """
     try:
         img_array = _np.array(img_obj)
         results = _zxingcpp.read_barcodes(img_array, **kwargs)
-        if results:
-            code = results[0]
+        for code in (results or []):
             raw_bytes = bytes(code.bytes)
             code_type = str(code.format).replace("BarcodeFormat.", "")
+            # Reject empty / placeholder results.
+            if not raw_bytes or code_type in ("NONE", "None", ""):
+                continue
             _qr_dbg_log.info(
                 f"[ZXING-CPP:{label}] Found {code_type}: "
                 f"{len(raw_bytes)} bytes, first10={list(raw_bytes[:10])}"
@@ -638,9 +646,12 @@ async def decode_barcode_server(file: UploadFile):
                             "raw_string": raw_bytes.decode("latin-1", errors="replace"),
                         }
 
-                    # For ROI / tight-crop variants, also try is_pure=True — it
-                    # tells zxing-cpp to assume the image IS just the barcode.
-                    if "roi" in variant_label or "center35" in variant_label:
+                    # For ROI variants only, also try is_pure=True — it tells
+                    # zxing-cpp to assume the image IS just the barcode.
+                    # Don't apply to centre crops: the crop may contain non-code
+                    # content, and is_pure=True will then return a bogus
+                    # format=NONE result that short-circuits later variants.
+                    if variant_label.startswith("roi"):
                         hit_pure = _zxing_try(
                             variant,
                             f"{label}+pure",
