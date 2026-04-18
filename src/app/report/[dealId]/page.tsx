@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,7 @@ function Lightbox({ photos, startIndex, onClose }: {
   onClose: () => void;
 }) {
   const [idx, setIdx] = useState(startIndex);
+  const [scale, setScale] = useState(1);
   const touchX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -134,48 +136,82 @@ function Lightbox({ photos, startIndex, onClose }: {
     return () => window.removeEventListener('keydown', h);
   }, [onClose, photos.length]);
 
+  // Reset zoom each time the active image changes
+  useEffect(() => { setScale(1); }, [idx]);
+
   const p = photos[idx];
+  const zoomed = scale > 1.01;
 
   return (
     <div
       style={{ position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.92)',display:'flex',
-        flexDirection:'column',alignItems:'center',justifyContent:'center',opacity:1 }}
+        flexDirection:'column',alignItems:'center',justifyContent:'center',opacity:1,touchAction: zoomed ? 'none' : 'auto' }}
       onClick={onClose}
-      onTouchStart={e => { touchX.current = e.touches[0].clientX; }}
-      onTouchEnd={e => {
-        if (touchX.current === null) return;
-        const dx = e.changedTouches[0].clientX - touchX.current;
-        if (dx > 50) setIdx(i => Math.max(i - 1, 0));
-        if (dx < -50) setIdx(i => Math.min(i + 1, photos.length - 1));
-        touchX.current = null;
-      }}
     >
-      <button onClick={onClose} style={{ position:'absolute',top:16,right:16,width:44,height:44,
-        background:'rgba(255,255,255,0.1)',border:'none',color:'#fff',fontSize:22,
-        borderRadius:'50%',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10 }}>
+      <button onClick={e => { e.stopPropagation(); onClose(); }}
+        style={{ position:'absolute',top:16,right:16,width:44,height:44,
+          background:'rgba(255,255,255,0.1)',border:'none',color:'#fff',fontSize:22,
+          borderRadius:'50%',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10 }}>
         <i className="fas fa-times"/>
       </button>
       <div style={{ position:'absolute',top:20,left:'50%',transform:'translateX(-50%)',
         color:'rgba(255,255,255,0.5)',fontSize:13 }}>{idx+1} / {photos.length}</div>
-      {idx > 0 && (
+      {zoomed && (
+        <div style={{ position:'absolute',top:20,left:20,color:'rgba(255,255,255,0.55)',fontSize:11,
+          background:'rgba(0,0,0,0.35)',padding:'4px 10px',borderRadius:10,pointerEvents:'none' }}>
+          {scale.toFixed(1)}×
+        </div>
+      )}
+      {idx > 0 && !zoomed && (
         <button onClick={e => { e.stopPropagation(); setIdx(i => i - 1); }}
           style={{ position:'absolute',left:16,top:'50%',transform:'translateY(-50%)',
             width:50,height:50,borderRadius:'50%',background:'rgba(255,255,255,0.12)',
-            border:'none',color:'#fff',fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+            border:'none',color:'#fff',fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10 }}>
           <i className="fas fa-chevron-left"/>
         </button>
       )}
-      <div onClick={e => e.stopPropagation()} style={{ maxWidth:'90vw',maxHeight:'75vh' }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={p.url} alt={p.label}
-          style={{ maxWidth:'90vw',maxHeight:'75vh',objectFit:'contain',borderRadius:4,display:'block' }} />
+      <div
+        onClick={e => e.stopPropagation()}
+        onTouchStart={e => {
+          if (zoomed) return;
+          if (e.touches.length !== 1) { touchX.current = null; return; }
+          touchX.current = e.touches[0].clientX;
+        }}
+        onTouchEnd={e => {
+          if (zoomed || touchX.current === null) { touchX.current = null; return; }
+          const dx = e.changedTouches[0].clientX - touchX.current;
+          if (dx > 50)  setIdx(i => Math.max(i - 1, 0));
+          if (dx < -50) setIdx(i => Math.min(i + 1, photos.length - 1));
+          touchX.current = null;
+        }}
+        style={{ width:'90vw',height:'75vh',display:'flex',alignItems:'center',justifyContent:'center' }}
+      >
+        <TransformWrapper
+          key={idx}
+          initialScale={1}
+          minScale={1}
+          maxScale={5}
+          doubleClick={{ mode: 'toggle', step: 2 }}
+          wheel={{ step: 0.2 }}
+          panning={{ disabled: !zoomed }}
+          onTransform={(_ref, state) => setScale(state.scale)}
+        >
+          <TransformComponent
+            wrapperStyle={{ width:'100%',height:'100%' }}
+            contentStyle={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center' }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={p.url} alt={p.label} draggable={false}
+              style={{ maxWidth:'90vw',maxHeight:'75vh',objectFit:'contain',borderRadius:4,display:'block',userSelect:'none' }} />
+          </TransformComponent>
+        </TransformWrapper>
       </div>
-      <div style={{ color:'#fff',textAlign:'center',marginTop:16,fontSize:15,fontWeight:500 }}>{p.label}</div>
-      {idx < photos.length - 1 && (
+      <div style={{ color:'#fff',textAlign:'center',marginTop:16,fontSize:15,fontWeight:500,pointerEvents:'none' }}>{p.label}</div>
+      {idx < photos.length - 1 && !zoomed && (
         <button onClick={e => { e.stopPropagation(); setIdx(i => i + 1); }}
           style={{ position:'absolute',right:16,top:'50%',transform:'translateY(-50%)',
             width:50,height:50,borderRadius:'50%',background:'rgba(255,255,255,0.12)',
-            border:'none',color:'#fff',fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+            border:'none',color:'#fff',fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10 }}>
           <i className="fas fa-chevron-right"/>
         </button>
       )}
