@@ -45,7 +45,7 @@ interface ReportData {
     position: string; brand?: string; model?: string; size?: string;
     dot?: string; season?: string; tread_mm?: number; status: string;
   }>;
-  paint_measurements: Array<{ point: number; name: string; value_um: number; status: string }>;
+  paint_measurements: Array<{ point: number; name: string; value_um: number | null; status: string }>;
   damages: Array<{ index: number; type: string; location: string; size?: string; description?: string; severity?: string; photo_url?: string | null }>;
   interior_damages?: Array<{ index: number; type: string; location: string; size?: string; description?: string }>;
   mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string; [key: string]: unknown };
@@ -67,22 +67,28 @@ interface ReportData {
 
 const LOGO_URL = 'https://i.postimg.cc/VsgMRGYH/SPROWADZENIE-SAMOCHODOW-Z-USAPOD-DOM-(500-x-500-px)-(800-x-500-px)-(700-x-300-px)-2.png';
 
+// Order MUST match backend PAINT_PANELS_19 (backend/routers/report.py:510).
+// Index i (0-based) corresponds to backend `point` = i+1.
 const PAINT_POINTS = [
-  { id: 'hood',         label: 'Pokrywa silnika',   cx: 200, cy: 78  },
-  { id: 'roof',         label: 'Dach',              cx: 200, cy: 155 },
-  { id: 'trunk',        label: 'Klapa tylna',       cx: 200, cy: 232 },
-  { id: 'fender_fl',   label: 'Błotnik przedni L', cx: 122, cy: 90  },
-  { id: 'fender_fr',   label: 'Błotnik przedni P', cx: 278, cy: 90  },
-  { id: 'fender_rl',   label: 'Błotnik tylny L',   cx: 122, cy: 218 },
-  { id: 'fender_rr',   label: 'Błotnik tylny P',   cx: 278, cy: 218 },
-  { id: 'door_fl',     label: 'Drzwi przednie L',  cx: 122, cy: 140 },
-  { id: 'door_fr',     label: 'Drzwi przednie P',  cx: 278, cy: 140 },
-  { id: 'door_rl',     label: 'Drzwi tylne L',     cx: 122, cy: 172 },
-  { id: 'door_rr',     label: 'Drzwi tylne P',     cx: 278, cy: 172 },
-  { id: 'bumper_front',label: 'Zderzak przedni',   cx: 200, cy: 48  },
-  { id: 'bumper_rear', label: 'Zderzak tylny',     cx: 200, cy: 262 },
-  { id: 'sill_left',   label: 'Próg lewy',         cx: 105, cy: 156 },
-  { id: 'sill_right',  label: 'Próg prawy',        cx: 295, cy: 156 },
+  { id: 'hood',             label: 'Pokrywa przednia',      cx: 200, cy: 78,  r: 15 },
+  { id: 'leftFrontFender',  label: 'Błotnik przedni L',     cx: 122, cy: 90,  r: 15 },
+  { id: 'rightFrontFender', label: 'Błotnik przedni P',     cx: 278, cy: 90,  r: 15 },
+  { id: 'leftFrontDoor',    label: 'Drzwi przednie L',      cx: 122, cy: 140, r: 15 },
+  { id: 'rightFrontDoor',   label: 'Drzwi przednie P',      cx: 278, cy: 140, r: 15 },
+  { id: 'leftRearDoor',     label: 'Drzwi tylne L',         cx: 122, cy: 172, r: 15 },
+  { id: 'rightRearDoor',    label: 'Drzwi tylne P',         cx: 278, cy: 172, r: 15 },
+  { id: 'leftRearFender',   label: 'Błotnik tylny L',       cx: 122, cy: 218, r: 15 },
+  { id: 'rightRearFender',  label: 'Błotnik tylny P',       cx: 278, cy: 218, r: 15 },
+  { id: 'trunk',            label: 'Pokrywa tylna / klapa', cx: 200, cy: 232, r: 15 },
+  { id: 'roof',             label: 'Dach',                  cx: 200, cy: 155, r: 15 },
+  { id: 'leftAColumn',      label: 'Słupek przedni L',      cx: 152, cy: 115, r: 10 },
+  { id: 'rightAColumn',     label: 'Słupek przedni P',      cx: 248, cy: 115, r: 10 },
+  { id: 'leftBColumn',      label: 'Słupek środkowy L',     cx: 152, cy: 155, r: 10 },
+  { id: 'rightBColumn',     label: 'Słupek środkowy P',     cx: 248, cy: 155, r: 10 },
+  { id: 'leftSill',         label: 'Próg L',                cx: 105, cy: 156, r: 15 },
+  { id: 'rightSill',        label: 'Próg P',                cx: 295, cy: 156, r: 15 },
+  { id: 'frontBumper',      label: 'Zderzak przedni',       cx: 200, cy: 48,  r: 15 },
+  { id: 'rearBumper',       label: 'Zderzak tylny',         cx: 200, cy: 262, r: 15 },
 ];
 
 function paintColor(s: string) {
@@ -518,16 +524,19 @@ function PaintDiagram({ measurements }: { measurements: ReportData['paint_measur
           {/* Measurement points */}
           {PAINT_POINTS.map((pt, i) => {
             const m = measureMap[i + 1];
-            const c = m ? paintColor(m.status) : '#AEAEB2';
+            const hasValue = m && m.value_um != null && m.value_um > 0;
+            const c = hasValue ? paintColor(m.status) : '#AEAEB2';
+            const fontSize = pt.r >= 14 ? 9 : 7;
+            const dy = pt.r >= 14 ? 4 : 3;
             return (
               <g key={pt.id}
-                onMouseEnter={e => m && setTooltip({ label: pt.label, value: m.value_um, status: m.status, x: pt.cx, y: pt.cy })}
+                onMouseEnter={e => hasValue && setTooltip({ label: pt.label, value: m!.value_um as number, status: m!.status, x: pt.cx, y: pt.cy })}
                 onMouseLeave={() => setTooltip(null)}
-                style={{ cursor: m ? 'pointer' : 'default' }}
+                style={{ cursor: hasValue ? 'pointer' : 'default' }}
               >
-                <circle cx={pt.cx} cy={pt.cy} r={15} fill={c} stroke="#fff" strokeWidth="2" opacity={0.92}/>
-                <text x={pt.cx} y={pt.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="700">
-                  {m ? m.value_um : '—'}
+                <circle cx={pt.cx} cy={pt.cy} r={pt.r} fill={c} stroke="#fff" strokeWidth="2" opacity={0.92}/>
+                <text x={pt.cx} y={pt.cy + dy} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="700">
+                  {hasValue ? m!.value_um : '—'}
                 </text>
               </g>
             );
@@ -760,16 +769,25 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .section-header{padding:16px 14px!important;}
           .sec-body-inner{padding:14px!important;}
           .sections-stack{gap:12px;}
+          /* Tighten tire card inner padding on narrow screens */
+          .tire-outer-grid{gap:10px!important;}
         }
         @media(max-width:480px){
-          .rg-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
+          /* Vehicle details: 2-col → 1-col for full-width field rows on phones */
+          .rg-4{grid-template-columns:1fr!important;gap:6px;}
           .rg-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
           .rg-photos,.rg-gallery{grid-template-columns:1fr;}
+          /* Tire cards: 2-col → 1-col */
+          .tire-outer-grid{grid-template-columns:1fr!important;}
           .summary-damages{flex-direction:column;align-items:stretch;}
           .sec-body-inner{padding:10px!important;}
           .section-header{padding:14px 12px!important;}
           .field-val{word-break:break-word;overflow-wrap:anywhere;font-size:14px!important;}
           .sections-stack{gap:10px;}
+          /* 44x44 min touch targets for PDF download buttons */
+          .pdf-dl-btn{min-height:44px;padding:12px 18px!important;font-size:14px!important;}
+          /* Paint diagram: ensure the SVG fills the available width on phones */
+          .paint-diagram svg{max-width:100%!important;}
         }
 
         /* ── .force-print-open: applied to <body> just before window.print()
@@ -833,6 +851,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         {/* PDF button */}
         <div className="no-print" style={{ display:'flex',justifyContent:'flex-end',marginBottom:-10,padding:'8px 0' }}>
           <button onClick={() => handlePrint()}
+            className="pdf-dl-btn"
             style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:500,
               color:'#86868B',background:'#fff',border:'1px solid #E0E0E0',borderRadius:6,cursor:'pointer',
               fontFamily:'inherit',transition:'all 0.3s' }}
@@ -1133,7 +1152,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               </div>
               <div style={{ padding:24 }}>
                 {data.tires.length > 0 ? (
-                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:14 }}>
+                  <div className="tire-outer-grid" style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:14 }}>
                     {data.tires.map((t, i) => <TireCard key={i} tire={t} />)}
                   </div>
                 ) : (
@@ -1351,6 +1370,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         {/* PDF bottom */}
         <div className="no-print" style={{ textAlign:'center',padding:'24px 0' }}>
           <button onClick={() => handlePrint()}
+            className="pdf-dl-btn"
             style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:500,
               color:'#86868B',background:'#fff',border:'1px solid #E0E0E0',borderRadius:6,cursor:'pointer',fontFamily:'inherit' }}>
             <i className="fas fa-file-pdf"/> Pobierz PDF
