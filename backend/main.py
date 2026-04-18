@@ -356,20 +356,32 @@ try:
 except ImportError:
     _qr_dbg_log.warning("[STARTUP] OpenCV NOT available — adaptive-threshold / bilateral / ROI preprocessing disabled")
 
-def _zxing_try(img_obj, label: str, **kwargs):
+_NEAR_MISSES: list = []  # populated per-decode by _zxing_try when return_errors=True
+
+def _zxing_try(img_obj, label: str, track_errors: bool = False, **kwargs):
     """
     Try zxing-cpp.read_barcodes with given kwargs, return first *real* hit or None.
 
     zxing-cpp occasionally returns a bogus result with format=NONE and 0 bytes
     when is_pure=True is given a non-barcode image — we filter those out so
     they don't short-circuit the rest of the variant loop.
+
+    If track_errors=True, results that have a non-empty .error attribute
+    (zxing-cpp detected a barcode but couldn't error-correct it) get pushed
+    to _NEAR_MISSES for diagnostic logging.
     """
     try:
         img_array = _np.array(img_obj)
+        if track_errors:
+            kwargs.setdefault("return_errors", True)
         results = _zxingcpp.read_barcodes(img_array, **kwargs)
         for code in (results or []):
             raw_bytes = bytes(code.bytes)
             code_type = str(code.format).replace("BarcodeFormat.", "")
+            err = getattr(code, "error", None)
+            if err:
+                _NEAR_MISSES.append(f"{label}: {code_type} → {err}")
+                continue
             # Reject empty / placeholder results.
             if not raw_bytes or code_type in ("NONE", "None", ""):
                 continue
@@ -621,6 +633,7 @@ async def decode_barcode_server(file: UploadFile):
                 ("FixedThreshold", _zxingcpp.Binarizer.FixedThreshold),
             ]
 
+            _NEAR_MISSES.clear()
             variants_tried = 0
             for variant_label, variant in _preprocess_variants(img):
                 for bin_label, binarizer in binarizers:
@@ -629,6 +642,7 @@ async def decode_barcode_server(file: UploadFile):
                     hit = _zxing_try(
                         variant,
                         label,
+                        track_errors=True,
                         formats=aztec_formats,
                         try_rotate=True,
                         try_downscale=True,
@@ -672,6 +686,13 @@ async def decode_barcode_server(file: UploadFile):
                                 "raw_bytes_b64": raw_b64,
                                 "raw_string": raw_bytes.decode("latin-1", errors="replace"),
                             }
+            if _NEAR_MISSES:
+                # We detected an Aztec but error-correction failed — log the
+                # first few so we can tell "image too degraded" from "no code".
+                preview = _NEAR_MISSES[:5]
+                _qr_dbg_log.info(
+                    f"[ZXING-CPP] {len(_NEAR_MISSES)} near-misses (detected but error-correction failed): {preview}"
+                )
             _qr_dbg_log.info(f"[ZXING-CPP] All {variants_tried} variants failed for {file.filename}")
         except Exception as e:
             _qr_dbg_log.warning(f"[ZXING-CPP] Outer error: {e}")
