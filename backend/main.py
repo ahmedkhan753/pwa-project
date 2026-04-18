@@ -341,11 +341,20 @@ try:
     import zxingcpp as _zxingcpp
     import numpy as _np
     _has_zxingcpp = True
-    _qr_dbg_log.info("[STARTUP] zxing-cpp loaded OK — Aztec decoding available")
+    _qr_dbg_log.info(f"[STARTUP] zxing-cpp loaded OK (version={getattr(_zxingcpp, '__version__', '?')})")
 except ImportError as e:
     _qr_dbg_log.warning(f"[STARTUP] zxing-cpp NOT available: {e} — Aztec server-side decoding disabled")
 except Exception as e:
     _qr_dbg_log.warning(f"[STARTUP] zxing-cpp load error: {e}")
+
+# Check OpenCV availability at startup
+_has_cv2 = False
+try:
+    import cv2 as _cv2  # type: ignore
+    _has_cv2 = True
+    _qr_dbg_log.info(f"[STARTUP] OpenCV loaded OK (version={_cv2.__version__}) — advanced preprocessing enabled")
+except ImportError:
+    _qr_dbg_log.warning("[STARTUP] OpenCV NOT available — adaptive-threshold / bilateral / ROI preprocessing disabled")
 
 def _zxing_try(img_obj, label: str, **kwargs):
     """Try zxing-cpp.read_barcodes with given kwargs, return first hit or None."""
@@ -366,33 +375,95 @@ def _zxing_try(img_obj, label: str, **kwargs):
     return None
 
 
+def _detect_barcode_roi(gray_arr):
+    """
+    Try to locate the barcode in a grayscale image via OpenCV morphology.
+    Returns a tight (x, y, w, h) bounding box or None.
+
+    Strategy: the barcode is a dense region of high local variance. Compute
+    gradient magnitude, close horizontally and vertically, threshold, pick
+    the largest square-ish contour.
+    """
+    if not _has_cv2:
+        return None
+    try:
+        cv2 = _cv2
+        h, w = gray_arr.shape[:2]
+
+        # Gradient-based structure detection.
+        gradX = cv2.Sobel(gray_arr, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+        gradY = cv2.Sobel(gray_arr, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=-1)
+        grad = cv2.convertScaleAbs(cv2.addWeighted(cv2.absdiff(gradX, 0), 0.5,
+                                                     cv2.absdiff(gradY, 0), 0.5, 0))
+        blurred = cv2.blur(grad, (9, 9))
+        _, thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 21))
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        closed = cv2.erode(closed, None, iterations=3)
+        closed = cv2.dilate(closed, None, iterations=3)
+
+        contours, _hier = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        # Prefer largest, roughly square contour.
+        best = None
+        best_score = 0
+        for c in contours:
+            x, y, cw, ch = cv2.boundingRect(c)
+            if cw < 80 or ch < 80:
+                continue
+            area = cw * ch
+            if area < (w * h) * 0.02:
+                continue
+            ratio = min(cw, ch) / max(cw, ch)
+            if ratio < 0.5:
+                continue
+            score = area * ratio
+            if score > best_score:
+                best_score = score
+                best = (x, y, cw, ch)
+
+        if not best:
+            return None
+
+        x, y, cw, ch = best
+        pad = int(max(cw, ch) * 0.08)
+        x0 = max(0, x - pad)
+        y0 = max(0, y - pad)
+        x1 = min(w, x + cw + pad)
+        y1 = min(h, y + ch + pad)
+        return (x0, y0, x1 - x0, y1 - y0)
+    except Exception as e:
+        _qr_dbg_log.debug(f"[roi-detect] failed: {e}")
+        return None
+
+
 def _preprocess_variants(img):
     """
     Yield (label, PIL_image) variants that give the decoder a fighting chance
     on noisy, rotated, low-contrast phone shots of an Aztec code.
 
-    Strategy:
-    - Try the raw image (fast path).
-    - Try grayscale + contrast variants for glare/low-light shots.
-    - Try CENTER-CROPS — phone cameras frame the code in the middle of the
-      viewfinder, and cropping to the center ~60% effectively zooms in,
-      giving the decoder more pixels per module.
-    - Try sharpened + upscaled variants for when the code is small/blurry
-      (laptop-screen shots, phone held too far back).
-    - Try OpenCV adaptive-threshold variants for uneven lighting.
+    Order matters — faster/more likely variants first, so we bail on the
+    first hit. Order:
+      1. Original + grayscale + simple centre crops (fast, cheap)
+      2. PIL sharpen / autocontrast (cheap)
+      3. OpenCV bilateral-filtered (kills screen moiré — critical)
+      4. OpenCV adaptive threshold + Otsu
+      5. ROI-detected crop (if OpenCV finds the barcode)
+      6. Upscale / downscale fallbacks
     """
-    from PIL import ImageOps, ImageEnhance, ImageFilter
+    from PIL import ImageOps, ImageEnhance, ImageFilter, Image as _PILImage
 
     yield "original", img
-
     gray = img.convert("L")
     yield "grayscale", gray
 
     w, h = img.size
 
-    # Center crops — 70% and 50% — huge impact when the code occupies only
-    # the center of the frame (which is always the case with our UI overlay).
-    for frac, tag in [(0.70, "center70"), (0.50, "center50")]:
+    # Center crops — the scan-guide always centres the code.
+    for frac, tag in [(0.80, "center80"), (0.65, "center65"), (0.50, "center50"), (0.35, "center35")]:
         cw, ch = int(w * frac), int(h * frac)
         x0, y0 = (w - cw) // 2, (h - ch) // 2
         try:
@@ -427,16 +498,77 @@ def _preprocess_variants(img):
     except Exception:
         pass
 
-    # Upscale small crops — if the code occupies only ~300px in original,
-    # upscaling gives zxing-cpp more to work with.
+    # OpenCV pipeline — the real workhorses for laptop-screen moiré.
+    if _has_cv2:
+        cv2 = _cv2
+        arr_full = _np.array(gray)
+
+        # Bilateral filter — preserves barcode edges while smoothing the
+        # moiré pattern from a computer screen. This is the best single
+        # trick against screen-recapture artifacts.
+        try:
+            bil = cv2.bilateralFilter(arr_full, d=9, sigmaColor=75, sigmaSpace=75)
+            yield "bilateral", _PILImage.fromarray(bil)
+            # Bilateral + Otsu — often where Aztec shows up.
+            _, bil_otsu = cv2.threshold(bil, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            yield "bilateral+otsu", _PILImage.fromarray(bil_otsu)
+        except Exception as e:
+            _qr_dbg_log.debug(f"[preprocess] bilateral error: {e}")
+
+        # Center crop adaptive + Otsu
+        try:
+            cw, ch = int(w * 0.70), int(h * 0.70)
+            x0, y0 = (w - cw) // 2, (h - ch) // 2
+            cc = arr_full[y0:y0 + ch, x0:x0 + cw]
+
+            # Bilateral on the centre crop — best shot for most frames.
+            bil_c = cv2.bilateralFilter(cc, d=9, sigmaColor=75, sigmaSpace=75)
+            yield "center70+bilateral", _PILImage.fromarray(bil_c)
+            _, bil_c_otsu = cv2.threshold(bil_c, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            yield "center70+bilateral+otsu", _PILImage.fromarray(bil_c_otsu)
+
+            at = cv2.adaptiveThreshold(
+                cc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 7
+            )
+            yield "center70+adaptive", _PILImage.fromarray(at)
+
+            at2 = cv2.adaptiveThreshold(
+                arr_full, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 9
+            )
+            yield "full+adaptiveMean", _PILImage.fromarray(at2)
+
+            _, otsu = cv2.threshold(cc, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            yield "center70+otsu", _PILImage.fromarray(otsu)
+        except Exception as e:
+            _qr_dbg_log.debug(f"[preprocess] center-crop opencv error: {e}")
+
+        # ROI detection — auto-find the barcode region and crop tight.
+        roi = _detect_barcode_roi(arr_full)
+        if roi:
+            rx, ry, rw, rh = roi
+            _qr_dbg_log.info(f"[preprocess] ROI detected at {rx},{ry} {rw}x{rh}")
+            try:
+                roi_crop = arr_full[ry:ry + rh, rx:rx + rw]
+                yield f"roi-{rw}x{rh}", _PILImage.fromarray(roi_crop)
+                # Upscale ROI 2x if small.
+                if max(rw, rh) < 500:
+                    up = cv2.resize(roi_crop, (rw * 2, rh * 2), interpolation=cv2.INTER_CUBIC)
+                    yield f"roi-upscaled-{rw*2}x{rh*2}", _PILImage.fromarray(up)
+                # ROI + bilateral + otsu
+                roi_bil = cv2.bilateralFilter(roi_crop, d=9, sigmaColor=75, sigmaSpace=75)
+                _, roi_otsu = cv2.threshold(roi_bil, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                yield f"roi+bilateral+otsu", _PILImage.fromarray(roi_otsu)
+            except Exception as e:
+                _qr_dbg_log.debug(f"[preprocess] roi-crop error: {e}")
+
+    # Upscale for small codes.
     if max(w, h) < 1400:
         try:
-            up = gray.resize((w * 2, h * 2))
-            yield f"upscaled-{w*2}x{h*2}", up
+            yield f"upscaled-{w*2}x{h*2}", gray.resize((w * 2, h * 2))
         except Exception:
             pass
 
-    # Downscale huge images — zxing-cpp sometimes does better on ~1000px wide.
+    # Downscale big images.
     if max(w, h) > 1400:
         scale = 1200 / max(w, h)
         new_size = (int(w * scale), int(h * scale))
@@ -444,35 +576,6 @@ def _preprocess_variants(img):
             yield f"resized-{new_size[0]}x{new_size[1]}", img.resize(new_size)
         except Exception:
             pass
-
-    # OpenCV-based adaptive threshold variants — great for screen-shot Aztec
-    # with moiré bands and uneven illumination.
-    try:
-        import cv2  # type: ignore
-        arr = _np.array(gray)
-        # Center crop first for adaptive threshold (most of the work is on the code).
-        cw, ch = int(w * 0.70), int(h * 0.70)
-        x0, y0 = (w - cw) // 2, (h - ch) // 2
-        cc = arr[y0:y0 + ch, x0:x0 + cw]
-
-        at = cv2.adaptiveThreshold(
-            cc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 7
-        )
-        from PIL import Image as _PILImage
-        yield "center70+adaptive", _PILImage.fromarray(at)
-
-        at2 = cv2.adaptiveThreshold(
-            arr, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 9
-        )
-        yield "full+adaptiveMean", _PILImage.fromarray(at2)
-
-        # Otsu on center crop — strong global binarization
-        _, otsu = cv2.threshold(cc, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        yield "center70+otsu", _PILImage.fromarray(otsu)
-    except ImportError:
-        pass
-    except Exception as e:
-        _qr_dbg_log.debug(f"[preprocess] OpenCV variant error: {e}")
 
 
 @app.post("/decode-barcode")
@@ -510,8 +613,10 @@ async def decode_barcode_server(file: UploadFile):
                 ("FixedThreshold", _zxingcpp.Binarizer.FixedThreshold),
             ]
 
+            variants_tried = 0
             for variant_label, variant in _preprocess_variants(img):
                 for bin_label, binarizer in binarizers:
+                    variants_tried += 1
                     label = f"{variant_label}/{bin_label}"
                     hit = _zxing_try(
                         variant,
@@ -532,7 +637,31 @@ async def decode_barcode_server(file: UploadFile):
                             "raw_bytes_b64": raw_b64,
                             "raw_string": raw_bytes.decode("latin-1", errors="replace"),
                         }
-            _qr_dbg_log.info(f"[ZXING-CPP] All variants failed for {file.filename}")
+
+                    # For ROI / tight-crop variants, also try is_pure=True — it
+                    # tells zxing-cpp to assume the image IS just the barcode.
+                    if "roi" in variant_label or "center35" in variant_label:
+                        hit_pure = _zxing_try(
+                            variant,
+                            f"{label}+pure",
+                            formats=aztec_formats,
+                            try_rotate=True,
+                            try_downscale=False,
+                            binarizer=binarizer,
+                            text_mode=_zxingcpp.TextMode.Plain,
+                            is_pure=True,
+                        )
+                        if hit_pure:
+                            _code, raw_bytes, code_type = hit_pure
+                            raw_b64 = _base64.b64encode(raw_bytes).decode("ascii")
+                            return {
+                                "found": True,
+                                "type": code_type,
+                                "variant": f"{label}+pure",
+                                "raw_bytes_b64": raw_b64,
+                                "raw_string": raw_bytes.decode("latin-1", errors="replace"),
+                            }
+            _qr_dbg_log.info(f"[ZXING-CPP] All {variants_tried} variants failed for {file.filename}")
         except Exception as e:
             _qr_dbg_log.warning(f"[ZXING-CPP] Outer error: {e}")
     else:
