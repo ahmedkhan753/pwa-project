@@ -518,6 +518,38 @@ def _preprocess_variants(img):
     except Exception:
         pass
 
+    # Lanczos upscale variants — 29 near-misses on screen-recapture Aztec
+    # suggested each Aztec module has too few pixels for accurate read.
+    # Lanczos interpolation + morphological close recovers module integrity
+    # better than bilinear.
+    if _has_cv2:
+        try:
+            cv2 = _cv2
+            arr_up = _np.array(gray)
+            # 3x upscale with Lanczos.
+            up3 = cv2.resize(arr_up, (w * 3, h * 3), interpolation=cv2.INTER_LANCZOS4)
+            yield f"lanczos3x-{w*3}x{h*3}", _PILImage.fromarray(up3)
+
+            # 3x upscale + Otsu threshold + morphological close to heal
+            # broken-by-screen-moire modules.
+            _, up3_otsu = cv2.threshold(up3, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            closed = cv2.morphologyEx(up3_otsu, cv2.MORPH_CLOSE, kernel, iterations=1)
+            yield "lanczos3x+otsu+close", _PILImage.fromarray(closed)
+
+            # Same pipeline on the centre 70% crop (smaller, faster).
+            cw, ch = int(w * 0.70), int(h * 0.70)
+            x0, y0 = (w - cw) // 2, (h - ch) // 2
+            cc = arr_up[y0:y0 + ch, x0:x0 + cw]
+            cc3 = cv2.resize(cc, (cw * 3, ch * 3), interpolation=cv2.INTER_LANCZOS4)
+            yield f"center70+lanczos3x", _PILImage.fromarray(cc3)
+            cc3_bil = cv2.bilateralFilter(cc3, d=7, sigmaColor=50, sigmaSpace=50)
+            _, cc3_otsu = cv2.threshold(cc3_bil, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            cc3_closed = cv2.morphologyEx(cc3_otsu, cv2.MORPH_CLOSE, kernel, iterations=1)
+            yield "center70+lanczos3x+bilateral+otsu+close", _PILImage.fromarray(cc3_closed)
+        except Exception as e:
+            _qr_dbg_log.debug(f"[preprocess] lanczos/morph error: {e}")
+
     # OpenCV pipeline — the real workhorses for laptop-screen moiré.
     if _has_cv2:
         cv2 = _cv2
