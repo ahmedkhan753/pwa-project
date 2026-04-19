@@ -678,6 +678,15 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
     setLightbox({ photos, idx });
   }, []);
 
+  const scrollToDamage = useCallback((index: number) => {
+    const el = document.getElementById(`damage-${index}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const prev = el.style.boxShadow;
+    el.style.boxShadow = '0 0 0 3px rgba(239,68,68,0.55)';
+    window.setTimeout(() => { el.style.boxShadow = prev; }, 1400);
+  }, []);
+
   // ⚠️ ALL HOOKS MUST BE DECLARED BEFORE EARLY RETURNS — Rules of Hooks (React #310)
   const handlePrint = useCallback(() => {
     // Force-open all collapsibles BEFORE print so content/images render.
@@ -1236,8 +1245,22 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 count={g.photos.length} isDamage={g.isDamage} defaultOpen={g.letter === 'A'}>
                 {g.isDamage && data.damages.length > 0 && (
                   <div style={{ padding:'12px 16px',marginBottom:16,background:'#FEF2F2',
-                    borderLeft:'3px solid #EF4444',borderRadius:'0 8px 8px 0',fontSize:13,color:'#991B1B' }}>
-                    Zarejestrowano {data.damages.length} uszkodzeń: {data.damages.map(d => `${d.type} (${d.location})`).join(', ')}
+                    borderLeft:'3px solid #EF4444',borderRadius:'0 8px 8px 0',fontSize:13,color:'#991B1B',
+                    display:'flex',flexWrap:'wrap',gap:6,alignItems:'center' }}>
+                    <span style={{ fontWeight:600 }}>Zarejestrowano {data.damages.length} uszkodzeń:</span>
+                    {data.damages.map((d, i) => (
+                      <button key={i} onClick={() => scrollToDamage(d.index)}
+                        style={{ appearance:'none',border:'1px solid rgba(239,68,68,0.35)',
+                          background:'#fff',color:'#991B1B',borderRadius:999,padding:'4px 10px',
+                          fontSize:12,fontWeight:600,cursor:'pointer',minHeight:28,
+                          transition:'all 0.15s' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background='#FEE2E2'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background='#fff'; }}
+                        title="Przejdź do szczegółów uszkodzenia"
+                      >
+                        #{d.index} {d.type}{d.location ? ` (${d.location})` : ''}
+                      </button>
+                    ))}
                   </div>
                 )}
                 {g.photos.length > 0 ? (
@@ -1300,10 +1323,10 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             <CollapsibleSection id="uszkodzenia" icon="fas fa-exclamation-triangle" num="07 / Uszkodzenia zewnętrzne" title="Uszkodzenia zewnętrzne" defaultOpen>
               <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
                 {data.damages.map((d, i) => (
-                  <div key={i} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
+                  <div key={i} id={`damage-${d.index}`} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
                     background: d.severity === 'structural' ? '#FEF2F2' : '#FFFBEB',
                     border: `1px solid ${d.severity === 'structural' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'}`,
-                    alignItems:'flex-start' }}>
+                    alignItems:'flex-start',scrollMarginTop:100,transition:'box-shadow 0.3s' }}>
                     <div style={{ width:32,height:32,borderRadius:6,flexShrink:0,
                       background: d.severity === 'structural' ? '#EF4444' : '#F59E0B',
                       display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:13 }}>
