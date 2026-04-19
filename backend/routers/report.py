@@ -436,6 +436,37 @@ async def get_report(deal_id: int, request: Request):
             if _hp.replace(".", "", 1).isdigit():
                 vehicle["engine_power_kw"] = str(round(float(_hp) / 1.341))
 
+    # ── Enum ID → label resolution (fuel/body/transmission/drive) ───────────
+    # Bitrix returns numeric enum IDs (e.g. "316"). If the DB InspectionRecord
+    # had no readable label, those IDs pass through and appear as raw numbers
+    # in the report. Resolve them against the discovery-cached field schema.
+    discovery_engine = getattr(request.app.state, "discovery", None)
+
+    def _resolve_enum_label(field_id: str, value: str) -> str:
+        if not value or discovery_engine is None:
+            return value
+        v = str(value).strip()
+        if not v or not v.isdigit():
+            return v
+        try:
+            if not discovery_engine.is_initialized:
+                return v
+            if not discovery_engine.is_enum_field(field_id):
+                return v
+            info = discovery_engine.get_field_schema(field_id) or {}
+            for item in info.get("items") or []:
+                if str(item.get("ID", "")) == v:
+                    return _safe_str(item.get("VALUE", v)) or v
+        except Exception as _enum_err:
+            logger.warning(f"[Report] Enum resolve failed for {field_id}={v}: {_enum_err}")
+        return v
+
+    for _enum_key in ("fuel_type", "body_type", "transmission", "drive_type"):
+        _fid = VEHICLE_FIELDS.get(_enum_key)
+        _cur = vehicle.get(_enum_key)
+        if _fid and _cur:
+            vehicle[_enum_key] = _resolve_enum_label(_fid, _cur)
+
     # ── Photos ────────────────────────────────────────────────────────────
     # Primary source: DB (InspectionPhoto) for new-style submissions.
     # Fallback: Bitrix file fields (older 8-slot submissions).
