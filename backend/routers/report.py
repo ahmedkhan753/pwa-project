@@ -266,6 +266,51 @@ def _paint_status(value_um: float) -> str:
     return "repair"         # red
 
 
+def _paint_parse_range_label(raw: Any) -> Optional[str]:
+    """Return a human-readable range label like '150-200 µm' when the raw
+    inspector value carries a range; None for plain numeric values."""
+    if not isinstance(raw, str):
+        return None
+    s = raw.strip().replace("μm", "µm")
+    if not s:
+        return None
+    body = s.replace("µm", "").strip()
+    if not body:
+        return None
+    is_range = ("-" in body and body.split("-", 1)[0].strip().replace(".", "", 1).isdigit()) \
+        or body.startswith(">") or body.startswith("<")
+    if not is_range:
+        return None
+    return f"{body} µm"
+
+
+def _paint_range_upper(raw: Any) -> Optional[float]:
+    """Upper bound of an inspector range, used for status color. Returns None
+    for plain numeric or unparseable values."""
+    if not isinstance(raw, str):
+        return None
+    body = raw.strip().replace("μm", "µm").replace("µm", "").replace(" ", "")
+    if not body:
+        return None
+    if body.startswith(">"):
+        try:
+            return float(body[1:]) + 1.0
+        except (TypeError, ValueError):
+            return None
+    if body.startswith("<"):
+        try:
+            return float(body[1:])
+        except (TypeError, ValueError):
+            return None
+    if "-" in body:
+        parts = body.split("-")
+        try:
+            return float(parts[-1])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _tire_status(tread_mm: Optional[float]) -> str:
     if tread_mm is None:
         return "unknown"
@@ -563,14 +608,19 @@ async def get_report(deal_id: int, request: Request):
     paint_measurements = []
     repaint_count = 0
 
-    def _paint_val_from_record(key: str) -> Optional[float]:
+    def _paint_val_from_record(key: str) -> tuple[Optional[float], Optional[str]]:
+        """Returns (numeric_upper_um, range_label). Either may be None.
+        When the inspector selected a range (e.g. '150-200µm'), both are
+        populated; for plain numeric entries only the number is returned."""
         zone = insp_rec_paint.get(key) if isinstance(insp_rec_paint, dict) else None
-        if isinstance(zone, dict):
-            return _safe_float(zone.get("value"))
-        return _safe_float(zone)
+        raw_v: Any = zone.get("value") if isinstance(zone, dict) else zone
+        label = _paint_parse_range_label(raw_v)
+        if label is not None:
+            return _paint_range_upper(raw_v), label
+        return _safe_float(raw_v), None
 
     for idx, (key, label, field_id) in enumerate(PAINT_PANELS_19, 1):
-        val = _paint_val_from_record(key)
+        val, range_label = _paint_val_from_record(key)
         if (val is None or val <= 0) and field_id:
             val = _safe_float(raw.get(field_id))
         if val and val > 0:
@@ -578,19 +628,21 @@ async def get_report(deal_id: int, request: Request):
             if status in ("repainted", "repair"):
                 repaint_count += 1
             paint_measurements.append({
-                "point":    idx,
-                "key":      key,
-                "name":     label,
-                "value_um": val,
-                "status":   status,
+                "point":       idx,
+                "key":         key,
+                "name":        label,
+                "value_um":    val,
+                "range_label": range_label,
+                "status":      status,
             })
         else:
             paint_measurements.append({
-                "point":    idx,
-                "key":      key,
-                "name":     label,
-                "value_um": None,
-                "status":   "unknown",
+                "point":       idx,
+                "key":         key,
+                "name":        label,
+                "value_um":    None,
+                "range_label": None,
+                "status":      "unknown",
             })
 
     tires: List[dict] = []   # populated later with InspectionRecord depth enrichment

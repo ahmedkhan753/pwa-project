@@ -46,7 +46,7 @@ interface ReportData {
     position: string; brand?: string; model?: string; size?: string;
     dot?: string; season?: string; tread_mm?: number; status: string;
   }>;
-  paint_measurements: Array<{ point: number; name: string; value_um: number | null; status: string }>;
+  paint_measurements: Array<{ point: number; name: string; value_um: number | null; range_label?: string | null; status: string }>;
   damages: Array<{ index: number; type: string; location: string; size?: string; description?: string; severity?: string; photo_url?: string | null }>;
   interior_damages?: Array<{ index: number; type: string; location: string; size?: string; description?: string }>;
   mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string; [key: string]: unknown };
@@ -538,8 +538,22 @@ function TireCard({ tire }: { tire: ReportData['tires'][0] }) {
 
 // ─── PaintDiagram ──────────────────────────────────────────────────────────────
 
+function paintStatusLabel(s: string): string {
+  if (s === 'factory')   return 'Fabryczny';
+  if (s === 'repainted') return 'Lakierowany';
+  if (s === 'repair')    return 'Naprawiany / Szpachlowany';
+  return 'Brak danych';
+}
+
+function paintDisplayText(m: { value_um: number | null; range_label?: string | null } | undefined): string {
+  if (!m) return '—';
+  if (m.range_label) return m.range_label;
+  if (m.value_um != null && m.value_um > 0) return `${m.value_um} µm`;
+  return 'Brak danych';
+}
+
 function PaintDiagram({ measurements }: { measurements: ReportData['paint_measurements'] }) {
-  const [tooltip, setTooltip] = useState<{ label: string; value: number; status: string; x: number; y: number } | null>(null);
+  const [tooltip, setTooltip] = useState<{ label: string; display: string; status: string; x: number; y: number } | null>(null);
   const measureMap = Object.fromEntries(measurements.map(m => [m.point, m]));
 
   return (
@@ -560,19 +574,20 @@ function PaintDiagram({ measurements }: { measurements: ReportData['paint_measur
           {/* Measurement points */}
           {PAINT_POINTS.map((pt, i) => {
             const m = measureMap[i + 1];
-            const hasValue = m && m.value_um != null && m.value_um > 0;
+            const hasValue = m && (m.value_um != null && m.value_um > 0);
             const c = hasValue ? paintColor(m.status) : '#AEAEB2';
             const fontSize = pt.r >= 14 ? 9 : 7;
             const dy = pt.r >= 14 ? 4 : 3;
+            const circleText = hasValue ? String(m!.value_um) : '—';
             return (
               <g key={pt.id}
-                onMouseEnter={e => hasValue && setTooltip({ label: pt.label, value: m!.value_um as number, status: m!.status, x: pt.cx, y: pt.cy })}
+                onMouseEnter={() => hasValue && setTooltip({ label: pt.label, display: paintDisplayText(m), status: m!.status, x: pt.cx, y: pt.cy })}
                 onMouseLeave={() => setTooltip(null)}
                 style={{ cursor: hasValue ? 'pointer' : 'default' }}
               >
                 <circle cx={pt.cx} cy={pt.cy} r={pt.r} fill={c} stroke="#fff" strokeWidth="2" opacity={0.92}/>
                 <text x={pt.cx} y={pt.cy + dy} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="700">
-                  {hasValue ? m!.value_um : '—'}
+                  {circleText}
                 </text>
               </g>
             );
@@ -581,14 +596,32 @@ function PaintDiagram({ measurements }: { measurements: ReportData['paint_measur
           {/* Tooltip */}
           {tooltip && (
             <g>
-              <rect x="60" y="128" width="280" height="54" rx="8" fill="#1D1D1F" opacity="0.96"/>
+              <rect x="40" y="128" width="320" height="54" rx="8" fill="#1D1D1F" opacity="0.96"/>
               <text x="200" y="150" textAnchor="middle" fontSize="12" fill="#fff" fontWeight="700">{tooltip.label}</text>
               <text x="200" y="170" textAnchor="middle" fontSize="11" fill={paintColor(tooltip.status)}>
-                {tooltip.value} μm — {tooltip.status === 'factory' ? 'Fabryczny' : tooltip.status === 'repainted' ? 'Lakierowany' : 'Naprawiany'}
+                {tooltip.display} — {paintStatusLabel(tooltip.status)}
               </text>
             </g>
           )}
         </svg>
+      </div>
+
+      {/* Paint measurement table — explicit range per panel */}
+      <div className="paint-table" style={{ marginTop:16,display:'grid',
+        gridTemplateColumns:'repeat(2, minmax(0,1fr))',gap:6,fontSize:12 }}>
+        {PAINT_POINTS.map((pt, i) => {
+          const m = measureMap[i + 1];
+          const text = paintDisplayText(m);
+          const dotColor = m && m.value_um != null && m.value_um > 0 ? paintColor(m.status) : '#AEAEB2';
+          return (
+            <div key={pt.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 10px',
+              background:'#F8F8FA',borderRadius:6,border:'1px solid #EEF0F3',minHeight:32 }}>
+              <span style={{ width:8,height:8,borderRadius:'50%',background:dotColor,flexShrink:0 }}/>
+              <span style={{ flex:1,color:'#1D1D1F',fontSize:11,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{pt.label}</span>
+              <span style={{ fontSize:11,fontWeight:700,color: text === 'Brak danych' ? '#AEAEB2' : '#1D1D1F',flexShrink:0 }}>{text}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Legend */}
@@ -833,6 +866,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           .pdf-dl-btn{min-height:44px;padding:12px 18px!important;font-size:14px!important;}
           /* Paint diagram: ensure the SVG fills the available width on phones */
           .paint-diagram svg{max-width:100%!important;}
+          /* Paint measurement table: 2-col → 1-col */
+          .paint-table{grid-template-columns:1fr!important;}
         }
 
         /* ── .force-print-open: applied to <body> just before window.print()
