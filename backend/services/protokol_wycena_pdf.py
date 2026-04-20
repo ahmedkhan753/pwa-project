@@ -421,12 +421,19 @@ def _section_vehicle(report: Dict[str, Any]) -> List[Any]:
 
 def _section_tires(report: Dict[str, Any]) -> List[Any]:
     tires = report.get("tires") or []
-    # Build a 4-row table; label positions even when missing
     by_code = {t.get("code"): t for t in tires if isinstance(t, dict)}
     order = [("fl", "Przednie lewe"), ("fr", "Przednie prawe"),
              ("rl", "Tylne lewe"),   ("rr", "Tylne prawe")]
 
-    header = [pc("Pozycja", True), pc("Marka", True), pc("Rozmiar", True),
+    # Two rows per wheel — row 1: identification; row 2: specs. Keeps all
+    # 8 inspector-captured fields visible within A4 width.
+    def _tire_season_pl(v: Any) -> str:
+        s = str(v or "").strip().lower()
+        return {"summer": "Letnie", "winter": "Zimowe",
+                "all-season": "Wielosezonowe"}.get(s, s.title() or "-")
+
+    header = [pc("Pozycja", True), pc("Marka", True), pc("Model", True),
+              pc("Rozmiar", True), pc("DOT", True), pc("LI/SI", True),
               pc("Bieżnik (mm)", True), pc("Sezon", True), pc("Status", True)]
     rows = [header]
     for code, pos in order:
@@ -434,20 +441,27 @@ def _section_tires(report: Dict[str, Any]) -> List[Any]:
         tread = d.get("tread_mm")
         status_txt, status_color = _tire_status_label(tread)
         tread_str = f"{tread:.1f}" if isinstance(tread, (int, float)) else "-"
+        li = d.get("load_index") or ""
+        si = d.get("speed_index") or ""
+        li_si = f"{li}{si}" if (li or si) else "-"
         rows.append([
             p(pos),
             p(_or_dash(d.get("brand"))),
+            p(_or_dash(d.get("model"))),
             p(_or_dash(d.get("size"))),
+            pc(_or_dash(d.get("dot"))),
+            pc(li_si),
             pc(tread_str),
-            p(_or_dash(d.get("type"))),
+            p(_tire_season_pl(d.get("type"))),
             pc(status_txt, color=status_color),
         ])
 
     col_w = CONTENT_W
     t = Table(
         rows,
-        colWidths=[col_w * 0.18, col_w * 0.20, col_w * 0.20,
-                   col_w * 0.14, col_w * 0.14, col_w * 0.14],
+        colWidths=[col_w * 0.12, col_w * 0.12, col_w * 0.14, col_w * 0.12,
+                   col_w * 0.08, col_w * 0.08, col_w * 0.10, col_w * 0.12,
+                   col_w * 0.12],
     )
     t.setStyle(_data_ts(header_rows=1, rows=len(rows) - 1))
     return [_section_header("2. Opony"), sp(0.15), t, sp(0.5)]
@@ -465,9 +479,13 @@ def _section_paint(report: Dict[str, Any]) -> List[Any]:
     else:
         for m in measurements:
             val = m.get("value_um")
+            range_label = m.get("range_label")
             if isinstance(val, (int, float)) and val > 0:
                 label_txt, label_color = _paint_status_label(val)
-                val_str = f"{val:.0f}"
+                # Prefer inspector-selected range (e.g. "200-300 µm") over
+                # the bare upper-bound number — the valuer needs to see the
+                # actual span the inspector measured, not a single digit.
+                val_str = range_label if range_label else f"{val:.0f}"
             else:
                 label_txt, label_color = "Brak danych", GRAY_MUTED
                 val_str = "-"
@@ -479,8 +497,8 @@ def _section_paint(report: Dict[str, Any]) -> List[Any]:
             ])
 
     col_w = CONTENT_W
-    t = Table(rows, colWidths=[col_w * 0.08, col_w * 0.50,
-                               col_w * 0.18, col_w * 0.24])
+    t = Table(rows, colWidths=[col_w * 0.08, col_w * 0.44,
+                               col_w * 0.24, col_w * 0.24])
     t.setStyle(_data_ts(header_rows=1, rows=len(rows) - 1))
     return [_section_header("3. Pomiary lakieru"), sp(0.15), t, sp(0.5)]
 

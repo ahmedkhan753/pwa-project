@@ -487,24 +487,37 @@ async def get_report(deal_id: int, request: Request):
     # in the report. Resolve them against the discovery-cached field schema.
     discovery_engine = getattr(request.app.state, "discovery", None)
 
+    # Safety net for bad Polish→English Bitrix admin translations. The
+    # transmission enum in Bitrix was literally labelled "CHEST MANUAL"
+    # ("skrzynia" = box/chest, bad auto-translation). Map to the clean
+    # Polish label clients expect.
+    _ENUM_LABEL_FIXUPS = {
+        "CHEST MANUAL":        "MANUALNA",
+        "CHEST AUTOMATIC":     "AUTOMATYCZNA",
+        "CHEST POLAUTOMATIC":  "PÓŁAUTOMATYCZNA",
+        "CHEST SEMIAUTOMATIC": "PÓŁAUTOMATYCZNA",
+    }
+
     def _resolve_enum_label(field_id: str, value: str) -> str:
         if not value or discovery_engine is None:
             return value
         v = str(value).strip()
-        if not v or not v.isdigit():
+        if not v:
             return v
-        try:
-            if not discovery_engine.is_initialized:
+        label = v
+        if v.isdigit():
+            try:
+                if (discovery_engine.is_initialized
+                        and discovery_engine.is_enum_field(field_id)):
+                    info = discovery_engine.get_field_schema(field_id) or {}
+                    for item in info.get("items") or []:
+                        if str(item.get("ID", "")) == v:
+                            label = _safe_str(item.get("VALUE", v)) or v
+                            break
+            except Exception as _enum_err:
+                logger.warning(f"[Report] Enum resolve failed for {field_id}={v}: {_enum_err}")
                 return v
-            if not discovery_engine.is_enum_field(field_id):
-                return v
-            info = discovery_engine.get_field_schema(field_id) or {}
-            for item in info.get("items") or []:
-                if str(item.get("ID", "")) == v:
-                    return _safe_str(item.get("VALUE", v)) or v
-        except Exception as _enum_err:
-            logger.warning(f"[Report] Enum resolve failed for {field_id}={v}: {_enum_err}")
-        return v
+        return _ENUM_LABEL_FIXUPS.get(label.strip().upper(), label)
 
     for _enum_key in ("fuel_type", "body_type", "transmission", "drive_type"):
         _fid = VEHICLE_FIELDS.get(_enum_key)
@@ -652,12 +665,20 @@ async def get_report(deal_id: int, request: Request):
     # ── Damages (exterior) — DB record first, then Bitrix ────────────────
     damages = []
 
+    def _norm_damage_type(s: str) -> str:
+        # Inspectors sometimes type lower-case ("dent") while the rest are
+        # capitalized — normalize for visual consistency in both the
+        # condition report and Protokół Wycena.
+        if not s:
+            return s
+        return s[:1].upper() + s[1:] if s[:1].islower() else s
+
     def _parse_damage_list(lst: list) -> list:
         out = []
         for i, d in enumerate(lst, 1):
             if not isinstance(d, dict):
                 continue
-            t   = _safe_str(d.get("type") or d.get("damageType") or d.get("rodzaj") or "")
+            t   = _norm_damage_type(_safe_str(d.get("type") or d.get("damageType") or d.get("rodzaj") or ""))
             loc = _safe_str(d.get("location") or d.get("part") or d.get("element") or d.get("miejsce") or "")
             out.append({
                 "index":       i,
@@ -684,7 +705,7 @@ async def get_report(deal_id: int, request: Request):
         # Last resort: individual damage group fields
         if not damages:
             for i, (type_field, desc_field) in enumerate(DAMAGE_GROUPS, 1):
-                dmg_type = _safe_str(raw.get(type_field))
+                dmg_type = _norm_damage_type(_safe_str(raw.get(type_field)))
                 dmg_desc = _safe_str(raw.get(desc_field))
                 if dmg_type or dmg_desc:
                     damages.append({
@@ -715,10 +736,14 @@ async def get_report(deal_id: int, request: Request):
             code = {"frontLeft": "fl", "frontRight": "fr", "rearLeft": "rl", "rearRight": "rr"}.get(wk)
             if code and isinstance(wd, dict):
                 tire_from_rec[code] = {
-                    "brand":     _safe_str(wd.get("brand") or wd.get("manufacturer")),
-                    "size":      _safe_str(wd.get("size") or wd.get("dimension")),
-                    "type":      _safe_str(wd.get("type") or wd.get("season")),
-                    "tread":     _safe_float(wd.get("treadDepth") or wd.get("tread") or wd.get("depth")),
+                    "brand":       _safe_str(wd.get("brand") or wd.get("manufacturer")),
+                    "model":       _safe_str(wd.get("model")),
+                    "size":        _safe_str(wd.get("size") or wd.get("dimension")),
+                    "type":        _safe_str(wd.get("type") or wd.get("season")),
+                    "tread":       _safe_float(wd.get("treadDepth") or wd.get("tread") or wd.get("depth")),
+                    "dot":         _safe_str(wd.get("dot") or wd.get("DOT") or wd.get("dotCode")),
+                    "load_index":  _safe_str(wd.get("loadIndex") or wd.get("load_index") or wd.get("LI")),
+                    "speed_index": _safe_str(wd.get("speedIndex") or wd.get("speed_index") or wd.get("SI")),
                 }
 
     for code, position, brand_field, size_field, type_field in TIRE_WHEELS:
@@ -727,13 +752,21 @@ async def get_report(deal_id: int, request: Request):
         size  = _safe_str(raw.get(size_field))
         type_ = _safe_str(raw.get(type_field))
         depth = _safe_float(raw.get(size_field))
+        model = ""
+        dot   = ""
+        li    = ""
+        si    = ""
 
         # Overlay with DB record (DB takes priority for any fields it has)
         rec = tire_from_rec.get(code) or {}
-        if rec.get("brand"): brand = rec["brand"]
-        if rec.get("size"):  size  = rec["size"]
-        if rec.get("type"):  type_ = rec["type"]
-        if rec.get("tread"): depth = rec["tread"]
+        if rec.get("brand"):       brand = rec["brand"]
+        if rec.get("size"):        size  = rec["size"]
+        if rec.get("type"):        type_ = rec["type"]
+        if rec.get("tread"):       depth = rec["tread"]
+        if rec.get("model"):       model = rec["model"]
+        if rec.get("dot"):         dot   = rec["dot"]
+        if rec.get("load_index"):  li    = rec["load_index"]
+        if rec.get("speed_index"): si    = rec["speed_index"]
 
         # Last resort: parse depth from size string ("205/55 R16 4.5mm")
         if size and not depth:
@@ -742,11 +775,13 @@ async def get_report(deal_id: int, request: Request):
             if m:
                 depth = _safe_float(m.group(1))
 
-        if brand or size or depth:
+        if brand or size or depth or model or dot:
             tires.append({
                 "position": position, "code": code,
-                "brand": brand, "size": size, "type": type_,
-                "tread_mm": depth, "status": _tire_status(depth),
+                "brand": brand, "model": model, "size": size, "type": type_,
+                "tread_mm": depth, "dot": dot,
+                "load_index": li, "speed_index": si,
+                "status": _tire_status(depth),
             })
 
     # ── Equipment — DB record (fullEquipment) ─────────────────────────────
