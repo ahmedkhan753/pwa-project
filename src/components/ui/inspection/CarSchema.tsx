@@ -42,18 +42,26 @@ const PAINT_RANGES = [
     "1000-2000µm"
 ];
 
+function autoStatusFromNumber(num: number): 'ok' | 'repainted' | 'putty' {
+    if (num <= 150) return 'ok';
+    if (num <= 300) return 'repainted';
+    return 'putty';
+}
+
 function getZoneColor(zone: PaintZone): string {
     if (!zone.value) return "fill-surface-raised stroke-border";
     const val = zone.value;
     
-    // Auto-status logic
+    // Range-based status logic
     if (val.includes('500-') || val.includes('1000-')) return "fill-danger stroke-danger-hover";
     if (val.includes('150-') || val.includes('200-') || val.includes('300-')) return "fill-warning stroke-warning-hover";
     if (val === '0-150µm') return "fill-success stroke-success-hover";
     
-    // Explicit status check if manual override was used
+    // Exact numeric value — use status field
+    // Explicit status check (covers both exact values and manual override)
     if (zone.status === 'putty') return "fill-danger stroke-danger-hover";
     if (zone.status === 'repainted') return "fill-warning stroke-warning-hover";
+    if (zone.status === 'ok') return "fill-success stroke-success-hover";
     
     return "fill-success stroke-success-hover";
 }
@@ -62,11 +70,19 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
     const [activeZone, setActiveZone] = useState<string | null>(null);
     const [modalValue, setModalValue] = useState('');
     const [modalStatus, setModalStatus] = useState<PaintZone['status']>('');
+    const [customInput, setCustomInput] = useState('');
 
     const openModal = (zoneId: string) => {
         const zone = paint[zoneId];
-        setModalValue(zone?.value || '');
+        const existingValue = zone?.value || '';
+        setModalValue(existingValue);
         setModalStatus(zone?.status || '');
+        // If the value is not a predefined range, populate the custom input
+        if (existingValue && !PAINT_RANGES.includes(existingValue)) {
+            setCustomInput(existingValue.replace('µm', '').trim());
+        } else {
+            setCustomInput('');
+        }
         setActiveZone(zoneId);
     };
 
@@ -80,10 +96,16 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
         const currentIndex = ZONES.findIndex(z => z.id === activeZone);
         if (currentIndex < ZONES.length - 1) {
             const nextZone = ZONES[currentIndex + 1];
-            // Open next modal after a small delay for better UX
             const nextZoneData = paint[nextZone.id] || { value: '', status: '' };
-            setModalValue(nextZoneData.value || '');
+            const nextValue = nextZoneData.value || '';
+            setModalValue(nextValue);
             setModalStatus(nextZoneData.status || '');
+            // Populate custom input if next zone has a non-range value
+            if (nextValue && !PAINT_RANGES.includes(nextValue)) {
+                setCustomInput(nextValue.replace('µm', '').trim());
+            } else {
+                setCustomInput('');
+            }
             setActiveZone(nextZone.id);
         } else {
             setActiveZone(null);
@@ -209,7 +231,7 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                         <div className="p-8 pb-4 flex items-center justify-between">
                             <div>
                                 <h3 className="text-2xl font-black text-foreground tracking-tight">{activeLabel}</h3>
-                                <p className="text-muted text-sm font-medium mt-1">Wybierz zakres grubości powłoki</p>
+                                <p className="text-muted text-sm font-medium mt-1">Wybierz zakres lub wpisz dokładną wartość</p>
                             </div>
                             <button onClick={() => setActiveZone(null)} className="p-3 bg-surface-raised text-muted hover:text-foreground rounded-2xl transition-all active:scale-95">
                                 <X size={24} />
@@ -224,6 +246,7 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                                         key={range}
                                         onClick={() => {
                                             setModalValue(range);
+                                            setCustomInput(''); // clear custom input when range selected
                                             // Auto-detect status based on range for efficiency
                                             if (range.includes('500-') || range.includes('1000-')) setModalStatus('putty');
                                             else if (range.includes('150-') || range.includes('200-') || range.includes('300-')) setModalStatus('repainted');
@@ -231,7 +254,7 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                                         }}
                                         className={cn(
                                             "w-full py-6 rounded-2xl text-base font-black transition-all border-2 flex flex-col items-center justify-center gap-1",
-                                            modalValue === range
+                                            modalValue === range && !customInput
                                                 ? "bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-[1.02]"
                                                 : "bg-surface-raised border-transparent text-muted hover:border-border"
                                         )}
@@ -242,7 +265,44 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                                 ))}
                             </div>
 
-                            {/* Additional Info / Note (Optional) */}
+                            {/* Custom exact value input */}
+                            <div className="space-y-2">
+                                <span className="text-xs font-black text-muted/40 uppercase tracking-widest px-1">Lub wpisz dokładną wartość</span>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="any"
+                                        min="0"
+                                        max="9999"
+                                        placeholder="np. 187"
+                                        value={customInput}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setCustomInput(val);
+                                            if (val && !isNaN(parseFloat(val))) {
+                                                setModalValue(val); // plain number, no µm suffix
+                                                setModalStatus(autoStatusFromNumber(parseFloat(val)));
+                                            } else if (!val) {
+                                                // If cleared, reset to no selection
+                                                setModalValue('');
+                                                setModalStatus('');
+                                            }
+                                        }}
+                                        className={cn(
+                                            "w-full py-4 px-5 pr-14 rounded-2xl bg-surface-raised text-foreground font-black text-lg",
+                                            "border-2 transition-all outline-none",
+                                            "placeholder:text-muted/30 placeholder:font-medium",
+                                            customInput
+                                                ? "border-primary shadow-lg shadow-primary/10"
+                                                : "border-transparent focus:border-border"
+                                        )}
+                                    />
+                                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-muted/40 font-black text-sm">µm</span>
+                                </div>
+                            </div>
+
+                            {/* Status display */}
                             <div className="space-y-3">
                                 <span className="text-xs font-black text-muted/40 uppercase tracking-widest px-1">Status powłoki</span>
                                 <div className="flex gap-3">
