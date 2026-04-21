@@ -48,6 +48,7 @@ interface ReportData {
   }>;
   paint_measurements: Array<{ point: number; name: string; value_um: number | null; range_label?: string | null; status: string }>;
   damages: Array<{ index: number; type: string; location: string; size?: string; description?: string; severity?: string; photo_url?: string | null }>;
+
   interior_damages?: Array<{ index: number; type: string; location: string; size?: string; description?: string }>;
   mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string; [key: string]: unknown };
   notes?: string;
@@ -686,10 +687,10 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           documents_check:    Array.isArray(d.documents_check)    ? d.documents_check    : [],
           tires:              Array.isArray(d.tires)              ? d.tires              : [],
           paint_measurements: Array.isArray(d.paint_measurements) ? d.paint_measurements : [],
-          damages:            Array.isArray(d.damages)            ? d.damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||'') })) : [],
-          interior_damages:   Array.isArray(d.interior_damages)   ? d.interior_damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||'') })) : [],
+          damages:            Array.isArray(d.damages)            ? d.damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||''), photo_url: x.photo_url ? String(x.photo_url) : null })) : [],
+          interior_damages:   Array.isArray(d.interior_damages)   ? d.interior_damages.map((x: Record<string,unknown>) => ({ index: Number(x.index)||0, type: String(x.type||''), location: String(x.location||''), size: String(x.size||''), severity: String(x.severity||'cosmetic'), description: String(x.description||''), photo_url: x.photo_url ? String(x.photo_url) : null })) : [],
           notes:              d.notes != null && typeof d.notes !== 'string' ? String(d.notes) : (d.notes ?? ''),
-          vehicle: d.vehicle ? Object.fromEntries(Object.entries(d.vehicle).map(([k,v]) => [k, v == null || typeof v === 'object' ? (typeof v === 'boolean' ? v : '') : v])) : d.vehicle,
+          vehicle: d.vehicle ? Object.fromEntries(Object.entries(d.vehicle).map(([k,v]) => [k, v == null || typeof v === 'object' ? (typeof v === 'boolean' ? v : '') : v])) : { make:'', model:'', vin:'', registration_plate:'', year:'', mileage:'', color:'', fuel_type:'', transmission:'', body_type:'', drive_type:'', doors:'', seats:'', weight_kg:'', engine_capacity_cc:'', engine_power_hp:'', engine_power_kw:'' },
           damage_summary:     d.damage_summary  ?? { cosmetic:0, structural:0, bodywork:0 },
           quick_stats:        d.quick_stats ? Object.fromEntries(Object.entries(d.quick_stats).map(([k,v]) => [k, v == null || typeof v === 'object' ? '' : v])) : {},
           photos: {
@@ -1374,6 +1375,14 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                         {d.size && <span style={{ fontSize:11,color:'#9CA3AF',padding:'1px 8px',background:'#F3F4F6',borderRadius:10 }}>{d.size}</span>}
                       </div>
                       {d.description && <p style={{ fontSize:12,color:'#4B5563',margin:0,lineHeight:1.5 }}>{d.description}</p>}
+                      {d.photo_url && (
+                        <div style={{ marginTop:8,borderRadius:8,overflow:'hidden',border:'1px solid #E8E8ED',maxWidth:280 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={d.photo_url} alt={`Uszkodzenie ${d.index}`}
+                            style={{ width:'100%',height:160,objectFit:'cover',display:'block',background:'#F5F5F7' }}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1403,6 +1412,14 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                         {d.size && <span style={{ fontSize:11,color:'#9CA3AF',padding:'1px 8px',background:'#fff',borderRadius:10,border:'1px solid #E8E8ED' }}>{d.size}</span>}
                       </div>
                       {d.description && <p style={{ fontSize:12,color:'#4B5563',margin:0,lineHeight:1.5 }}>{d.description}</p>}
+                      {(d as any).photo_url && (
+                        <div style={{ marginTop:8,borderRadius:8,overflow:'hidden',border:'1px solid #E8E8ED',maxWidth:280 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={(d as any).photo_url} alt={`Uszkodzenie ${d.index}`}
+                            style={{ width:'100%',height:160,objectFit:'cover',display:'block',background:'#F5F5F7' }}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

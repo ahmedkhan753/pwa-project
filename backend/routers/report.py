@@ -673,13 +673,18 @@ async def get_report(deal_id: int, request: Request):
             return s
         return s[:1].upper() + s[1:] if s[:1].islower() else s
 
-    def _parse_damage_list(lst: list) -> list:
+    def _parse_damage_list(lst: list, source: str = "ext") -> list:
         out = []
         for i, d in enumerate(lst, 1):
             if not isinstance(d, dict):
                 continue
             t   = _norm_damage_type(_safe_str(d.get("type") or d.get("damageType") or d.get("rodzaj") or ""))
             loc = _safe_str(d.get("location") or d.get("part") or d.get("element") or d.get("miejsce") or "")
+            # Build photo_url if this damage has photos stored in the JSON
+            photos = d.get("photos") or []
+            first_photo_url = None
+            if photos and isinstance(photos, list) and len(photos) > 0:
+                first_photo_url = f"/api/gallery/{deal_id}/damage/{source}/{i - 1}/0"
             out.append({
                 "index":       i,
                 "type":        t,
@@ -687,6 +692,7 @@ async def get_report(deal_id: int, request: Request):
                 "size":        _safe_str(d.get("size") or d.get("rozmiar") or ""),
                 "severity":    _safe_str(d.get("severity") or "cosmetic"),
                 "description": _safe_str(d.get("description") or d.get("notes") or d.get("opis") or ""),
+                "photo_url":   first_photo_url,
             })
         return out
 
@@ -714,7 +720,7 @@ async def get_report(deal_id: int, request: Request):
                     })
 
     # ── Interior damages — DB record only ────────────────────────────────
-    interior_damages = _parse_damage_list(insp_rec_int_damages) if insp_rec_int_damages else []
+    interior_damages = _parse_damage_list(insp_rec_int_damages, source="int") if insp_rec_int_damages else []
 
     cosmetic_count   = sum(1 for d in damages if d.get("severity") in ("cosmetic", ""))
     structural_count = sum(1 for d in damages if d.get("severity") == "structural")

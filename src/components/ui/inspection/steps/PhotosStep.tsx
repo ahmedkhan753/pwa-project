@@ -53,6 +53,11 @@ function VideoRecordSlot({
 
     const startRecording = async () => {
         try {
+            // iOS Safari's MediaRecorder is unreliable (empty blobs, no onstop firing).
+            // Always use the native file input fallback on iOS — gives better quality and stability.
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            if (isIOS) throw new Error('iOS: use file input fallback');
             if (!navigator?.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -256,15 +261,6 @@ export function PhotosStep() {
         })();
         return () => { cancelled = true; };
     }, [dealId, token, apiUrl]);
-
-    // ── Auto-release previews from RAM once backend confirms upload ──
-    // This progressively frees ~150KB per photo from React state as the
-    // upload worker completes, preventing iOS memory pressure buildup.
-    useEffect(() => {
-        if (uploadedSlots.size === 0) return;
-        const ids = Array.from(uploadedSlots);
-        releaseUploadedPhotos(ids);
-    }, [uploadedSlots, releaseUploadedPhotos]);
 
     // ── Subscribe to IndexedDB queue changes (debounced) ───────────
     useEffect(() => {

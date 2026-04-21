@@ -226,7 +226,7 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
             {/* Modal Overlay */}
             {activeZone && (
                 <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm animate-fade-in" onClick={() => setActiveZone(null)}>
-                    <div className="w-full max-w-lg bg-surface rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-slide-up overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                    <div className="w-full max-w-lg max-h-[90dvh] bg-surface rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-slide-up overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         {/* Modal Header */}
                         <div className="p-8 pb-4 flex items-center justify-between">
                             <div>
