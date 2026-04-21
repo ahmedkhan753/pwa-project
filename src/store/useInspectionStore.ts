@@ -469,6 +469,7 @@ interface InspectionState {
   // Photos
   setPhotoSlot: (slotId: string, base64: string) => void;
   clearPhotoSlot: (slotId: string) => void;
+  releaseUploadedPhotos: (uploadedSlotIds: string[]) => void;
   // Tires
   copyTiresToAxle: (source: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight', target: 'front' | 'rear' | 'all') => void;
   // Signatures
@@ -1033,6 +1034,24 @@ export const useInspectionStore = create<InspectionState>()(
             ),
           },
         })),
+
+      // Free base64 preview from RAM for photos that the backend already has.
+      // Called by PhotosStep when uploadedSlots set updates. This is critical
+      // for iOS memory: 34 × 150KB = 5MB freed from React state.
+      releaseUploadedPhotos: (uploadedSlotIds) =>
+        set((state) => {
+          const idSet = new Set(uploadedSlotIds);
+          const changed = state.data.photos.some((p) => p.base64 && idSet.has(p.id));
+          if (!changed) return {};  // avoid unnecessary re-render
+          return {
+            data: {
+              ...state.data,
+              photos: state.data.photos.map((p) =>
+                p.base64 && idSet.has(p.id) ? { ...p, base64: '' } : p
+              ),
+            },
+          };
+        }),
 
       // ── Tire Copy ──
       copyTiresToAxle: (source, target) =>

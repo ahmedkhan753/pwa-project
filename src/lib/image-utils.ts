@@ -31,16 +31,18 @@
  * ----------------
  *   - JPEG only. canvas.toDataURL('image/webp') silently degrades to
  *     PNG on iOS Safari, blowing the size budget.
- *   - Long-edge cap of 2400 px on the HQ pass keeps the in-memory RGBA
- *     buffer at ~17 MB even for portrait shots — well inside the
+ *   - Long-edge cap of 1800 px on the HQ pass keeps the in-memory RGBA
+ *     buffer at ~9 MB even for portrait shots — well inside the
  *     WKWebView budget that historically OOMs around 250 MB.
+ *   - Canvas dimensions are zeroed after use to force immediate RGBA
+ *     buffer deallocation (iOS WebKit delays GC on canvas buffers).
  */
 
 const PREVIEW_MAX_DIM = 1024;
 const PREVIEW_TARGET_BYTES = 150 * 1024;     // 150 KB base64
 
-const FULL_MAX_DIM = 2400;                   // long edge — yields ≥2000×1500 from any 4:3 phone
-const FULL_TARGET_BYTES = 1500 * 1024;       // 1.5 MB soft cap
+const FULL_MAX_DIM = 1800;                   // long edge — yields ≥1800×1350 from any 4:3 phone
+const FULL_TARGET_BYTES = 800 * 1024;        // 800 KB soft cap (was 1.5MB — caused iOS OOM)
 
 type Attempt = { maxW: number; maxH: number; q: number };
 
@@ -52,10 +54,10 @@ const PREVIEW_ATTEMPTS: Attempt[] = [
 ];
 
 const FULL_ATTEMPTS: Attempt[] = [
-    { maxW: FULL_MAX_DIM, maxH: FULL_MAX_DIM, q: 0.85 },
-    { maxW: FULL_MAX_DIM, maxH: FULL_MAX_DIM, q: 0.80 },
-    { maxW: 2000,         maxH: 2000,         q: 0.80 },
-    { maxW: 1600,         maxH: 1600,         q: 0.75 },
+    { maxW: FULL_MAX_DIM, maxH: FULL_MAX_DIM, q: 0.82 },
+    { maxW: FULL_MAX_DIM, maxH: FULL_MAX_DIM, q: 0.75 },
+    { maxW: 1400,         maxH: 1400,         q: 0.72 },
+    { maxW: 1200,         maxH: 1200,         q: 0.65 },
 ];
 
 export async function compressImage(
@@ -82,6 +84,10 @@ export async function compressImagePair(
     // Sequential — never parallel — so iOS WebKit doesn't double-allocate
     // a large RGBA canvas on memory-tight devices.
     const preview = await compressImage(file);
+
+    // Yield to the event loop so iOS GC can reclaim the preview canvas
+    // RGBA buffer before we allocate the (larger) full-size canvas.
+    await new Promise((r) => setTimeout(r, 0));
 
     let full = '';
     try {
@@ -122,6 +128,12 @@ function _compressTo(
 
                     // Always JPEG — WebP canvas encoding is NOT supported on iOS Safari
                     const dataUrl = canvas.toDataURL('image/jpeg', q);
+
+                    // Force immediate RGBA buffer release — critical for iOS WebKit
+                    // which delays garbage collection on canvas pixel buffers.
+                    canvas.width = 0;
+                    canvas.height = 0;
+
                     last = dataUrl;
 
                     if (dataUrl.length <= targetBytes) {

@@ -214,7 +214,7 @@ function VideoRecordSlot({
     );
 }
 export function PhotosStep() {
-    const { data, setPhotoSlot, clearPhotoSlot, jobs, auth } = useInspectionStore();
+    const { data, setPhotoSlot, clearPhotoSlot, releaseUploadedPhotos, jobs, auth } = useInspectionStore();
     const photoSlots = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
@@ -256,6 +256,15 @@ export function PhotosStep() {
         })();
         return () => { cancelled = true; };
     }, [dealId, token, apiUrl]);
+
+    // ── Auto-release previews from RAM once backend confirms upload ──
+    // This progressively frees ~150KB per photo from React state as the
+    // upload worker completes, preventing iOS memory pressure buildup.
+    useEffect(() => {
+        if (uploadedSlots.size === 0) return;
+        const ids = Array.from(uploadedSlots);
+        releaseUploadedPhotos(ids);
+    }, [uploadedSlots, releaseUploadedPhotos]);
 
     // ── Subscribe to IndexedDB queue changes (debounced) ───────────
     useEffect(() => {
