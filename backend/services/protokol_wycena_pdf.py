@@ -432,9 +432,13 @@ def _section_tires(report: Dict[str, Any]) -> List[Any]:
         return {"summer": "Letnie", "winter": "Zimowe",
                 "all-season": "Wielosezonowe"}.get(s, s.title() or "-")
 
-    header = [pc("Pozycja", True), pc("Marka", True), pc("Model", True),
-              pc("Rozmiar", True), pc("DOT", True), pc("LI/SI", True),
-              pc("Bieżnik (mm)", True), pc("Sezon", True), pc("Status", True)]
+    # NB: header cells must pass color=white because pc() wraps text in a
+    # Paragraph whose own text color overrides the table's TEXTCOLOR style.
+    header = [pc("Pozycja", True, color=colors.white), pc("Marka", True, color=colors.white),
+              pc("Model", True, color=colors.white), pc("Rozmiar", True, color=colors.white),
+              pc("DOT", True, color=colors.white), pc("LI/SI", True, color=colors.white),
+              pc("Bieżnik (mm)", True, color=colors.white), pc("Sezon", True, color=colors.white),
+              pc("Status", True, color=colors.white)]
     rows = [header]
     for code, pos in order:
         d = by_code.get(code) or {}
@@ -470,8 +474,8 @@ def _section_tires(report: Dict[str, Any]) -> List[Any]:
 def _section_paint(report: Dict[str, Any]) -> List[Any]:
     measurements = report.get("paint_measurements") or []
     rows = [[
-        pc("Nr", True), pc("Element", True),
-        pc("Grubość (μm)", True), pc("Ocena", True),
+        pc("Nr", True, color=colors.white), pc("Element", True, color=colors.white),
+        pc("Grubość (μm)", True, color=colors.white), pc("Ocena", True, color=colors.white),
     ]]
     if not measurements:
         rows.append([p(""), p("Brak pomiarów lakieru"),
@@ -728,7 +732,7 @@ def _section_equipment(report: Dict[str, Any]) -> List[Any]:
 
 def _section_documents(report: Dict[str, Any]) -> List[Any]:
     docs = report.get("documents_check") or []
-    rows = [[pc("Dokument / wyposażenie", True), pc("Stan", True)]]
+    rows = [[pc("Dokument / wyposażenie", True, color=colors.white), pc("Stan", True, color=colors.white)]]
     if not docs:
         rows.append([p("Brak zarejestrowanych pozycji"),
                      pc("-", color=GRAY_MUTED)])
@@ -757,7 +761,7 @@ def _section_documents(report: Dict[str, Any]) -> List[Any]:
 
 def _section_mechanical(report: Dict[str, Any]) -> List[Any]:
     mech = report.get("mechanical") or {}
-    rows = [[pc("Element", True), pc("Stan", True)]]
+    rows = [[pc("Element", True, color=colors.white), pc("Stan", True, color=colors.white)]]
     any_row = False
     for key, label, mode in MECHANICAL_ROWS:
         v = mech.get(key)
@@ -797,8 +801,9 @@ def _section_damages(report: Dict[str, Any]) -> List[Any]:
 
     def _tbl(title: str, damages: List[dict]) -> Any:
         fn, fnb = _fn()
-        header = [pc("Nr", True), pc("Lokalizacja", True), pc("Typ", True),
-                  pc("Rozmiar", True), pc("Opis", True)]
+        header = [pc("Nr", True, color=colors.white), pc("Lokalizacja", True, color=colors.white),
+                  pc("Typ", True, color=colors.white), pc("Rozmiar", True, color=colors.white),
+                  pc("Opis", True, color=colors.white)]
         rows = [header]
         if not damages:
             rows.append([pc("-"), p("Brak uszkodzeń"),
