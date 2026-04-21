@@ -536,7 +536,6 @@ class SubmitRequest(BaseModel):
 @router.post("/submit")
 async def submit_inspection(
     request: Request,
-    data: SubmitRequest,
     background_tasks: BackgroundTasks,
     db=Depends(get_db),
 ):
@@ -555,8 +554,16 @@ async def submit_inspection(
             detail="Bitrix24 integration not ready — try again later",
         )
 
-    deal_id = data.deal_id
-    body = data.model_dump()
+    # Read raw JSON body directly — bypasses Pydantic model_dump() which was
+    # silently dropping extra fields like paintMeasurement, causing empty paint_json
+    body = await request.json()
+    deal_id = int(body.get("deal_id", 0))
+    if not deal_id:
+        raise HTTPException(status_code=400, detail="Missing deal_id")
+
+    logger.info(f"📦 Submit body keys: {sorted(body.keys())}")
+    logger.info(f"🎨 paintMeasurement present: {'paintMeasurement' in body}, "
+                f"type: {type(body.get('paintMeasurement')).__name__}")
 
     # Log signatures for debugging
     summary_from_body = body.get("finalSummary", {})
