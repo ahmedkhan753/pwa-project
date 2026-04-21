@@ -143,15 +143,14 @@ async def _background_submit(gateway, deal_id: int, body: dict):
             import json as _json_mod
             rec = db.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
 
-            # Submit body has paintMeasurement panels hoisted to root level (the
-            # frontend flattens this slice but keeps the other slices nested).
-            # If `paintMeasurement` is already a dict (new shape) prefer it as-is;
-            # otherwise reconstruct from the root-level zone keys so the report
-            # builder can still find each zone by key. Without this, paint_json
-            # was always saving as '{}' and the report fell back to raw Bitrix
-            # enum IDs (416/446/…) instead of the inspector's range labels.
+            # ── Paint data extraction with debug logging ──
             paint_measurement = body.get("paintMeasurement")
-            if not paint_measurement:
+            logger.info(f"[BG] 🎨 paintMeasurement from body: type={type(paint_measurement).__name__}, "
+                        f"keys={list(paint_measurement.keys()) if isinstance(paint_measurement, dict) else 'N/A'}, "
+                        f"truthy={bool(paint_measurement)}")
+
+            if not paint_measurement or not isinstance(paint_measurement, dict):
+                # Fallback: try to reconstruct from root-level zone keys
                 _PAINT_PANEL_KEYS = (
                     "hood", "roof", "trunk",
                     "leftFrontFender", "leftRearFender",
@@ -168,6 +167,15 @@ async def _background_submit(gateway, deal_id: int, body: dict):
                     k: body[k] for k in _PAINT_PANEL_KEYS
                     if k in body and body[k]
                 }
+                logger.info(f"[BG] 🎨 Fallback paint reconstruction: {len(paint_measurement)} panels found")
+            else:
+                # Check how many zones have actual values
+                filled = sum(1 for v in paint_measurement.values()
+                             if isinstance(v, dict) and v.get('value'))
+                logger.info(f"[BG] 🎨 Paint data: {len(paint_measurement)} zones, {filled} with values")
+
+            # Log the full body keys to verify what data arrived
+            logger.info(f"[BG] 📦 Submit body top-level keys: {sorted(body.keys())}")
 
             rec_data = {
                 "equipment_json":       _json_mod.dumps(body.get("equipmentCompleteness") or {}),
@@ -180,6 +188,8 @@ async def _background_submit(gateway, deal_id: int, body: dict):
                 "mechanical_json":      _json_mod.dumps(body.get("mechanical") or {}),
                 "paint_json":           _json_mod.dumps(paint_measurement or {}),
             }
+            logger.info(f"[BG] 🎨 paint_json length: {len(rec_data['paint_json'])} chars")
+
             if rec:
                 for k, v in rec_data.items():
                     setattr(rec, k, v)
@@ -511,7 +521,7 @@ class SubmitRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     deal_id: int
     job_id: Optional[int] = None
-    photos: Dict[str, Any] = {}
+    photos: Any = None  # Accept list (frontend PhotoSlot[]) or dict
 
     @field_validator('deal_id', 'job_id', mode='before')
     @classmethod
