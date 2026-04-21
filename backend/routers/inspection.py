@@ -191,6 +191,14 @@ async def _background_submit(gateway, deal_id: int, body: dict):
             logger.info(f"[BG] 🎨 paint_json length: {len(rec_data['paint_json'])} chars")
 
             if rec:
+                # If paint_json from submit body is empty but the record already has
+                # paint data (saved during step 4 sync), preserve the existing data
+                existing_paint = getattr(rec, 'paint_json', None) or '{}'
+                if rec_data["paint_json"] == '{}' and existing_paint != '{}':
+                    logger.info(f"[BG] 🎨 Preserving existing paint_json ({len(existing_paint)} chars) "
+                                f"— submit body had no paint data")
+                    rec_data.pop("paint_json")  # Don't overwrite with empty
+
                 for k, v in rec_data.items():
                     setattr(rec, k, v)
             else:
@@ -711,9 +719,35 @@ async def save_step(
 
         # ── Step-specific flattening ──
         if step_number == 4 and isinstance(step_fields, dict):
-            # Paint: flatten nested panels
+            # Paint: flatten nested panels for Bitrix
             flat_paint = flatten_paint_data(step_fields)
             logger.info(f"Step 4 paint flattened: {len(flat_paint)} fields from {len(step_fields)} panels")
+
+            # ── CRITICAL: Also persist raw paint data to InspectionRecord ──
+            # The frontend's submit payload loses paintMeasurement (state becomes
+            # undefined by submission time). Save it HERE where we KNOW it's present.
+            try:
+                from database import SessionLocal
+                _db = SessionLocal()
+                try:
+                    import json as _j
+                    rec = _db.query(InspectionRecord).filter(
+                        InspectionRecord.deal_id == deal_id
+                    ).first()
+                    paint_json = _j.dumps(step_fields)
+                    if rec:
+                        rec.paint_json = paint_json
+                    else:
+                        rec = InspectionRecord(deal_id=deal_id, paint_json=paint_json)
+                        _db.add(rec)
+                    _db.commit()
+                    logger.info(f"[Step4] paint_json saved to DB for deal {deal_id} "
+                                f"({len(paint_json)} chars, {len(step_fields)} zones)")
+                finally:
+                    _db.close()
+            except Exception as paint_err:
+                logger.warning(f"[Step4] Could not persist paint_json for deal {deal_id}: {paint_err}")
+
             step_fields = flat_paint
 
         elif step_number == 5 and isinstance(step_fields, dict):
