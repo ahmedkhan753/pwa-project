@@ -1155,14 +1155,28 @@ export const useInspectionStore = create<InspectionState>()(
           // To simplify, we use the submissionQueue or direct batch upload
           console.log("[Bitrix Sync] Starting full submission for deal", dealId);
 
-          // Construct the payload for transform_to_bitrix in backend
-          // The backend expects flat keys, but our InspectionPayload.flatten() handles that
-          // Here we just send the store data structure, backend Pydantic models will parse it
-          const result = await api.submitInspection(dealId, {
-            ...state.data,
-            deal_id: dealId,
-            job_id: dealId // in this PWA, jobId is the dealId
-          });
+          // Build payload with explicit keys — state.data spread was silently
+          // dropping paintMeasurement (undefined → omitted by JSON.stringify).
+          const payload: Record<string, any> = {
+            vehicleData:            state.data.vehicleData,
+            equipmentCompleteness:  state.data.equipmentCompleteness,
+            fullEquipment:          state.data.fullEquipment,
+            paintMeasurement:       state.data.paintMeasurement ?? initialData.paintMeasurement,
+            tires:                  state.data.tires,
+            photos:                 state.data.photos,
+            exteriorDamage:         state.data.exteriorDamage,
+            interiorDamage:         state.data.interiorDamage,
+            mechanical:             state.data.mechanical,
+            notesValuation:         state.data.notesValuation,
+            finalSummary:           state.data.finalSummary,
+            deal_id:                dealId,
+            job_id:                 dealId,
+          };
+          console.log('[Bitrix Sync] Submit payload keys:', Object.keys(payload));
+          console.log('[Bitrix Sync] paintMeasurement defined:', !!payload.paintMeasurement,
+                      'type:', typeof payload.paintMeasurement);
+
+          const result = await api.submitInspection(dealId, payload);
 
           if (result.status === 'success') {
             set((s) => ({
