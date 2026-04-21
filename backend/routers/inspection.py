@@ -142,6 +142,33 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         try:
             import json as _json_mod
             rec = db.query(InspectionRecord).filter(InspectionRecord.deal_id == deal_id).first()
+
+            # Submit body has paintMeasurement panels hoisted to root level (the
+            # frontend flattens this slice but keeps the other slices nested).
+            # If `paintMeasurement` is already a dict (new shape) prefer it as-is;
+            # otherwise reconstruct from the root-level zone keys so the report
+            # builder can still find each zone by key. Without this, paint_json
+            # was always saving as '{}' and the report fell back to raw Bitrix
+            # enum IDs (416/446/…) instead of the inspector's range labels.
+            paint_measurement = body.get("paintMeasurement")
+            if not paint_measurement:
+                _PAINT_PANEL_KEYS = (
+                    "hood", "roof", "trunk",
+                    "leftFrontFender", "leftRearFender",
+                    "rightFrontFender", "rightRearFender",
+                    "leftFrontDoor", "leftRearDoor",
+                    "rightFrontDoor", "rightRearDoor",
+                    "leftSill", "rightSill",
+                    "leftAColumn", "rightAColumn",
+                    "leftBColumn", "rightBColumn",
+                    "leftCColumn", "rightCColumn",
+                    "frontBumper", "rearBumper",
+                )
+                paint_measurement = {
+                    k: body[k] for k in _PAINT_PANEL_KEYS
+                    if k in body and body[k]
+                }
+
             rec_data = {
                 "equipment_json":       _json_mod.dumps(body.get("equipmentCompleteness") or {}),
                 "full_equipment_json":  _json_mod.dumps(body.get("fullEquipment") or {}),
@@ -151,7 +178,7 @@ async def _background_submit(gateway, deal_id: int, body: dict):
                 "vehicle_json":         _json_mod.dumps(body.get("vehicleData") or {}),
                 "tires_json":           _json_mod.dumps(body.get("tires") or {}),
                 "mechanical_json":      _json_mod.dumps(body.get("mechanical") or {}),
-                "paint_json":           _json_mod.dumps(body.get("paintMeasurement") or {}),
+                "paint_json":           _json_mod.dumps(paint_measurement or {}),
             }
             if rec:
                 for k, v in rec_data.items():
