@@ -58,9 +58,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         } catch { /* ignore */ }
     }, [currentStep]);
 
-    // Bitrix Auto-Sync (Anti-Oops) — debounced, fires on step CHANGE only.
-    // Critically: skipped on initial mount so that iOS app-restart / Zustand
-    // rehydration does NOT auto-fire a step-1 save and create a 3× submit loop.
+    // Bitrix Auto-Sync (Anti-Oops) — fires on step CHANGE, syncs the PREVIOUS step.
+    // When the user leaves step 4 (paint) for step 5, we sync step 4 with the
+    // paint data they just filled in. Skipped on initial mount to avoid iOS loops.
+    const prevStepRef = useRef(currentStep);
     useEffect(() => {
         if (!didMountRef.current) {
             didMountRef.current = true;
@@ -68,11 +69,16 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         }
         if (isSubmitting) return;
 
-        const timer = setTimeout(async () => {
-            await syncStepWithBitrix(currentStep);
-        }, 2000);
+        const prevStep = prevStepRef.current;
+        prevStepRef.current = currentStep;
 
-        return () => clearTimeout(timer);
+        // Sync the step the user just LEFT (has filled data), not the one they entered
+        if (prevStep !== currentStep && prevStep >= 1) {
+            const timer = setTimeout(async () => {
+                await syncStepWithBitrix(prevStep);
+            }, 500);
+            return () => clearTimeout(timer);
+        }
     }, [currentStep, syncStepWithBitrix, isSubmitting]);
 
 
@@ -186,6 +192,7 @@ async function compressImage(base64: string): Promise<string> {
                         vehicleData: storeData?.vehicleData || {},
                         equipmentCompleteness: storeData?.equipmentCompleteness || {},
                         fullEquipment: storeData?.fullEquipment || {},
+                        paintMeasurement: storeData?.paintMeasurement || {},
                         tires: storeData?.tires || {},
                         exteriorDamage: storeData?.exteriorDamage || [],
                         interiorDamage: storeData?.interiorDamage || [],
