@@ -17,9 +17,32 @@ from sqlalchemy.orm import Session
 from deps import get_current_user
 from database import get_db
 from models.inspector import Inspector, InspectorNotification
+from services.bitrix_discovery import discovery
 
 router = APIRouter(prefix="/deals", tags=["Deals"])
 logger = logging.getLogger("routers.deals")
+
+
+def _enum_label(field_id: str, value) -> str:
+    """
+    Convert a raw Bitrix enum ID (e.g. "316") to its human label ("DIESEL") using
+    the discovery schema. Passes through plain strings unchanged. Without this the
+    frontend dropdown shows the numeric ID as the selected value — the inspector
+    sees "316" instead of "DIESEL" in the input form.
+    """
+    if value in (None, "", 0, "0"):
+        return ""
+    sval = str(value).strip()
+    if not sval or not field_id:
+        return sval
+    schema = discovery.get_field_schema(field_id) or {}
+    items = schema.get("items") or []
+    if not items:
+        return sval
+    for item in items:
+        if str(item.get("ID", "")) == sval:
+            return str(item.get("VALUE", "")) or sval
+    return sval  # already a label or unknown ID — pass through
 
 # ── Stage → Status mapping ──
 STAGE_STATUS_MAP = {
@@ -329,10 +352,10 @@ async def get_deal(request: Request, deal_id: int):
             deal["vehicle_color"] = raw_crm.get("UF_CRM_1772534410706") or deal.get("vehicle_color") or deal.get("color") or ""
             deal["engine_capacity"] = raw_crm.get("UF_CRM_1772534081105") or deal.get("engine_capacity") or deal.get("engineCapacity") or ""
             deal["engine_power"] = raw_crm.get("UF_CRM_1772534094039") or deal.get("engine_power") or deal.get("enginePower") or ""
-            deal["fuel_type"] = raw_crm.get("UF_CRM_1772534193") or deal.get("fuel_type") or ""
-            deal["body_type"] = raw_crm.get("UF_CRM_1772796562336") or deal.get("body_type") or ""
-            deal["gearbox_type"] = raw_crm.get("UF_CRM_1772796772039") or deal.get("gearbox_type") or ""
-            deal["drive_type"] = raw_crm.get("UF_CRM_1772534384484") or deal.get("drive_type") or ""
+            deal["fuel_type"]    = _enum_label("UF_CRM_1772534193",    raw_crm.get("UF_CRM_1772534193"))    or deal.get("fuel_type") or ""
+            deal["body_type"]    = _enum_label("UF_CRM_1772796562336", raw_crm.get("UF_CRM_1772796562336")) or deal.get("body_type") or ""
+            deal["gearbox_type"] = _enum_label("UF_CRM_1772796772039", raw_crm.get("UF_CRM_1772796772039")) or deal.get("gearbox_type") or ""
+            deal["drive_type"]   = _enum_label("UF_CRM_1772534384484", raw_crm.get("UF_CRM_1772534384484")) or deal.get("drive_type") or ""
             deal["notes"] = raw_crm.get("UF_CRM_1766057874704") or deal.get("COMMENTS") or ""
         except Exception:
             deal.setdefault("inspectionAddress", deal.get("planned_address") or deal.get("inspection_place") or "")

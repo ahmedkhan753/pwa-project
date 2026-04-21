@@ -157,6 +157,16 @@ async function compressImage(base64: string): Promise<string> {
         const storeData = { ...store.data };
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+        // Persist a recovery draft for this deal BEFORE clearing the wizard.
+        // If submit fails (network / server / oversized payload), the user can
+        // re-open the deal from the dashboard and Zustand's selectJob() will
+        // rehydrate from drafts[dealId] — nothing is lost. Without this, the
+        // fire-and-forget clearInspection() below wiped state and a failed
+        // submit meant the whole inspection had to be redone (Żuraw case).
+        useInspectionStore.setState((s) => ({
+            drafts: { ...s.drafts, [dealId]: storeData },
+        }));
+
         // Mark uploading so dashboard card shows progress badge immediately
         useInspectionStore.getState().setSubmissionStatus(dealId, 'uploading');
 
@@ -201,11 +211,17 @@ async function compressImage(base64: string): Promise<string> {
                     }),
                 });
                 if (res.ok) {
+                    // Submit confirmed — safe to discard the recovery draft.
+                    useInspectionStore.setState((s) => {
+                        const { [dealId]: _discard, ...remaining } = s.drafts;
+                        return { drafts: remaining };
+                    });
                     useInspectionStore.getState().setSubmissionStatus(dealId, 'pending');
                 } else {
                     throw new Error(`HTTP ${res.status}`);
                 }
             } catch {
+                // Keep drafts[dealId] intact — user re-opens deal from dashboard to retry.
                 useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
             }
         })();
