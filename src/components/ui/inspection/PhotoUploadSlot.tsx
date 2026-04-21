@@ -2,7 +2,7 @@
 
 import { Camera, X, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { compressImage } from "@/lib/image-utils";
+import { compressImagePair } from "@/lib/image-utils";
 import { useRef } from "react";
 
 interface PhotoUploadSlotProps {
@@ -10,7 +10,9 @@ interface PhotoUploadSlotProps {
     base64: string;
     required: boolean;
     uploaded?: boolean;  // true if backend DB confirmed this slot
-    onCapture: (base64: string) => void;
+    // preview = small base64 for Zustand/localStorage thumbnail.
+    // full    = HQ base64 destined for the IndexedDB upload queue → backend.
+    onCapture: (preview: string, full: string) => void;
     onClear: () => void;
 }
 
@@ -20,8 +22,8 @@ export function PhotoUploadSlot({ label, base64, required, uploaded, onCapture, 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const compressed = await compressImage(file, 800, 800, 0.60);
-        onCapture(compressed);
+        const { preview, full } = await compressImagePair(file);
+        onCapture(preview, full);
         e.target.value = '';
     };
 

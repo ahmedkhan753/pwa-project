@@ -296,16 +296,20 @@ export function PhotosStep() {
     }, [dealId, token, apiUrl]);
 
     // ── Enqueue to IndexedDB instead of fire-and-forget ──────────────
-    const updatePhotoSlot = (slotId: string, base64: string) => {
-        setPhotoSlot(slotId, base64);
+    // preview = small base64 (≤150 KB) safe for Zustand/localStorage.
+    // full    = HQ base64 (~1.5 MB cap) for the upload queue → backend.
+    // Video paths skip compression and pass the same blob for both.
+    const updatePhotoSlot = (slotId: string, preview: string, full?: string) => {
+        setPhotoSlot(slotId, preview);
         if (!dealId) return;
-        const isVideo = base64.startsWith('data:video');
+        const upload = full || preview;
+        const isVideo = upload.startsWith('data:video');
         const ext = isVideo ? 'mp4' : 'jpg';
         photoQueue.enqueue({
             id: `${dealId}__${slotId}`,
             dealId,
             slotId,
-            base64,
+            base64: upload,
             filename: `${slotId}.${ext}`,
         }).catch((err) => {
             console.error(`[PhotosStep] queue enqueue failed for ${slotId}:`, err);
@@ -411,7 +415,7 @@ export function PhotosStep() {
                             base64={slot.base64}
                             required={slot.required}
                             uploaded={uploadedSlots.has(slot.id)}
-                            onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
+                            onCapture={(preview, full) => updatePhotoSlot(slot.id, preview, full)}
                             onClear={() => clearPhotoSlot(slot.id)}
                         />
                     )
@@ -453,7 +457,7 @@ export function PhotosStep() {
                                 base64={slot.base64}
                                 required={false}
                                 uploaded={uploadedSlots.has(slot.id)}
-                                onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
+                                onCapture={(preview, full) => updatePhotoSlot(slot.id, preview, full)}
                                 onClear={() => clearPhotoSlot(slot.id)}
                             />
                         ))}
