@@ -156,60 +156,75 @@ async function compressImage(base64: string): Promise<string> {
         // Snapshot data before clearing
         const storeData = { ...store.data };
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const finalSummary = storeData?.finalSummary || {};
 
-        // Persist a recovery draft for this deal BEFORE clearing the wizard.
-        // If submit fails (network / server / oversized payload), the user can
-        // re-open the deal from the dashboard and Zustand's selectJob() will
-        // rehydrate from drafts[dealId] — nothing is lost. Without this, the
-        // fire-and-forget clearInspection() below wiped state and a failed
-        // submit meant the whole inspection had to be redone (Żuraw case).
+        // Build the submit body up front so JSON.stringify runs synchronously
+        // against a stable snapshot — no risk of store mutation mid-serialize.
+        const submitBody = JSON.stringify({
+            deal_id: dealId,
+            photos: {},
+            finalSummary: {
+                signatureAppraiser: finalSummary.signatureAppraiser || '',
+                signatureClient: finalSummary.signatureClient || '',
+                signatureYard: finalSummary.signatureYard || '',
+                vinConfirmed: (finalSummary as any).vinConfirmed || false,
+            },
+            vehicleData: storeData?.vehicleData || {},
+            equipmentCompleteness: storeData?.equipmentCompleteness || {},
+            fullEquipment: storeData?.fullEquipment || {},
+            paintMeasurement: storeData?.paintMeasurement || {},
+            tires: storeData?.tires || {},
+            exteriorDamage: storeData?.exteriorDamage || [],
+            interiorDamage: storeData?.interiorDamage || [],
+            mechanical: storeData?.mechanical || {},
+            notesValuation: storeData?.notesValuation || {},
+        });
+
+        // keepalive has a 64KB body cap per request. Warn if we approach it so
+        // we catch payload growth before it silently breaks submits in the wild.
+        const bodySizeKB = Math.round(new Blob([submitBody]).size / 1024);
+        if (bodySizeKB > 50) {
+            console.warn(`[submit] body=${bodySizeKB}KB — approaching 64KB keepalive cap (deal ${dealId})`);
+        }
+
+        // Persist recovery draft BEFORE the in-flight request goes out.
+        // If the submit eventually fails (network / 5xx / iOS abort), the user
+        // re-opens the deal from the dashboard and selectJob() rehydrates from
+        // drafts[dealId] — nothing is lost. Without this, an earlier version
+        // of clearInspection() wiped state on submit failure (Żuraw case).
         useInspectionStore.setState((s) => ({
             drafts: { ...s.drafts, [dealId]: storeData },
         }));
-
-        // Mark uploading so dashboard card shows progress badge immediately
         useInspectionStore.getState().setSubmissionStatus(dealId, 'uploading');
-
-        // Clear the IndexedDB upload queue for this deal — photos are already
-        // in the backend DB (the worker uploaded them during step 6).
         photoQueue.clearDeal(dealId).catch(() => {});
 
-        // Clear wizard — DashboardPage renders <Dashboard /> instantly.
-        // This is a React state change (no URL navigation), so iOS WebKit
-        // does NOT kill the background IIFE below.
+        // ── ORDER IS LOAD-BEARING — DO NOT REORDER ─────────────────────
+        // 1) Initiate fetch FIRST, while WizardLayout is still mounted.
+        //    iOS WebKit aborts in-flight fetches whose originating React
+        //    component has unmounted. By kicking the request off before
+        //    clearInspection(), the request is already on the wire when
+        //    React tears the component down.
+        // 2) keepalive:true tells the browser "this request must complete
+        //    even if the page navigates away or the document is destroyed."
+        //    Designed exactly for fire-and-forget submit-then-leave patterns.
+        //    iOS Safari 15+ supports it. 64KB body cap (warned above).
+        //
+        // Mateusz incident 2026-04-22 (deal 1642): 31 photos uploaded fine,
+        // 11 step PATCHes succeeded, but POST /inspection/submit never
+        // appeared in backend logs at all — fetch was killed by unmount.
+        // This ordering + keepalive is the production-grade fix.
+        const submitPromise = fetch(`${apiUrl}/inspection/submit`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: submitBody,
+        });
+
+        // Now safe to unmount — fetch is already in-flight with keepalive.
         useInspectionStore.getState().clearInspection();
 
-        // ── Fire-and-forget: runs after dashboard appears ──────────────
-        (async () => {
-            // Photos are already in DB from immediate step-6 uploads — no need to re-upload.
-            // The backend reads photos directly from the DB when generating the PDF.
-
-            // Submit — backend generates PDF in background, returns fast
-            const finalSummary = storeData?.finalSummary || {};
-            try {
-                const res = await fetch(`${apiUrl}/inspection/submit`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        deal_id: dealId,
-                        photos: {},
-                        finalSummary: {
-                            signatureAppraiser: finalSummary.signatureAppraiser || '',
-                            signatureClient: finalSummary.signatureClient || '',
-                            signatureYard: finalSummary.signatureYard || '',
-                            vinConfirmed: (finalSummary as any).vinConfirmed || false,
-                        },
-                        vehicleData: storeData?.vehicleData || {},
-                        equipmentCompleteness: storeData?.equipmentCompleteness || {},
-                        fullEquipment: storeData?.fullEquipment || {},
-                        paintMeasurement: storeData?.paintMeasurement || {},
-                        tires: storeData?.tires || {},
-                        exteriorDamage: storeData?.exteriorDamage || [],
-                        interiorDamage: storeData?.interiorDamage || [],
-                        mechanical: storeData?.mechanical || {},
-                        notesValuation: storeData?.notesValuation || {},
-                    }),
-                });
+        submitPromise
+            .then((res) => {
                 if (res.ok) {
                     // Submit confirmed — safe to discard the recovery draft.
                     useInspectionStore.setState((s) => {
@@ -218,13 +233,16 @@ async function compressImage(base64: string): Promise<string> {
                     });
                     useInspectionStore.getState().setSubmissionStatus(dealId, 'pending');
                 } else {
-                    throw new Error(`HTTP ${res.status}`);
+                    console.error(`[submit] deal ${dealId} server returned ${res.status}`);
+                    useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
                 }
-            } catch {
-                // Keep drafts[dealId] intact — user re-opens deal from dashboard to retry.
+            })
+            .catch((err) => {
+                // Network failure / CORS / keepalive size limit / browser abort.
+                // drafts[dealId] is intact — user retries from dashboard.
+                console.error(`[submit] deal ${dealId} fetch failed:`, err?.message || err);
                 useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
-            }
-        })();
+            });
     };
 
     if (isSubmitting) return null;
