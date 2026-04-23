@@ -33,6 +33,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
+    // Pending photo uploads for the current deal — drives the submit gate.
+    // pending = items still in IndexedDB (status pending/uploading/failed).
+    // Once the worker drains them all, count drops to 0 and submit unlocks.
+    const [pendingPhotos, setPendingPhotos] = useState({ pending: 0, failed: 0 });
 
     // ── Start the IndexedDB-backed upload worker ──────────────────
     // Survives iOS crashes: on reload, the worker picks up any queued
@@ -46,6 +50,38 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         }
         return () => { stopUploadWorker(); };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── Submit gate: track pending photo uploads for the current deal ──
+    // Inspector pre-keepalive could click WYŚLIJ while photos were still in
+    // the IndexedDB queue. Submit body has photos:{} so the metadata went
+    // out fine, but if any uploads were still mid-flight or failed, the
+    // backend would generate a PDF with missing pictures. We block the
+    // submit button until the queue for this deal is empty.
+    useEffect(() => {
+        let cancelled = false;
+        const refresh = async () => {
+            const dealId = useInspectionStore.getState().jobs?.currentJobId;
+            if (!dealId) {
+                if (!cancelled) setPendingPhotos({ pending: 0, failed: 0 });
+                return;
+            }
+            const items = await photoQueue.getByDeal(String(dealId));
+            if (cancelled) return;
+            let pending = 0;
+            let failed = 0;
+            for (const it of items) {
+                if (it.status === 'failed') failed++;
+                else if (it.status !== 'uploaded') pending++;
+            }
+            setPendingPhotos({ pending, failed });
+        };
+        refresh();
+        const unsub = photoQueue.subscribe(refresh);
+        // Safety poll — covers cases where notify() is missed (e.g. during a
+        // tab restore where the worker fires before subscribers re-attach).
+        const poll = setInterval(refresh, 2_000);
+        return () => { cancelled = true; unsub(); clearInterval(poll); };
+    }, []);
 
     // Scroll to top on step change — covers both the inner scroll container
     // and window/document for browsers where the page itself scrolls.
@@ -141,6 +177,17 @@ async function compressImage(base64: string): Promise<string> {
 
         if (!dealId) {
             setSubmitError('Brak ID zlecenia — odśwież stronę');
+            setSubmitStatus('error');
+            return;
+        }
+
+        // Belt-and-braces gate (button is also disabled in render): re-read
+        // the queue at click-time so a race between subscriber update and
+        // click handler can't slip a submit through with photos in flight.
+        const queueAtClick = await photoQueue.getByDeal(String(dealId));
+        const stillPending = queueAtClick.filter((i) => i.status !== 'uploaded').length;
+        if (stillPending > 0) {
+            setSubmitError(`${stillPending} zdjęć wciąż się wysyła — poczekaj chwilę.`);
             setSubmitStatus('error');
             return;
         }
@@ -333,11 +380,12 @@ async function compressImage(base64: string): Promise<string> {
                 {currentStep === totalSteps ? (
                     <button
                         onClick={handleSubmit}
-                        disabled={isSubmitting || submitStatus === 'success'}
+                        disabled={isSubmitting || submitStatus === 'success' || pendingPhotos.pending > 0}
                         aria-label="Submit inspection"
                         className={`flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest text-white flex items-center justify-center gap-2 shadow-xl active:scale-[0.95] uppercase ${
                             isSubmitting ? 'bg-gray-400 cursor-wait' :
                             submitStatus === 'success' ? 'bg-green-500 cursor-default' :
+                            pendingPhotos.pending > 0 ? 'bg-gray-400 cursor-not-allowed' :
                             submitStatus === 'error' ? 'bg-red-500' :
                             'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500'
                         }`}
@@ -347,6 +395,7 @@ async function compressImage(base64: string): Promise<string> {
                         <span style={{display: isSubmitting ? 'none' : 'flex', alignItems: 'center', gap: '8px'}}>
                             <Send size={20} className="stroke-[3]" />
                             {submitStatus === 'success' ? '✅ Raport wysłany pomyślnie!' :
+                             pendingPhotos.pending > 0 ? `⏳ Wysyłanie zdjęć (${pendingPhotos.pending})...` :
                              submitStatus === 'error' ? '❌ Błąd — spróbuj ponownie' :
                              'WYŚLIJ RAPORT'}
                         </span>
@@ -367,9 +416,25 @@ async function compressImage(base64: string): Promise<string> {
                 )}
                 </div>
 
-                {/* Validation error feedback (no dealId / no token) */}
+                {/* Validation error feedback (no dealId / no token / pending photos) */}
                 {submitStatus === 'error' && submitError && (
                     <p className="mt-2 text-center text-xs text-red-600 font-medium">{submitError}</p>
+                )}
+
+                {/* Live photo upload progress (only on summary step, when relevant) */}
+                {currentStep === totalSteps && (pendingPhotos.pending > 0 || pendingPhotos.failed > 0) && (
+                    <p className="mt-2 text-center text-xs font-medium">
+                        {pendingPhotos.pending > 0 && (
+                            <span className="text-amber-600 dark:text-amber-400">
+                                ⏳ {pendingPhotos.pending} {pendingPhotos.pending === 1 ? 'zdjęcie czeka' : 'zdjęć czeka'} na wysłanie
+                            </span>
+                        )}
+                        {pendingPhotos.failed > 0 && (
+                            <span className="text-red-600 dark:text-red-400 ml-2">
+                                ❌ {pendingPhotos.failed} nieudanych — ponawiamy automatycznie
+                            </span>
+                        )}
+                    </p>
                 )}
             </footer>
         </div>

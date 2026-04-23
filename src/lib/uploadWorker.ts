@@ -27,6 +27,12 @@ let loopId: ReturnType<typeof setTimeout> | null = null;
 // network/nginx issue.
 const RETRY_DELAYS_MS = [0, 3_000, 6_000, 12_000, 24_000, 60_000];
 
+// Max concurrent uploads in flight at once. 3 is the sweet spot:
+//   - 1 (old) → 50 photos × ~3s each = 150s wait, inspector blocked
+//   - 3 → ~3× faster without saturating mobile uplink or nginx workers
+//   - 6+ → diminishing returns + iOS connection cap + risk of OOM on phone
+const MAX_PARALLEL_UPLOADS = 3;
+
 /** Start (or update credentials of) the worker. Safe to call repeatedly. */
 export function startUploadWorker(authToken: string, baseUrl: string): void {
   token = authToken;
@@ -77,11 +83,19 @@ async function tick(): Promise<void> {
       return;
     }
 
-    // Upload one at a time — avoids hammering nginx with parallel large bodies.
-    for (const item of ready) {
-      if (!running) break;
-      await uploadOne(item);
-    }
+    // Upload up to MAX_PARALLEL_UPLOADS at a time. Bounded promise pool: each
+    // worker pulls the next ready item off a shared queue, so all in-flight
+    // slots stay busy until the queue is drained. Order of completion doesn't
+    // matter — backend dedupes by (deal_id, slot_id).
+    const queue = [...ready];
+    const workers = Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, queue.length) }, async () => {
+      while (running) {
+        const next = queue.shift();
+        if (!next) return;
+        await uploadOne(next);
+      }
+    });
+    await Promise.all(workers);
   } catch (err) {
     console.error('[uploadWorker] tick error:', err);
   } finally {
