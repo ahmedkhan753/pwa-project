@@ -282,11 +282,26 @@ async function compressImage(base64: string): Promise<string> {
             notesValuation: storeData?.notesValuation || {},
         });
 
-        // keepalive has a 64KB body cap per request. Warn if we approach it so
-        // we catch payload growth before it silently breaks submits in the wild.
+        // keepalive has a hard 64KB body cap. Real-world inspection bodies
+        // come in around 100-200KB once signatures + damage descriptions +
+        // paint measurements + notes are populated, which used to silently
+        // fail the submit with "Failed to fetch" because the browser
+        // refused to dispatch the request at all. Decide per-submit:
+        //   - small body (< 60KB) → keepalive for ironclad delivery on
+        //                            unmount/navigation
+        //   - large body (≥ 60KB) → omit keepalive; rely on the fact that
+        //                            fetch() is initiated BEFORE
+        //                            clearInspection() unmounts the wizard,
+        //                            so the request is already in the
+        //                            browser's network queue when React
+        //                            tears the component down. The browser
+        //                            keeps in-flight requests alive across
+        //                            React unmounts as long as the document
+        //                            itself doesn't unload.
         const bodySizeKB = Math.round(new Blob([submitBody]).size / 1024);
-        if (bodySizeKB > 50) {
-            console.warn(`[submit] body=${bodySizeKB}KB — approaching 64KB keepalive cap (deal ${dealId})`);
+        const useKeepalive = bodySizeKB < 60;
+        if (!useKeepalive) {
+            console.warn(`[submit] body=${bodySizeKB}KB — too large for keepalive, falling back to standard fetch (deal ${dealId})`);
         }
 
         // Persist recovery draft BEFORE the in-flight request goes out.
@@ -302,25 +317,32 @@ async function compressImage(base64: string): Promise<string> {
 
         // ── ORDER IS LOAD-BEARING — DO NOT REORDER ─────────────────────
         // 1) Initiate fetch FIRST, while WizardLayout is still mounted.
-        //    iOS WebKit aborts in-flight fetches whose originating React
-        //    component has unmounted. By kicking the request off before
-        //    clearInspection(), the request is already on the wire when
-        //    React tears the component down.
-        // 2) keepalive:true tells the browser "this request must complete
-        //    even if the page navigates away or the document is destroyed."
-        //    Designed exactly for fire-and-forget submit-then-leave patterns.
-        //    iOS Safari 15+ supports it. 64KB body cap (warned above).
+        //    Browsers keep in-flight fetches alive across React unmounts
+        //    as long as the document itself doesn't unload, so getting the
+        //    request into the network queue before clearInspection() runs
+        //    is the key invariant.
+        // 2) keepalive:true (when body fits the 64KB cap) tells the browser
+        //    "this request must complete even if the page navigates away
+        //    or the document is destroyed." Designed exactly for
+        //    fire-and-forget submit-then-leave patterns; bullet-proof on
+        //    iOS Safari 15+. For larger bodies we omit it (browser would
+        //    reject the fetch outright with "Failed to fetch") and lean
+        //    on the fetch-before-unmount ordering instead.
         //
         // Mateusz incident 2026-04-22 (deal 1642): 31 photos uploaded fine,
         // 11 step PATCHes succeeded, but POST /inspection/submit never
         // appeared in backend logs at all — fetch was killed by unmount.
-        // This ordering + keepalive is the production-grade fix.
-        const submitPromise = fetch(`${apiUrl}/inspection/submit`, {
+        // Deal 1652 incident 2026-04-26: body=163KB, keepalive rejected
+        // the request before dispatch. Conditional keepalive resolves both.
+        const fetchInit: RequestInit = {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            keepalive: true,
             body: submitBody,
-        });
+        };
+        if (useKeepalive) {
+            fetchInit.keepalive = true;
+        }
+        const submitPromise = fetch(`${apiUrl}/inspection/submit`, fetchInit);
 
         // Now safe to unmount — fetch is already in-flight with keepalive.
         useInspectionStore.getState().clearInspection();
