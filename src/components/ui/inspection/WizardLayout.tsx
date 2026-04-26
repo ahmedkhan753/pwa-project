@@ -244,6 +244,17 @@ async function compressImage(base64: string): Promise<string> {
 
         setIsSubmitting(true);
 
+        // Tell ErrorBoundary "the next ~second of DOM churn is expected".
+        // clearInspection() unmounts the entire wizard subtree. iOS WebKit
+        // and React's strict mode can both throw `removeChild`/`insertBefore`
+        // mid-unmount when portals (modals, popovers, signature canvases)
+        // race the parent unmount. The ErrorBoundary recognises this flag
+        // and short-circuits its soft-retry/reload cycle, showing the
+        // success screen instead of "Odśwież stronę".
+        if (typeof window !== 'undefined') {
+            (window as any).__submitInProgress = true;
+        }
+
         // Snapshot data before clearing
         const storeData = { ...store.data };
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -333,10 +344,25 @@ async function compressImage(base64: string): Promise<string> {
                 // drafts[dealId] is intact — user retries from dashboard.
                 console.error(`[submit] deal ${dealId} fetch failed:`, err?.message || err);
                 useInspectionStore.getState().setSubmissionStatus(dealId, 'error');
+            })
+            .finally(() => {
+                // Clear the "expected DOM churn" flag once the request settles.
+                // After this point any DOM error is a real bug, not a submit
+                // race, so ErrorBoundary should resume normal recovery flow.
+                if (typeof window !== 'undefined') {
+                    (window as any).__submitInProgress = false;
+                }
             });
     };
 
-    if (isSubmitting) return null;
+    // NOTE: deliberately NOT returning null on isSubmitting here. The previous
+    // version unmounted the whole wizard subtree the instant setIsSubmitting
+    // fired, then clearInspection() triggered a SECOND unmount when DashboardPage
+    // swapped WizardLayout for Dashboard. Two unmount cascades in close succession
+    // racing portal/modal teardowns produced `removeChild`/`insertBefore` errors
+    // that the ErrorBoundary surfaced as the "Odśwież stronę" recovery screen.
+    // We let DashboardPage handle the swap once currentJobId becomes null —
+    // that's a single clean unmount React's reconciler handles cleanly.
 
     return (
         <div className="flex flex-col min-h-[100dvh] max-w-lg mx-auto bg-background overflow-x-hidden transition-colors duration-300">
