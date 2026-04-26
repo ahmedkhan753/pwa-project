@@ -23,8 +23,8 @@ let apiUrl: string = '';
 let loopId: ReturnType<typeof setTimeout> | null = null;
 
 // Backoff (ms) keyed by attempt count. Index 0 = first try, no wait.
-// Hard cap at 60s — better to keep retrying than to give up on a recoverable
-// network/nginx issue.
+// Hard cap at 60s per attempt — better to keep retrying than to give up on a
+// recoverable network/nginx issue.
 const RETRY_DELAYS_MS = [0, 3_000, 6_000, 12_000, 24_000, 60_000];
 
 // Max concurrent uploads in flight at once. 3 is the sweet spot:
@@ -32,6 +32,16 @@ const RETRY_DELAYS_MS = [0, 3_000, 6_000, 12_000, 24_000, 60_000];
 //   - 3 → ~3× faster without saturating mobile uplink or nginx workers
 //   - 6+ → diminishing returns + iOS connection cap + risk of OOM on phone
 const MAX_PARALLEL_UPLOADS = 3;
+
+// Hard ceiling on retries per item. Without this, a permanently-failing photo
+// (e.g. a corrupt blob, an oversized video that exceeds nginx body limit)
+// would cycle forever between 'failed' and 'uploading' — burning battery,
+// hammering the network, and (critically) keeping the WizardLayout submit
+// gate locked indefinitely. After this many tries we declare the item dead;
+// the UI surfaces it as "permanent failure" and the inspector can either
+// re-take the photo (re-enqueue resets attempts to 0) or submit anyway.
+// Total wait at MAX: 0+3+6+12+24+60+60+60 ≈ 225s before giving up.
+export const MAX_UPLOAD_ATTEMPTS = 8;
 
 /** Start (or update credentials of) the worker. Safe to call repeatedly. */
 export function startUploadWorker(authToken: string, baseUrl: string): void {
@@ -64,9 +74,13 @@ async function tick(): Promise<void> {
       return;
     }
 
-    // Pick items whose backoff window has elapsed.
+    // Pick items whose backoff window has elapsed AND that haven't blown
+    // through the retry ceiling. Items past the ceiling stay marked 'failed'
+    // forever (until the inspector re-takes the photo, which re-enqueues
+    // with attempts reset to 0).
     const now = Date.now();
     const ready = items.filter((it) => {
+      if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS) return false;
       if (it.status === 'uploading') {
         // If a previous run died mid-upload, lastTriedAt is stale; allow
         // re-attempt after 30 s so we never permanently get stuck.

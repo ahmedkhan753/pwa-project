@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/ui/Logo";
-import { startUploadWorker, stopUploadWorker } from "@/lib/uploadWorker";
+import { startUploadWorker, stopUploadWorker, MAX_UPLOAD_ATTEMPTS } from "@/lib/uploadWorker";
 import { photoQueue } from "@/lib/photoUploadQueue";
 
 const STEPS = [
@@ -33,10 +33,12 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string>('');
-    // Pending photo uploads for the current deal — drives the submit gate.
-    // pending = items still in IndexedDB (status pending/uploading/failed).
-    // Once the worker drains them all, count drops to 0 and submit unlocks.
-    const [pendingPhotos, setPendingPhotos] = useState({ pending: 0, failed: 0 });
+    // Photo upload queue health for the current deal.
+    //   active : worker is still actively trying to upload (block submit)
+    //   dead   : permanently failed after MAX_UPLOAD_ATTEMPTS retries
+    //            (allow submit-anyway with confirmation, since grinding
+    //             forever doesn't help and locks the inspector out)
+    const [photoQueueState, setPhotoQueueState] = useState({ active: 0, dead: 0 });
 
     // ── Start the IndexedDB-backed upload worker ──────────────────
     // Survives iOS crashes: on reload, the worker picks up any queued
@@ -51,29 +53,39 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         return () => { stopUploadWorker(); };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Submit gate: track pending photo uploads for the current deal ──
-    // Inspector pre-keepalive could click WYŚLIJ while photos were still in
-    // the IndexedDB queue. Submit body has photos:{} so the metadata went
-    // out fine, but if any uploads were still mid-flight or failed, the
-    // backend would generate a PDF with missing pictures. We block the
-    // submit button until the queue for this deal is empty.
+    // ── Submit gate: track photo upload health for the current deal ──
+    // Submit body has photos:{} so the wizard relies on the worker having
+    // already drained every photo to backend storage. If we let submit fire
+    // while uploads are mid-flight, the backend generates a PDF with missing
+    // pictures.
+    //
+    // Two-tier accounting:
+    //   active = pending + uploading + (failed but attempts < MAX, still
+    //            being retried by the worker). Block submit while > 0.
+    //   dead   = failed AND attempts >= MAX (permanently given up).
+    //            Don't block — instead require an explicit confirmation
+    //            so a single bad photo can't lock the inspector out.
     useEffect(() => {
         let cancelled = false;
         const refresh = async () => {
             const dealId = useInspectionStore.getState().jobs?.currentJobId;
             if (!dealId) {
-                if (!cancelled) setPendingPhotos({ pending: 0, failed: 0 });
+                if (!cancelled) setPhotoQueueState({ active: 0, dead: 0 });
                 return;
             }
             const items = await photoQueue.getByDeal(String(dealId));
             if (cancelled) return;
-            let pending = 0;
-            let failed = 0;
+            let active = 0;
+            let dead = 0;
             for (const it of items) {
-                if (it.status === 'failed') failed++;
-                else if (it.status !== 'uploaded') pending++;
+                if (it.status === 'uploaded') continue;
+                if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && it.status === 'failed') {
+                    dead++;
+                } else {
+                    active++;
+                }
             }
-            setPendingPhotos({ pending, failed });
+            setPhotoQueueState({ active, dead });
         };
         refresh();
         const unsub = photoQueue.subscribe(refresh);
@@ -185,11 +197,43 @@ async function compressImage(base64: string): Promise<string> {
         // the queue at click-time so a race between subscriber update and
         // click handler can't slip a submit through with photos in flight.
         const queueAtClick = await photoQueue.getByDeal(String(dealId));
-        const stillPending = queueAtClick.filter((i) => i.status !== 'uploaded').length;
-        if (stillPending > 0) {
-            setSubmitError(`${stillPending} zdjęć wciąż się wysyła — poczekaj chwilę.`);
+        let activeNow = 0;
+        const deadSlots: string[] = [];
+        for (const it of queueAtClick) {
+            if (it.status === 'uploaded') continue;
+            if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && it.status === 'failed') {
+                deadSlots.push(it.slotId);
+            } else {
+                activeNow++;
+            }
+        }
+        if (activeNow > 0) {
+            setSubmitError(`${activeNow} zdjęć wciąż się wysyła — poczekaj chwilę.`);
             setSubmitStatus('error');
             return;
+        }
+        if (deadSlots.length > 0) {
+            // Surface exactly which photos couldn't be uploaded so the inspector
+            // makes an informed call: either go back to step 6 and re-take
+            // them (re-enqueue resets attempts), or submit knowing the report
+            // will be missing those pictures. Native confirm() works on iOS.
+            const slotList = deadSlots.slice(0, 5).join(', ') + (deadSlots.length > 5 ? '…' : '');
+            const ok = window.confirm(
+                `${deadSlots.length} zdjęć nie udało się wysłać po wielu próbach:\n\n${slotList}\n\n` +
+                `Czy chcesz mimo to wysłać raport?\n\n` +
+                `OK → wyślij raport bez tych zdjęć\n` +
+                `Anuluj → wróć do kroku Zdjęcia i zrób je ponownie`
+            );
+            if (!ok) {
+                setSubmitError('Wróć do kroku 6 (Zdjęcia) i zrób ponownie nieudane zdjęcia.');
+                setSubmitStatus('error');
+                return;
+            }
+            // User accepted — drop the dead items so the queue stops advertising
+            // them as unsent. Backend already has whatever did make it through.
+            for (const slot of deadSlots) {
+                await photoQueue.markUploaded(`${dealId}__${slot}`).catch(() => {});
+            }
         }
 
         const token = store.auth?.token;
@@ -380,12 +424,13 @@ async function compressImage(base64: string): Promise<string> {
                 {currentStep === totalSteps ? (
                     <button
                         onClick={handleSubmit}
-                        disabled={isSubmitting || submitStatus === 'success' || pendingPhotos.pending > 0}
+                        disabled={isSubmitting || submitStatus === 'success' || photoQueueState.active > 0}
                         aria-label="Submit inspection"
                         className={`flex-[1.5] py-5 px-6 rounded-2xl font-black text-sm tracking-widest text-white flex items-center justify-center gap-2 shadow-xl active:scale-[0.95] uppercase ${
                             isSubmitting ? 'bg-gray-400 cursor-wait' :
                             submitStatus === 'success' ? 'bg-green-500 cursor-default' :
-                            pendingPhotos.pending > 0 ? 'bg-gray-400 cursor-not-allowed' :
+                            photoQueueState.active > 0 ? 'bg-gray-400 cursor-not-allowed' :
+                            photoQueueState.dead > 0 ? 'bg-amber-500' :
                             submitStatus === 'error' ? 'bg-red-500' :
                             'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500'
                         }`}
@@ -395,7 +440,8 @@ async function compressImage(base64: string): Promise<string> {
                         <span style={{display: isSubmitting ? 'none' : 'flex', alignItems: 'center', gap: '8px'}}>
                             <Send size={20} className="stroke-[3]" />
                             {submitStatus === 'success' ? '✅ Raport wysłany pomyślnie!' :
-                             pendingPhotos.pending > 0 ? `⏳ Wysyłanie zdjęć (${pendingPhotos.pending})...` :
+                             photoQueueState.active > 0 ? `⏳ Wysyłanie zdjęć (${photoQueueState.active})...` :
+                             photoQueueState.dead > 0 ? `⚠️ WYŚLIJ (bez ${photoQueueState.dead} zdjęć)` :
                              submitStatus === 'error' ? '❌ Błąd — spróbuj ponownie' :
                              'WYŚLIJ RAPORT'}
                         </span>
@@ -422,16 +468,16 @@ async function compressImage(base64: string): Promise<string> {
                 )}
 
                 {/* Live photo upload progress (only on summary step, when relevant) */}
-                {currentStep === totalSteps && (pendingPhotos.pending > 0 || pendingPhotos.failed > 0) && (
+                {currentStep === totalSteps && (photoQueueState.active > 0 || photoQueueState.dead > 0) && (
                     <p className="mt-2 text-center text-xs font-medium">
-                        {pendingPhotos.pending > 0 && (
+                        {photoQueueState.active > 0 && (
                             <span className="text-amber-600 dark:text-amber-400">
-                                ⏳ {pendingPhotos.pending} {pendingPhotos.pending === 1 ? 'zdjęcie czeka' : 'zdjęć czeka'} na wysłanie
+                                ⏳ {photoQueueState.active} {photoQueueState.active === 1 ? 'zdjęcie czeka' : 'zdjęć czeka'} na wysłanie
                             </span>
                         )}
-                        {pendingPhotos.failed > 0 && (
+                        {photoQueueState.dead > 0 && (
                             <span className="text-red-600 dark:text-red-400 ml-2">
-                                ❌ {pendingPhotos.failed} nieudanych — ponawiamy automatycznie
+                                ⚠️ {photoQueueState.dead} {photoQueueState.dead === 1 ? 'zdjęcie' : 'zdjęć'} nie wysłano — wróć do kroku 6 lub wyślij raport bez nich
                             </span>
                         )}
                     </p>

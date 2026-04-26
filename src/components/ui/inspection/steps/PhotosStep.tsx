@@ -4,6 +4,7 @@ import { PhotoUploadSlot } from "../PhotoUploadSlot";
 import { Camera, CheckCircle2, ChevronDown, Plus, Video, RotateCcw, Check, X, CloudUpload, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { photoQueue } from "@/lib/photoUploadQueue";
+import { MAX_UPLOAD_ATTEMPTS } from "@/lib/uploadWorker";
 
 // ── Video Record Slot: 6-second auto-stop with countdown ──────────────
 function VideoRecordSlot({
@@ -224,8 +225,13 @@ export function PhotosStep() {
     const [showExtra, setShowExtra] = useState(false);
 
     // ── Upload queue status (IndexedDB ground truth) ─────────────────
+    // pendingCount: actively trying to upload (status pending/uploading or
+    //               failed but attempts < MAX → worker will retry).
+    // deadCount   : permanently failed after MAX attempts. Inspector must
+    //               re-take or accept the loss before submit will succeed.
     const [pendingCount, setPendingCount] = useState(0);
-    const [failedCount, setFailedCount] = useState(0);
+    const [deadCount, setDeadCount] = useState(0);
+    const [deadSlots, setDeadSlots] = useState<string[]>([]);
     const [uploadedSlots, setUploadedSlots] = useState<Set<string>>(new Set());
 
     const requiredSlots = photoSlots.slice(0, 34);
@@ -273,10 +279,19 @@ export function PhotosStep() {
             if (timer) clearTimeout(timer);
             timer = setTimeout(async () => {
                 const items = await photoQueue.getByDeal(dealId);
-                const pending = items.filter(i => i.status === 'pending' || i.status === 'uploading').length;
-                const failed = items.filter(i => i.status === 'failed').length;
+                let pending = 0;
+                const dead: string[] = [];
+                for (const i of items) {
+                    if (i.status === 'uploaded') continue;
+                    if ((i.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && i.status === 'failed') {
+                        dead.push(i.slotId);
+                    } else {
+                        pending++;
+                    }
+                }
                 setPendingCount(pending);
-                setFailedCount(failed);
+                setDeadCount(dead.length);
+                setDeadSlots(dead);
 
                 // Only re-fetch the backend list when queue shrank (an upload finished)
                 const currentSize = items.length;
@@ -375,17 +390,17 @@ export function PhotosStep() {
             </div>
 
             {/* Upload Queue Status Banner */}
-            {(pendingCount > 0 || failedCount > 0) && (
+            {(pendingCount > 0 || deadCount > 0) && (
                 <div className={cn(
-                    "rounded-2xl p-4 flex items-center gap-3 border shadow-sm",
-                    failedCount > 0
+                    "rounded-2xl p-4 flex items-start gap-3 border shadow-sm",
+                    deadCount > 0
                         ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
                         : "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
                 )}>
-                    {failedCount > 0 ? (
-                        <AlertTriangle size={20} className="text-red-500 flex-shrink-0" />
+                    {deadCount > 0 ? (
+                        <AlertTriangle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
                     ) : (
-                        <CloudUpload size={20} className="text-blue-500 flex-shrink-0 animate-pulse" />
+                        <CloudUpload size={20} className="text-blue-500 flex-shrink-0 animate-pulse mt-0.5" />
                     )}
                     <div className="flex-1 min-w-0">
                         {pendingCount > 0 && (
@@ -393,10 +408,15 @@ export function PhotosStep() {
                                 Wysyłanie {pendingCount} {pendingCount === 1 ? 'pliku' : 'plików'}... Nie zamykaj aplikacji.
                             </p>
                         )}
-                        {failedCount > 0 && (
-                            <p className="text-[11px] font-bold text-red-600 dark:text-red-400">
-                                {failedCount} {failedCount === 1 ? 'plik' : 'plików'} nie udało się wysłać — ponawiam automatycznie.
-                            </p>
+                        {deadCount > 0 && (
+                            <div className="mt-1">
+                                <p className="text-[11px] font-bold text-red-600 dark:text-red-400">
+                                    {deadCount} {deadCount === 1 ? 'plik nie został wysłany' : 'plików nie zostało wysłanych'} — kliknij ❌ na nieudanym zdjęciu i zrób je ponownie.
+                                </p>
+                                <p className="mt-1 text-[10px] font-medium text-red-500/80 break-words">
+                                    {deadSlots.slice(0, 6).join(', ')}{deadSlots.length > 6 ? '…' : ''}
+                                </p>
+                            </div>
                         )}
                     </div>
                 </div>
