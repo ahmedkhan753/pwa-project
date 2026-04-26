@@ -268,6 +268,25 @@ export function PhotosStep() {
         return () => { cancelled = true; };
     }, [dealId, token, apiUrl]);
 
+    // ── One-shot cleanup: drop any video items left in the queue ────
+    // Inspectors who hit the broken upload path before this fix may have
+    // stale video_* items stuck in IndexedDB. Without this, those would
+    // still count against the submit gate. Safe to run unconditionally —
+    // markUploaded just deletes the row.
+    useEffect(() => {
+        if (!dealId) return;
+        (async () => {
+            try {
+                const items = await photoQueue.getByDeal(dealId);
+                for (const it of items) {
+                    if (it.slotId.startsWith('video_') || it.base64.startsWith('data:video')) {
+                        await photoQueue.markUploaded(it.id);
+                    }
+                }
+            } catch { /* ignore — IndexedDB unavailable */ }
+        })();
+    }, [dealId]);
+
     // ── Subscribe to IndexedDB queue changes (debounced) ───────────
     useEffect(() => {
         if (!dealId) return;
@@ -323,8 +342,23 @@ export function PhotosStep() {
         setPhotoSlot(slotId, preview);
         if (!dealId) return;
         const upload = full || preview;
-        const isVideo = upload.startsWith('data:video');
-        const ext = isVideo ? 'mp4' : 'jpg';
+        const isVideo = upload.startsWith('data:video') || slotId.startsWith('video_');
+
+        // ── TEMPORARY: skip backend upload for videos ─────────────────
+        // The engine video kept failing upload (size + slow mobile uplink),
+        // permanently blocking submit for every inspection. Until we move
+        // videos onto a chunked/resumable upload path, we keep them on the
+        // device only — inspector still sees the recording in the slot,
+        // and the rest of the report (photos + metadata) submits cleanly.
+        // Drop any prior queue entry for this video so a stale failed item
+        // from before this fix doesn't keep counting against the gate.
+        if (isVideo) {
+            photoQueue.markUploaded(`${dealId}__${slotId}`).catch(() => {});
+            console.log(`[PhotosStep] video '${slotId}' kept local-only (backend upload disabled)`);
+            return;
+        }
+
+        const ext = 'jpg';
         photoQueue.enqueue({
             id: `${dealId}__${slotId}`,
             dealId,
