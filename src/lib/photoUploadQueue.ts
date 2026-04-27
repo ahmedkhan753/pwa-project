@@ -39,6 +39,20 @@ export interface QueueItem {
   lastTriedAt?: number;
 }
 
+/** Lightweight projection — everything but the base64. */
+export interface QueueItemMeta {
+  id: string;
+  dealId: string;
+  slotId: string;
+  status: QueueItem['status'];
+  attempts: number;
+  enqueuedAt: number;
+  lastTriedAt?: number;
+  /** True if the underlying base64 is a video — derived once during the cursor
+   *  walk so callers can filter without ever loading the data URL. */
+  isVideoData: boolean;
+}
+
 const DB_NAME = 'inspection-uploads';
 const DB_VERSION = 1;
 const STORE = 'queue';
@@ -184,6 +198,47 @@ export const photoQueue = {
     }
   },
 
+  /**
+   * Lightweight metadata-only listing (no base64). Stress-test critical:
+   * with 150 queued photos at ~120KB each, calling getAllPending() loads
+   * ~18 MB of base64 into JS memory on every tick / poll. iOS WebKit's
+   * ~250 MB document budget evaporates quickly under that pressure.
+   * This walks via cursor and projects only the lightweight fields, so
+   * peak memory is one item at a time during the cursor scan.
+   */
+  async getAllPendingMeta(): Promise<QueueItemMeta[]> {
+    try {
+      return await withStore('readonly', async (store) => {
+        return new Promise<QueueItemMeta[]>((resolve, reject) => {
+          const out: QueueItemMeta[] = [];
+          const req = store.openCursor();
+          req.onsuccess = () => {
+            const cur = req.result;
+            if (!cur) { resolve(out); return; }
+            const v = cur.value as QueueItem;
+            if (v && v.status !== 'uploaded') {
+              out.push({
+                id: v.id,
+                dealId: v.dealId,
+                slotId: v.slotId,
+                status: v.status,
+                attempts: v.attempts || 0,
+                lastTriedAt: v.lastTriedAt,
+                enqueuedAt: v.enqueuedAt,
+                isVideoData: !!(v.base64 && v.base64.startsWith('data:video')),
+              });
+            }
+            cur.continue();
+          };
+          req.onerror = () => reject(req.error);
+        });
+      });
+    } catch (err) {
+      console.warn('[photoQueue] getAllPendingMeta:', err);
+      return [];
+    }
+  },
+
   async getByDeal(dealId: string): Promise<QueueItem[]> {
     if (!dealId) return [];
     try {
@@ -198,17 +253,84 @@ export const photoQueue = {
   },
 
   /**
+   * Lite version of getByDeal — same memory rationale as getAllPendingMeta.
+   * Use this from any UI subscriber/poller that only needs counts and
+   * statuses for the submit gate, banner, etc.
+   */
+  async getMetaByDeal(dealId: string): Promise<QueueItemMeta[]> {
+    if (!dealId) return [];
+    try {
+      return await withStore('readonly', async (store) => {
+        return new Promise<QueueItemMeta[]>((resolve, reject) => {
+          const out: QueueItemMeta[] = [];
+          const idx = store.index('byDeal');
+          const req = idx.openCursor(IDBKeyRange.only(dealId));
+          req.onsuccess = () => {
+            const cur = req.result;
+            if (!cur) { resolve(out); return; }
+            const v = cur.value as QueueItem;
+            if (v) {
+              out.push({
+                id: v.id,
+                dealId: v.dealId,
+                slotId: v.slotId,
+                status: v.status,
+                attempts: v.attempts || 0,
+                lastTriedAt: v.lastTriedAt,
+                enqueuedAt: v.enqueuedAt,
+                isVideoData: !!(v.base64 && v.base64.startsWith('data:video')),
+              });
+            }
+            cur.continue();
+          };
+          req.onerror = () => reject(req.error);
+        });
+      });
+    } catch (err) {
+      console.warn('[photoQueue] getMetaByDeal:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch a single full item (with base64) by id. Used by uploadWorker
+   * to lazy-load the actual bytes only at the moment of upload, so we
+   * never have more than (concurrency × one item) of base64 in memory.
+   */
+  async getById(id: string): Promise<QueueItem | null> {
+    try {
+      return await withStore('readonly', async (store) => {
+        const v = (await reqToPromise(store.get(id))) as QueueItem | undefined;
+        return v || null;
+      });
+    } catch (err) {
+      console.warn('[photoQueue] getById:', err);
+      return null;
+    }
+  },
+
+  /**
    * Drop everything for a deal — call this after a successful submit so the
-   * queue does not hold stale base64 forever.
+   * queue does not hold stale base64 forever. Uses the byDeal index +
+   * cursor so we only walk this deal's rows and never load the base64
+   * blobs into JS memory at all (delete works directly off the cursor's
+   * primary key).
    */
   async clearDeal(dealId: string): Promise<void> {
     if (!dealId) return;
     try {
       await withStore('readwrite', async (store) => {
-        const all = (await reqToPromise(store.getAll())) as QueueItem[];
-        for (const i of all || []) {
-          if (i.dealId === dealId) store.delete(i.id);
-        }
+        return new Promise<void>((resolve, reject) => {
+          const idx = store.index('byDeal');
+          const req = idx.openCursor(IDBKeyRange.only(dealId));
+          req.onsuccess = () => {
+            const cur = req.result;
+            if (!cur) { resolve(); return; }
+            cur.delete();
+            cur.continue();
+          };
+          req.onerror = () => reject(req.error);
+        });
       });
       notify();
     } catch (err) {

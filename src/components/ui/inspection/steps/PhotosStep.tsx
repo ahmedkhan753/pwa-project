@@ -272,15 +272,16 @@ export function PhotosStep() {
     // Inspectors who hit the broken upload path before this fix may have
     // stale video_* items stuck in IndexedDB. Without this, those would
     // still count against the submit gate. Safe to run unconditionally —
-    // markUploaded just deletes the row.
+    // markUploaded just deletes the row. Meta-only walk so no base64
+    // ever hits JS memory during the cleanup pass.
     useEffect(() => {
         if (!dealId) return;
         (async () => {
             try {
-                const items = await photoQueue.getByDeal(dealId);
-                for (const it of items) {
-                    if (it.slotId.startsWith('video_') || it.base64.startsWith('data:video')) {
-                        await photoQueue.markUploaded(it.id);
+                const metas = await photoQueue.getMetaByDeal(dealId);
+                for (const m of metas) {
+                    if (m.slotId.startsWith('video_') || m.isVideoData) {
+                        await photoQueue.markUploaded(m.id);
                     }
                 }
             } catch { /* ignore — IndexedDB unavailable */ }
@@ -297,7 +298,10 @@ export function PhotosStep() {
             // Debounce: collapse rapid-fire notifications into one check
             if (timer) clearTimeout(timer);
             timer = setTimeout(async () => {
-                const items = await photoQueue.getByDeal(dealId);
+                // Meta-only — never loads base64 into memory. With 150 photos
+                // the previous getByDeal() rehydrated ~18 MB on every poll,
+                // crashing iOS WebKit at the stress-test threshold.
+                const items = await photoQueue.getMetaByDeal(dealId);
                 let pending = 0;
                 const dead: string[] = [];
                 for (const i of items) {
@@ -333,6 +337,20 @@ export function PhotosStep() {
         const unsub = photoQueue.subscribe(refresh);
         return () => { unsub(); if (timer) clearTimeout(timer); };
     }, [dealId, token, apiUrl]);
+
+    // ── Free in-memory base64 for already-uploaded slots ────────────
+    // Stress-test critical: with 150 captured photos at ~120 KB preview
+    // base64 each, the Zustand store would hold ~18 MB of preview data
+    // forever — even after the backend confirmed the upload. iOS WebKit
+    // OOMed around the 80-90 photo mark. Once a slot is in uploadedSlots
+    // (backend acknowledged), PhotoUploadSlot renders the lightweight
+    // "ZAPISANO" badge instead of a thumbnail, so the base64 is no longer
+    // needed for the UI. Free it from React state proactively.
+    useEffect(() => {
+        if (uploadedSlots.size === 0) return;
+        const ids = Array.from(uploadedSlots);
+        releaseUploadedPhotos(ids);
+    }, [uploadedSlots, releaseUploadedPhotos]);
 
     // ── Enqueue to IndexedDB instead of fire-and-forget ──────────────
     // preview = small base64 (≤150 KB) safe for Zustand/localStorage.

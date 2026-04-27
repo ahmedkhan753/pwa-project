@@ -15,7 +15,7 @@
  *   - Token aware: started with the auth token, stops cleanly on logout.
  */
 
-import { photoQueue, type QueueItem } from './photoUploadQueue';
+import { photoQueue, type QueueItem, type QueueItemMeta } from './photoUploadQueue';
 
 let running = false;
 let token: string | null = null;
@@ -68,8 +68,10 @@ function scheduleTick(delay: number) {
 async function tick(): Promise<void> {
   if (!running) return;
   try {
-    const items = await photoQueue.getAllPending();
-    if (items.length === 0) {
+    // Stress-test critical: walk metadata only — never load 150 × ~120 KB
+    // base64 blobs into memory just to decide which items are eligible.
+    const metas = await photoQueue.getAllPendingMeta();
+    if (metas.length === 0) {
       scheduleTick(3_000);
       return;
     }
@@ -79,7 +81,7 @@ async function tick(): Promise<void> {
     // forever (until the inspector re-takes the photo, which re-enqueues
     // with attempts reset to 0).
     const now = Date.now();
-    const ready = items.filter((it) => {
+    const ready = metas.filter((it) => {
       if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS) return false;
       if (it.status === 'uploading') {
         // If a previous run died mid-upload, lastTriedAt is stale; allow
@@ -97,16 +99,21 @@ async function tick(): Promise<void> {
       return;
     }
 
-    // Upload up to MAX_PARALLEL_UPLOADS at a time. Bounded promise pool: each
-    // worker pulls the next ready item off a shared queue, so all in-flight
-    // slots stay busy until the queue is drained. Order of completion doesn't
-    // matter — backend dedupes by (deal_id, slot_id).
-    const queue = [...ready];
+    // Upload up to MAX_PARALLEL_UPLOADS at a time. Bounded promise pool:
+    // each worker pulls the next ready meta off a shared queue, lazy-loads
+    // that ONE item's full record (with base64) right before sending, then
+    // discards it. Peak memory therefore stays at concurrency × 1 item
+    // (~3 × 120 KB ≈ 360 KB) regardless of total queue depth — vs the
+    // old all-at-once load which scaled with queue size and OOMed iOS
+    // around 80-90 photos.
+    const queue: QueueItemMeta[] = [...ready];
     const workers = Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, queue.length) }, async () => {
       while (running) {
-        const next = queue.shift();
-        if (!next) return;
-        await uploadOne(next);
+        const meta = queue.shift();
+        if (!meta) return;
+        const full = await photoQueue.getById(meta.id);
+        if (!full) continue;  // already deleted (e.g. cleared by submit)
+        await uploadOne(full);
       }
     });
     await Promise.all(workers);

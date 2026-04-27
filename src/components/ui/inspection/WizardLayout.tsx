@@ -73,11 +73,14 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
                 if (!cancelled) setPhotoQueueState({ active: 0, dead: 0 });
                 return;
             }
-            const items = await photoQueue.getByDeal(String(dealId));
+            // Meta-only walk — never loads base64 into memory. Critical for
+            // stress-test scenarios with 80-150 photos where the previous
+            // getByDeal() call was rehydrating ~18 MB into memory every 2 s.
+            const metas = await photoQueue.getMetaByDeal(String(dealId));
             if (cancelled) return;
             let active = 0;
             let dead = 0;
-            for (const it of items) {
+            for (const it of metas) {
                 if (it.status === 'uploaded') continue;
                 if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && it.status === 'failed') {
                     dead++;
@@ -196,7 +199,8 @@ async function compressImage(base64: string): Promise<string> {
         // Belt-and-braces gate (button is also disabled in render): re-read
         // the queue at click-time so a race between subscriber update and
         // click handler can't slip a submit through with photos in flight.
-        const queueAtClick = await photoQueue.getByDeal(String(dealId));
+        // Meta-only — base64 is never needed for the gate decision.
+        const queueAtClick = await photoQueue.getMetaByDeal(String(dealId));
         let activeNow = 0;
         const deadSlots: string[] = [];
         for (const it of queueAtClick) {
