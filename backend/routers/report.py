@@ -680,11 +680,18 @@ async def get_report(deal_id: int, request: Request):
                 continue
             t   = _norm_damage_type(_safe_str(d.get("type") or d.get("damageType") or d.get("rodzaj") or ""))
             loc = _safe_str(d.get("location") or d.get("part") or d.get("element") or d.get("miejsce") or "")
-            # Build photo_url if this damage has photos stored in the JSON
+            # Build photo_urls for every photo this damage has, not just the
+            # first one. The /api/gallery/{deal_id}/damage/{source}/{dmg_idx}/{photo_idx}
+            # endpoint already supports any photo_idx; the bug was that this
+            # parser only ever generated index 0.
             photos = d.get("photos") or []
-            first_photo_url = None
-            if photos and isinstance(photos, list) and len(photos) > 0:
-                first_photo_url = f"/api/gallery/{deal_id}/damage/{source}/{i - 1}/0"
+            photo_urls: list = []
+            if isinstance(photos, list):
+                for pi, p in enumerate(photos):
+                    if p:  # skip empty/None entries
+                        photo_urls.append(
+                            f"/api/gallery/{deal_id}/damage/{source}/{i - 1}/{pi}"
+                        )
             out.append({
                 "index":       i,
                 "type":        t,
@@ -692,7 +699,10 @@ async def get_report(deal_id: int, request: Request):
                 "size":        _safe_str(d.get("size") or d.get("rozmiar") or ""),
                 "severity":    _safe_str(d.get("severity") or "cosmetic"),
                 "description": _safe_str(d.get("description") or d.get("notes") or d.get("opis") or ""),
-                "photo_url":   first_photo_url,
+                # Keep photo_url (single) for backward compat with any older
+                # frontend bundle that's still cached on a client device.
+                "photo_url":   photo_urls[0] if photo_urls else None,
+                "photo_urls":  photo_urls,
             })
         return out
 
