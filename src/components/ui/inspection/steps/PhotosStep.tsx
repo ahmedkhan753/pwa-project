@@ -220,7 +220,7 @@ function VideoRecordSlot({
     );
 }
 export function PhotosStep() {
-    const { data, setPhotoSlot, clearPhotoSlot, releaseUploadedPhotos, jobs, auth } = useInspectionStore();
+    const { data, setPhotoSlot, clearPhotoSlot, jobs, auth } = useInspectionStore();
     const photoSlots = data.photos;
     const [showExtra, setShowExtra] = useState(false);
 
@@ -338,20 +338,21 @@ export function PhotosStep() {
         return () => { unsub(); if (timer) clearTimeout(timer); };
     }, [dealId, token, apiUrl]);
 
-    // ── Free in-memory base64 for already-uploaded slots ────────────
-    // Stress-test critical: with 150 captured photos at ~120 KB preview
-    // base64 each, the Zustand store would hold ~18 MB of preview data
-    // forever — even after the backend confirmed the upload. iOS WebKit
-    // OOMed around the 80-90 photo mark. Once a slot is in uploadedSlots
-    // (backend acknowledged), PhotoUploadSlot renders the lightweight
-    // "ZAPISANO" badge instead of a thumbnail, so the base64 is no longer
-    // needed for the UI. Free it from React state proactively.
-    useEffect(() => {
-        if (uploadedSlots.size === 0) return;
-        const ids = Array.from(uploadedSlots);
-        releaseUploadedPhotos(ids);
-    }, [uploadedSlots, releaseUploadedPhotos]);
-
+    // NOTE: a previous version of this file eagerly called
+    // releaseUploadedPhotos(uploadedSlotIds) on every uploadedSlots change.
+    // That worked for memory but caused a UX regression: as soon as the
+    // backend confirmed the upload, PhotoUploadSlot's base64 prop went
+    // empty and the slot swapped from a thumbnail of the inspector's
+    // photo to a generic "ZAPISANO" badge. Inspectors reported photos
+    // "disappearing" after upload. The actual OOM driver at high photo
+    // counts was getByDeal/getAllPending loading the full base64 blobs
+    // on every poll — that's already solved by getMetaByDeal /
+    // getAllPendingMeta cursor walks, so we don't need to also wipe the
+    // Zustand previews. They're capped at ~150 KB each by the preview
+    // tier of compressImagePair, so 150 photos × 150 KB ≈ 22 MB in
+    // React state — comfortably inside the iOS budget once the meta
+    // queries stop allocating an extra 18 MB on every refresh.
+    //
     // ── Enqueue to IndexedDB instead of fire-and-forget ──────────────
     // preview = small base64 (≤150 KB) safe for Zustand/localStorage.
     // full    = HQ base64 (~1.5 MB cap) for the upload queue → backend.
