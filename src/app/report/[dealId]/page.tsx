@@ -1448,6 +1448,125 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           </>
         )}
 
+        {/* ── MECHANICAL CONDITION ── */}
+        {(() => {
+          const mech = data.mechanical || {};
+          // Same label set + value mapping as the Protokół Wycena PDF
+          // (services/protokol_wycena_pdf.py::MECHANICAL_ROWS) so the
+          // condition report and the appraisal stay in sync.
+          type Mode = 'fitness' | 'fluid' | 'presence' | 'good_bad' | 'yesno';
+          const ROWS: Array<[string, string, Mode]> = [
+            ['engineCondition',    'Stan silnika',                'good_bad'],
+            ['engineOilLevel',     'Poziom oleju',                'fluid'],
+            ['coolantLevel',       'Poziom płynu chłodniczego',   'fluid'],
+            ['engineNoises',       'Hałasy silnika',              'presence'],
+            ['engineSmoke',        'Dymienie silnika',            'presence'],
+            ['transmission',       'Skrzynia biegów',             'fitness'],
+            ['clutch',             'Sprzęgło',                    'fitness'],
+            ['driveShaft',         'Wał napędowy',                'fitness'],
+            ['frontSuspension',    'Zawieszenie przednie',        'fitness'],
+            ['rearSuspension',     'Zawieszenie tylne',           'fitness'],
+            ['shockAbsorbers',     'Amortyzatory',                'fitness'],
+            ['frontBrakes',        'Hamulce przednie',            'fitness'],
+            ['rearBrakes',         'Hamulce tylne',               'fitness'],
+            ['handbrake',          'Hamulec ręczny',              'fitness'],
+            ['steeringPlay',       'Luz kierownicy',              'presence'],
+            ['steeringPump',       'Wspomaganie kierownicy',      'fitness'],
+            ['exhaustSystem',      'Układ wydechowy',             'fitness'],
+            ['airConditioning',    'Klimatyzacja',                'fitness'],
+            ['heatingSystem',      'Ogrzewanie',                  'fitness'],
+            ['electricalSystem',   'Instalacja elektryczna',      'fitness'],
+            ['batteryCondition',   'Akumulator',                  'good_bad'],
+            ['lightsAll',          'Oświetlenie',                 'fitness'],
+            ['wipers',             'Wycieraczki',                 'fitness'],
+          ];
+          const labelFor = (raw: unknown, mode: Mode): { text: string; color: string } => {
+            const v = raw == null ? '' : String(raw).trim().toUpperCase();
+            const GREEN = '#16A34A';
+            const RED = '#DC2626';
+            const GRAY = '#6B7280';
+            if (!v) return { text: '-', color: GRAY };
+            // Boolean-ish values
+            if (v === 'TRUE' || v === 'TAK' || v === 'YES' || v === '1') {
+              if (mode === 'fitness')  return { text: 'Sprawny',     color: GREEN };
+              if (mode === 'fluid')    return { text: 'OK',          color: GREEN };
+              if (mode === 'presence') return { text: 'Brak',        color: GREEN };
+              if (mode === 'good_bad') return { text: 'Dobry',       color: GREEN };
+              return { text: 'Tak', color: GREEN };
+            }
+            if (v === 'FALSE' || v === 'NIE' || v === 'NO' || v === '0') {
+              if (mode === 'fitness')  return { text: 'Niesprawny',  color: RED };
+              if (mode === 'fluid')    return { text: 'Niski',       color: RED };
+              if (mode === 'presence') return { text: 'Występują',   color: RED };
+              if (mode === 'good_bad') return { text: 'Zły',         color: RED };
+              return { text: 'Nie', color: RED };
+            }
+            // Free-text values fall through unchanged (e.g. "Dobry", "Zły")
+            const lower = v.toLowerCase();
+            const goodWords = ['dobry', 'sprawny', 'ok', 'brak'];
+            const badWords  = ['zły', 'niesprawny', 'niski', 'występują', 'wystepuja'];
+            const color = goodWords.some(w => lower.includes(w)) ? GREEN
+                        : badWords.some(w => lower.includes(w)) ? RED
+                        : GRAY;
+            // Title-case for readability
+            const text = v.length > 1 ? v[0] + v.slice(1).toLowerCase() : v;
+            return { text, color };
+          };
+          const visibleRows = ROWS
+            .map(([key, label, mode]) => {
+              const raw = (mech as Record<string, unknown>)[key];
+              if (raw == null || String(raw).trim() === '') return null;
+              const { text, color } = labelFor(raw, mode);
+              return { key, label, text, color };
+            })
+            .filter(Boolean) as Array<{ key: string; label: string; text: string; color: string }>;
+          const warningLights = String(
+            (mech as Record<string, unknown>).warning_lights ??
+            (mech as Record<string, unknown>).warningLights ?? ''
+          ).trim();
+          const testDriveComment = String((mech as Record<string, unknown>).testDriveComment ?? '').trim();
+          if (visibleRows.length === 0 && !warningLights && !testDriveComment) {
+            return null;
+          }
+          return (
+            <>
+              <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+              <CollapsibleSection id="stan-mechaniczny" icon="fas fa-cogs" num="09 / Stan mechaniczny" title="Stan mechaniczny">
+                <div style={{ background:'#fff',borderRadius:8,border:'1px solid #E8E8ED',overflow:'hidden' }}>
+                  <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:'#F8F8FA',borderBottom:'1px solid #E8E8ED' }}>
+                        <th style={{ textAlign:'left',padding:'10px 14px',fontSize:12,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.04em' }}>Element</th>
+                        <th style={{ textAlign:'left',padding:'10px 14px',fontSize:12,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.04em' }}>Stan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleRows.map((r, i) => (
+                        <tr key={r.key} style={{ borderBottom: i < visibleRows.length - 1 ? '1px solid #F0F0F2' : undefined }}>
+                          <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>{r.label}</td>
+                          <td style={{ padding:'10px 14px',fontWeight:700,color:r.color }}>{r.text}</td>
+                        </tr>
+                      ))}
+                      {testDriveComment && (
+                        <tr style={{ borderTop:'1px solid #E8E8ED' }}>
+                          <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>Uwagi z jazdy próbnej</td>
+                          <td style={{ padding:'10px 14px',color:'#374151' }}>{testDriveComment}</td>
+                        </tr>
+                      )}
+                      {warningLights && (
+                        <tr style={{ borderTop:'1px solid #E8E8ED' }}>
+                          <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>Kontrolki ostrzegawcze</td>
+                          <td style={{ padding:'10px 14px',color:'#DC2626',fontWeight:600 }}>{warningLights}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsibleSection>
+            </>
+          );
+        })()}
+
         </div>{/* end sections-stack */}
 
         {/* Attached PDF Reports — fetched from our server */}
