@@ -146,7 +146,14 @@ function Lightbox({ photos, startIndex, onClose }: {
   return (
     <div
       style={{ position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.92)',display:'flex',
-        flexDirection:'column',alignItems:'center',justifyContent:'center',opacity:1,touchAction: zoomed ? 'none' : 'auto' }}
+        flexDirection:'column',alignItems:'center',justifyContent:'center',opacity:1,
+        // touch-action: none always — without this iOS Safari intercepts the
+        // multi-finger pinch as page-zoom (now enabled by /report/layout.tsx
+        // viewport override) before react-zoom-pan-pinch can detect it.
+        // Single-finger swipe-nav still works because onTouchStart/End below
+        // read raw touches; touch-action:none only suppresses default browser
+        // gestures, it doesn't block JS from receiving the touch events.
+        touchAction: 'none' }}
       onClick={onClose}
     >
       <button onClick={e => { e.stopPropagation(); onClose(); }}
@@ -185,7 +192,7 @@ function Lightbox({ photos, startIndex, onClose }: {
           if (dx < -50) setIdx(i => Math.min(i + 1, photos.length - 1));
           touchX.current = null;
         }}
-        style={{ width:'90vw',height:'75vh',display:'flex',alignItems:'center',justifyContent:'center' }}
+        style={{ width:'90vw',height:'75vh',display:'flex',alignItems:'center',justifyContent:'center',touchAction:'none' }}
       >
         <TransformWrapper
           key={idx}
