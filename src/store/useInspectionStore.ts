@@ -1305,24 +1305,33 @@ export const useInspectionStore = create<InspectionState>()(
       // writes to fail silently. The slot structure (ids, labels, required flags) is
       // preserved so the UI shows the correct empty slots on reload; the user just
       // needs to retake photos if the page reloads mid-inspection.
-      partialize: (state) => ({
-        ...state,
-        data: {
-          ...state.data,
-          photos: state.data.photos.map((p) => ({ ...p, base64: '' })),
-        },
-        // Also strip photo base64 from any saved drafts — a draft switch
-        // while photos are filled would otherwise also overflow localStorage.
-        drafts: Object.fromEntries(
-          Object.entries(state.drafts).map(([k, v]) => [
-            k,
-            {
-              ...(v as StepData),
-              photos: (v as StepData).photos.map((p) => ({ ...p, base64: '' })),
-            },
-          ])
-        ),
-      }),
+      partialize: (state) => {
+        // Strip every base64 blob out of state before localStorage write —
+        // photos.base64, exteriorDamage[].photos[], interiorDamage[].photos[].
+        // Without this the iOS Safari 5 MB localStorage cap silently fails
+        // (caught at the setItem catch below) on inspections with many
+        // damage photos: 8 damages × 4 photos × ~150 KB = 4.8 MB just for
+        // the damage section. The QuotaExceededError used to drop ALL state
+        // on the floor — Issue 3 in QA report 2026-04-29.
+        // Photos themselves still travel via the IndexedDB-queued upload
+        // path (slot photos) or inline in the submit body (damage photos);
+        // localStorage's only job is metadata + structure persistence.
+        const stripDamage = (arr: DamageEntry[]) =>
+          arr.map((d) => ({ ...d, photos: d.photos.map(() => '') }));
+        const stripData = (d: StepData): StepData => ({
+          ...d,
+          photos: d.photos.map((p) => ({ ...p, base64: '' })),
+          exteriorDamage: stripDamage(d.exteriorDamage),
+          interiorDamage: stripDamage(d.interiorDamage),
+        });
+        return {
+          ...state,
+          data: stripData(state.data),
+          drafts: Object.fromEntries(
+            Object.entries(state.drafts).map(([k, v]) => [k, stripData(v as StepData)])
+          ),
+        };
+      },
       storage: createJSONStorage(() => ({
         getItem: (name: string) => {
           try { return localStorage.getItem(name); } catch { return null; }
