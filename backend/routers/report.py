@@ -1154,8 +1154,35 @@ async def download_document(deal_id: int, doc_type: str):
 
 
 @router.get("/report/{deal_id}/documents/status")
-async def document_status(deal_id: int):
-    """Check which documents are available for a deal."""
+async def document_status(deal_id: int, request: Request):
+    """
+    Check which CEPIK / damage-history PDFs are available for a deal.
+    If a file is missing on disk, attempt one reactive fetch from Bitrix
+    before reporting status — this auto-heals deals where the Bitrix
+    outgoing webhook didn't fire (Issue 6 from QA report 2026-04-29).
+    Reactive fetch is best-effort: errors are swallowed and we just
+    report the on-disk truth.
+    """
+    has_cepik = _doc_path(deal_id, "cepik").exists()
+    has_damage = _doc_path(deal_id, "damage_history").exists()
+
+    # If both are present, no work needed
+    if has_cepik and has_damage:
+        return {"has_cepik": True, "has_damage_history": True}
+
+    # Otherwise try a reactive sync from Bitrix
+    try:
+        gateway = request.app.state.gateway
+        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+        if bitrix_ready and gateway is not None:
+            deal = await gateway.call("crm.deal.get", {"ID": deal_id})
+            if isinstance(deal, dict):
+                # Lazy import to avoid circular dep at module load
+                from routers.webhook import sync_deal_documents       # type: ignore
+                await sync_deal_documents(deal_id, deal)
+    except Exception as e:
+        logger.warning(f"[documents/status] reactive sync failed for deal {deal_id}: {e}")
+
     return {
         "has_cepik": _doc_path(deal_id, "cepik").exists(),
         "has_damage_history": _doc_path(deal_id, "damage_history").exists(),
