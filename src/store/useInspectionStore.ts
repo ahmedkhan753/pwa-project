@@ -1299,30 +1299,28 @@ export const useInspectionStore = create<InspectionState>()(
     }),
     {
       name: 'inspection-storage',
-      // Exclude photo/video base64 data from localStorage.
-      // A 6-second video is 10-50 MB as base64 — combined with 28+ photos (~4 MB)
-      // this blows past the 5 MB localStorage limit, causing all subsequent state
-      // writes to fail silently. The slot structure (ids, labels, required flags) is
-      // preserved so the UI shows the correct empty slots on reload; the user just
-      // needs to retake photos if the page reloads mid-inspection.
+      // Strip slot-photo base64 from localStorage — slot photos live in the
+      // IndexedDB upload queue and are recovered from there, so localStorage
+      // only needs the slot structure (id, label, required, isVideo).
+      //
+      // DO NOT strip damage photos. Earlier ec88736 stripped them by replacing
+      // each base64 with '' while keeping array length; iOS Safari unloads
+      // tabs aggressively during photo-heavy inspections, and on tab reload
+      // Zustand rehydrated empty-string photos into in-memory state. The user
+      // then added more photos on top, the array ballooned with mostly-empty
+      // slots, and the submit shipped a polluted exteriorDamage/interiorDamage
+      // payload — the gallery rendered N broken tiles per damage (deal 1678
+      // saw 98). See QA report 2026-04-29 follow-up.
+      //
+      // Damage photos travel inline in the submit body and are needed in
+      // memory at submit time, so they MUST round-trip through localStorage
+      // intact. The setItem catch below silently swallows QuotaExceededError
+      // for the rare big-inspection case (8+ damages × 4+ photos near the
+      // 5 MB iOS cap) — in-memory state stays correct and submit still works.
       partialize: (state) => {
-        // Strip every base64 blob out of state before localStorage write —
-        // photos.base64, exteriorDamage[].photos[], interiorDamage[].photos[].
-        // Without this the iOS Safari 5 MB localStorage cap silently fails
-        // (caught at the setItem catch below) on inspections with many
-        // damage photos: 8 damages × 4 photos × ~150 KB = 4.8 MB just for
-        // the damage section. The QuotaExceededError used to drop ALL state
-        // on the floor — Issue 3 in QA report 2026-04-29.
-        // Photos themselves still travel via the IndexedDB-queued upload
-        // path (slot photos) or inline in the submit body (damage photos);
-        // localStorage's only job is metadata + structure persistence.
-        const stripDamage = (arr: DamageEntry[]) =>
-          arr.map((d) => ({ ...d, photos: d.photos.map(() => '') }));
         const stripData = (d: StepData): StepData => ({
           ...d,
           photos: d.photos.map((p) => ({ ...p, base64: '' })),
-          exteriorDamage: stripDamage(d.exteriorDamage),
-          interiorDamage: stripDamage(d.interiorDamage),
         });
         return {
           ...state,
@@ -1349,7 +1347,7 @@ export const useInspectionStore = create<InspectionState>()(
           try { localStorage.removeItem(name); } catch { /* ignore */ }
         },
       })),
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {
           const jobs = persistedState.jobs || {};
@@ -1376,6 +1374,36 @@ export const useInspectionStore = create<InspectionState>()(
               ...(persistedState.data || {}),
               photos: [...defaultPhotoSlots],
             }
+          };
+        }
+        if (version < 4) {
+          // Cleanup: prior `partialize` stripped damage photos to '' while
+          // keeping array length; rehydration → in-memory pollution →
+          // ballooning empty arrays → broken gallery tiles (deal 1678).
+          // Drop empty-string entries so the photos array reflects only
+          // photos the user actually has in this session.
+          const scrubDamages = (arr: any): any =>
+            Array.isArray(arr)
+              ? arr.map((d: any) => ({
+                  ...d,
+                  photos: Array.isArray(d?.photos)
+                    ? d.photos.filter((p: any) => typeof p === 'string' && p.length > 0)
+                    : [],
+                }))
+              : [];
+          const scrubData = (d: any) => d ? ({
+            ...d,
+            exteriorDamage: scrubDamages(d.exteriorDamage),
+            interiorDamage: scrubDamages(d.interiorDamage),
+          }) : d;
+          return {
+            ...persistedState,
+            data: scrubData(persistedState.data),
+            drafts: persistedState.drafts
+              ? Object.fromEntries(
+                  Object.entries(persistedState.drafts).map(([k, v]) => [k, scrubData(v)])
+                )
+              : {},
           };
         }
         return persistedState;

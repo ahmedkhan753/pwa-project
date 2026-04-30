@@ -1457,6 +1457,9 @@ async def get_gallery(deal_id: int, request: Request):
     # ── Damage photos from InspectionRecord JSON ─────────────────────────
     # These are photos taken during ExteriorDamageStep / InteriorDamageStep
     # and stored as base64 inside the damage JSON (not in InspectionPhoto table).
+    # Defensively skip empty/None photo entries — older inspections submitted
+    # while the broken `partialize` strip was active have empty-string slots
+    # mixed into the photos array (deal 1678 had 98 such entries).
     for _source, _damage_json_str in [("ext", _ext_damage_json), ("int", _int_damage_json)]:
         if not _damage_json_str:
             continue
@@ -1473,7 +1476,9 @@ async def get_gallery(deal_id: int, request: Request):
                 _label = _part or "Uszkodzenie"
                 if _desc:
                     _label = f"{_label}: {_desc}"
-                for _photo_idx in range(len(_photos)):
+                for _photo_idx, _photo_b64 in enumerate(_photos):
+                    if not _photo_b64 or not isinstance(_photo_b64, str):
+                        continue
                     _slot_id = f"dmg_{_source}_{_dmg_idx}_photo_{_photo_idx}"
                     _url = f"/api/gallery/{deal_id}/damage/{_source}/{_dmg_idx}/{_photo_idx}"
                     media_items.append({
