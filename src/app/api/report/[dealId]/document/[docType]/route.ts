@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const BACKEND = process.env.BACKEND_URL || 'http://backend:8000';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { dealId: string; docType: string } },
 ) {
   const { dealId, docType } = params;
@@ -22,8 +22,11 @@ export async function GET(
     return NextResponse.json({ error: 'Unknown document type' }, { status: 404 });
   }
 
+  // Forward `?download=1` so the backend switches to attachment disposition
+  const download = req.nextUrl.searchParams.get('download') === '1' ? '?download=1' : '';
+
   try {
-    const res = await fetch(`${BACKEND}/report/${dealId}/document/${docType}`, {
+    const res = await fetch(`${BACKEND}/report/${dealId}/document/${docType}${download}`, {
       cache: 'no-store',
     });
 

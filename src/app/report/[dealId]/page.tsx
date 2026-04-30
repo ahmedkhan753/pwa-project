@@ -676,12 +676,20 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
   const [error, setError]       = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ photos: Array<{ label:string; url:string }>; idx: number } | null>(null);
   const [backTop, setBackTop]   = useState(false);
+  const [docs, setDocs] = useState<{ has_cepik: boolean; has_damage_history: boolean }>({ has_cepik: false, has_damage_history: false });
 
   useEffect(() => {
     const onScroll = () => setBackTop(window.scrollY > 400);
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    fetch(`/api/report/${dealId}/documents/status`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setDocs({ has_cepik: !!d.has_cepik, has_damage_history: !!d.has_damage_history }); })
+      .catch(() => { /* non-fatal — section just stays hidden */ });
+  }, [dealId]);
 
   useEffect(() => {
     // Use the Next.js API proxy route (relative URL — same origin, no CORS/expiry issues).
@@ -1387,15 +1395,26 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                           ? d.photo_urls
                           : (d.photo_url ? [d.photo_url] : []);
                         if (urls.length === 0) return null;
+                        const lightboxPhotos = urls.map((u, ui) => ({
+                          label: `Uszkodzenie ${d.index} — zdjęcie ${ui + 1}`,
+                          url: u,
+                        }));
                         return (
                           <div style={{ marginTop:8,display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',gap:6,maxWidth:560 }}>
                             {urls.map((u, ui) => (
-                              <div key={ui} style={{ borderRadius:8,overflow:'hidden',border:'1px solid #E8E8ED' }}>
+                              <button
+                                key={ui}
+                                type="button"
+                                onClick={() => openLightbox(lightboxPhotos, ui)}
+                                style={{ padding:0,border:'1px solid #E8E8ED',borderRadius:8,overflow:'hidden',
+                                  background:'transparent',cursor:'pointer',display:'block' }}
+                                aria-label={`Otwórz zdjęcie uszkodzenia ${d.index} — ${ui + 1}`}
+                              >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt={`Uszkodzenie ${d.index} — zdjęcie ${ui + 1}`}
                                   style={{ width:'100%',height:120,objectFit:'cover',display:'block',background:'#F5F5F7' }}
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                              </div>
+                              </button>
                             ))}
                           </div>
                         );
@@ -1434,15 +1453,26 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                           ? d.photo_urls
                           : (d.photo_url ? [d.photo_url] : []);
                         if (urls.length === 0) return null;
+                        const lightboxPhotos = urls.map((u, ui) => ({
+                          label: `Uszkodzenie wnętrza ${d.index} — zdjęcie ${ui + 1}`,
+                          url: u,
+                        }));
                         return (
                           <div style={{ marginTop:8,display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))',gap:6,maxWidth:560 }}>
                             {urls.map((u, ui) => (
-                              <div key={ui} style={{ borderRadius:8,overflow:'hidden',border:'1px solid #E8E8ED' }}>
+                              <button
+                                key={ui}
+                                type="button"
+                                onClick={() => openLightbox(lightboxPhotos, ui)}
+                                style={{ padding:0,border:'1px solid #E8E8ED',borderRadius:8,overflow:'hidden',
+                                  background:'transparent',cursor:'pointer',display:'block' }}
+                                aria-label={`Otwórz zdjęcie uszkodzenia wnętrza ${d.index} — ${ui + 1}`}
+                              >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt={`Uszkodzenie ${d.index} — zdjęcie ${ui + 1}`}
                                   style={{ width:'100%',height:120,objectFit:'cover',display:'block',background:'#F5F5F7' }}
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                              </div>
+                              </button>
                             ))}
                           </div>
                         );
@@ -1622,6 +1652,53 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               )}
             </div>
           </div>
+        )}
+
+        {/* ── DODATKOWE DOKUMENTY (CEPIK + Historia Szkodowości) ── */}
+        {(docs.has_cepik || docs.has_damage_history) && (
+          <>
+            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+            <CollapsibleSection id="dodatkowe-dokumenty" icon="fas fa-file-pdf" num="" title="Dodatkowe dokumenty">
+              <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:14 }}>
+                {[
+                  { type: 'cepik',          label: 'Raport Historia Pojazdu (CEPIK)', filename: `CEPIK_Raport_${dealId}.pdf`,        present: docs.has_cepik },
+                  { type: 'damage_history', label: 'Historia Szkodowości',           filename: `Historia_Szkodowosci_${dealId}.pdf`, present: docs.has_damage_history },
+                ].filter(d => d.present).map(d => {
+                  const url = `/api/report/${dealId}/document/${d.type}`;
+                  return (
+                    <div key={d.type}
+                      style={{ display:'flex',gap:14,padding:'16px 18px',borderRadius:10,
+                        background:'#fff',border:'1px solid #E8E8ED',boxShadow:'0 1px 3px rgba(0,0,0,0.04)',alignItems:'center' }}>
+                      <div style={{ width:44,height:54,borderRadius:6,flexShrink:0,
+                        background:'#FEE2E2',display:'flex',alignItems:'center',justifyContent:'center',
+                        color:'#DC2626',fontSize:14,fontWeight:700,letterSpacing:'0.5px' }}>
+                        PDF
+                      </div>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <div style={{ fontSize:13,fontWeight:600,color:'#1A1A2E',marginBottom:6,lineHeight:1.3 }}>
+                          {d.label}
+                        </div>
+                        <div className="no-print" style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+                          <a href={url} target="_blank" rel="noopener noreferrer"
+                            style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'6px 12px',fontSize:12,fontWeight:500,
+                              color:'#1A1A2E',background:'#F5F5F7',border:'1px solid #E0E0E0',borderRadius:6,
+                              textDecoration:'none',fontFamily:'inherit' }}>
+                            <i className="fas fa-eye"/> Otwórz
+                          </a>
+                          <a href={`${url}?download=1`} download={d.filename}
+                            style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'6px 12px',fontSize:12,fontWeight:500,
+                              color:'#fff',background:'#B71C1C',border:'1px solid #B71C1C',borderRadius:6,
+                              textDecoration:'none',fontFamily:'inherit' }}>
+                            <i className="fas fa-download"/> Pobierz
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CollapsibleSection>
+          </>
         )}
 
         {/* PDF bottom */}

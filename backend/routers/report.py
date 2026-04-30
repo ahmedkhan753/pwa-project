@@ -1125,10 +1125,11 @@ async def upload_document(deal_id: int, doc_type: str, file: UploadFile = File(.
 
 
 @router.get("/report/{deal_id}/document/{doc_type}")
-async def download_document(deal_id: int, doc_type: str):
+async def download_document(deal_id: int, doc_type: str, download: int = 0):
     """
     Download a stored PDF document for a deal.
     doc_type: 'cepik' or 'damage_history'
+    download=1 → attachment disposition (forces save dialog), default inline
     """
     if doc_type not in ALLOWED_DOC_TYPES:
         raise HTTPException(404, "Unknown document type")
@@ -1142,12 +1143,13 @@ async def download_document(deal_id: int, doc_type: str):
         "damage_history": f"Historia_Szkodowosci_{deal_id}.pdf",
     }
     filename = filename_map.get(doc_type, f"document_{deal_id}.pdf")
+    disposition = "attachment" if download == 1 else "inline"
 
     return StreamingResponse(
         iter([path.read_bytes()]),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Disposition": f'{disposition}; filename="{filename}"',
             "Cache-Control": "public, max-age=3600",
         },
     )
