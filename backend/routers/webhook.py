@@ -31,6 +31,11 @@ INSPECTOR_PHONE_FIELD = "UF_CRM_1773970466449"
 CEPIK_FIELD = "UF_CRM_1775497237180"
 DAMAGE_HISTORY_FIELD = "UF_CRM_1775497290806"
 
+# Eurotax kosztorys: input PDF field + output public-URL field.
+EUROTAX_PDF_FIELD = os.getenv("BITRIX_EUROTAX_FIELD", "UF_CRM_1775497355115")
+KOSZTORYS_URL_FIELD = "UF_CRM_1777661533952"
+PUBLIC_APP_BASE = os.getenv("PUBLIC_APP_BASE", "https://app.zaufajrzeczoznawcy.pl")
+
 # Local storage for downloaded docs
 DOCS_DIR = Path("/app/data/report_docs")
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -197,6 +202,39 @@ async def sync_deal_documents(deal_id: int, deal: dict):
             logger.error(f"[DocSync] ❌ All download methods failed for {doc_type} in deal {deal_id}")
 
 
+# ─── Kosztorys URL auto-write ─────────────────────────────────────────────────
+
+async def sync_deal_kosztorys_url(gateway, deal_id: int, deal: dict) -> None:
+    """
+    When a deal has a Eurotax PDF in UF_CRM_1775497355115, ensure the
+    public kosztorys URL field UF_CRM_1777661533952 holds:
+        https://app.zaufajrzeczoznawcy.pl/kosztorys/{deal_id}
+
+    Idempotent — only writes when the existing value differs from
+    expected, so re-firing webhooks doesn't cause crm.deal.update storms.
+    Failures are logged but never propagate (called via BackgroundTasks
+    alongside other webhook handlers — must not derail siblings).
+    """
+    try:
+        pdf_field = deal.get(EUROTAX_PDF_FIELD)
+        if not pdf_field:
+            return  # no Eurotax PDF attached → nothing to do
+
+        expected_url = f"{PUBLIC_APP_BASE.rstrip('/')}/kosztorys/{deal_id}"
+        current = deal.get(KOSZTORYS_URL_FIELD)
+        current_str = str(current).strip() if current else ""
+        if current_str == expected_url:
+            return  # already correct, no-op
+
+        await gateway.call("crm.deal.update", {
+            "ID": deal_id,
+            "fields": {KOSZTORYS_URL_FIELD: expected_url},
+        })
+        logger.info(f"[Kosztorys URL] Wrote {expected_url} to deal {deal_id}")
+    except Exception as e:
+        logger.warning(f"[Kosztorys URL] Failed for deal {deal_id}: {e}")
+
+
 # ─── OAuth install / callback endpoints ───────────────────────────────────────
 
 @router.post("/bitrix/oauth/install")
@@ -359,6 +397,11 @@ async def bitrix_webhook(request: Request, background_tasks: BackgroundTasks, db
 
         # ─── Background: Sync PDF documents ───────────────────────────
         background_tasks.add_task(sync_deal_documents, int(deal_id), deal)
+
+        # ─── Background: Auto-write public kosztorys URL when Eurotax
+        # PDF is attached to UF_CRM_1775497355115. Idempotent. Runs
+        # alongside doc sync — independent failure domain.
+        background_tasks.add_task(sync_deal_kosztorys_url, gateway, int(deal_id), deal)
 
         # ─── Email notification logic ─────────────────────────────────
         # Get inspector list ID from deal
