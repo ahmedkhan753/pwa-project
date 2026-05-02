@@ -287,6 +287,7 @@ from routers import auth as auth_router
 from routers import admin as admin_router
 from routers import webhook as webhook_router
 from routers import report as report_router
+from routers import kosztorys as kosztorys_router
 
 app.include_router(health.router)
 app.include_router(deals.router)
@@ -298,6 +299,7 @@ app.include_router(admin_router.router)
 app.include_router(webhook_router.router)
 # Public report endpoint — no auth required
 app.include_router(report_router.router)
+app.include_router(kosztorys_router.router)
 
 
 # ─── QR Debug Endpoint ────────────────────────────────────────
