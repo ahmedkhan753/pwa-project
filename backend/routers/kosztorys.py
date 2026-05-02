@@ -24,7 +24,7 @@ from services.eurotax_parser import parse_eurotax_pdf
 from services.bitrix_disk import get_deal_file_id, download_file_by_id
 from services.bitrix_oauth import get_oauth
 
-router = APIRouter(prefix="/api/kosztorys", tags=["Kosztorys"])
+router = APIRouter(prefix="/kosztorys", tags=["Kosztorys"])
 logger = logging.getLogger("routers.kosztorys")
 
 EUROTAX_PDF_FIELD = os.getenv("BITRIX_EUROTAX_FIELD", "UF_CRM_1775497355115")
