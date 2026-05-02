@@ -795,7 +795,7 @@ const SHARED_CSS = `
     /* Preserve colour for badges and total-rows */
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   }
-  .page-container { overflow:hidden; width:100%; }
+  .page-container { overflow:hidden; width:100%; color:#1D1D1F; }
   .nav-link { color:#6B7280; text-decoration:none; font-size:13px; font-weight:600;
     padding:8px 0; border-bottom:2px solid transparent; transition:all 0.2s; white-space:nowrap; cursor:pointer; }
   .nav-link:hover { color:#1D1D1F; border-bottom-color:#B71C1C; }
@@ -806,17 +806,17 @@ const SHARED_CSS = `
   table.data-table th { text-align:left; padding:10px 12px; background:#F9FAFB; color:#6B7280;
     font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
     border-bottom:2px solid #E5E7EB; }
-  table.data-table td { padding:10px 12px; border-bottom:1px solid #F3F4F6; vertical-align:top; }
+  table.data-table td { padding:10px 12px; border-bottom:1px solid #F3F4F6; vertical-align:top; color:#374151; }
   table.data-table tr:hover td { background:#FAFAFA; }
   table.data-table .total-row td { font-weight:700; border-top:2px solid #E5E7EB; background:#F9FAFB; }
-  .amt { text-align:right; font-variant-numeric:tabular-nums; }
+  .amt { text-align:right; font-variant-numeric:tabular-nums; color:#1D1D1F; }
   .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .table-scroll table { min-width:580px; }
   .veh-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px;
     padding:10px 0; border-bottom:1px solid #F3F4F6; }
-  .veh-label { color:#6B7280; font-weight:500; font-size:14px; flex-shrink:0; }
-  .veh-value { font-weight:600; font-size:14px; text-align:right; overflow-wrap:anywhere;
-    word-break:break-word; min-width:0; }
+  .veh-label { color:#4B5563; font-weight:600; font-size:14px; flex-shrink:0; }
+  .veh-value { font-weight:700; font-size:14px; text-align:right; overflow-wrap:anywhere;
+    word-break:break-word; min-width:0; color:#1D1D1F; }
   .hero-thumb { cursor:pointer; border-radius:8px; overflow:hidden; aspect-ratio:4/3;
     border:2px solid transparent; transition:all 0.2s; }
   .hero-thumb:hover { border-color:#B71C1C; }
