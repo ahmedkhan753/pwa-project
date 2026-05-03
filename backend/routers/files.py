@@ -271,6 +271,106 @@ async def upload_file_json(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/upload-binary", response_model=FileUploadResult)
+async def upload_file_binary(
+    request: Request,
+    deal_id: int = Form(..., description="Bitrix deal ID"),
+    field_key: str = Form(..., description="PWA field key (e.g. video_engine)"),
+    file: UploadFile = File(..., description="Raw binary file (no base64)"),
+):
+    """
+    POST /files/upload-binary
+    Multipart binary upload — for video and other large blobs that would
+    bloat ~33% as base64-over-JSON. Mirrors /upload-json's contract:
+      1. DB save is canonical (always attempted, source of truth).
+      2. Bitrix upload is best-effort (never blocks the 200 response).
+    """
+    is_video = field_key.startswith("video_")
+    kind = "VIDEO" if is_video else "binary"
+    print(f"[files/upload-binary] handler entered: deal_id={deal_id}, field_key={field_key}", flush=True)
+
+    try:
+        file_bytes = await file.read()
+        size_mb = len(file_bytes) / 1024 / 1024
+        filename = file.filename or f"{field_key}.bin"
+
+        if len(file_bytes) > MAX_FILE_SIZE:
+            logger.error(
+                f"[upload-binary] ❌ {kind} '{field_key}' deal={deal_id} — "
+                f"file too large: {size_mb:.1f}MB (limit {MAX_FILE_SIZE // 1024 // 1024}MB)"
+            )
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large: {size_mb:.1f}MB. Max: {MAX_FILE_SIZE // 1024 // 1024}MB.",
+            )
+
+        logger.info(f"[upload-binary] ▶ {kind} '{field_key}' deal={deal_id} size={len(file_bytes)}B ({size_mb:.2f}MB) filename={filename}")
+
+        # ── Step 1: Save to DB (ALWAYS — source of truth) ──
+        db_saved = False
+        db = None
+        try:
+            db = SessionLocal()
+            existing = db.query(InspectionPhoto).filter_by(
+                deal_id=int(deal_id), slot_id=field_key
+            ).first()
+            if existing:
+                existing.photo_bytes = file_bytes
+                logger.info(f"[upload-binary] DB updated (overwrite): {kind} '{field_key}' deal={deal_id}")
+            else:
+                db.add(InspectionPhoto(
+                    deal_id=int(deal_id),
+                    slot_id=field_key,
+                    photo_bytes=file_bytes,
+                ))
+                logger.info(f"[upload-binary] DB inserted: {kind} '{field_key}' deal={deal_id}")
+            db.commit()
+            db_saved = True
+            logger.info(f"[upload-binary] ✅ DB saved: {kind} '{field_key}' deal={deal_id}")
+        except Exception as db_err:
+            logger.error(f"[upload-binary] ❌ DB save FAILED for {kind} '{field_key}' deal={deal_id}: {db_err}")
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+        # ── Step 2: Best-effort Bitrix upload (never blocks Step 1) ──
+        gateway = request.app.state.gateway
+        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+        result: dict = {"file_id": filename, "url": None, "success": db_saved}
+        if bitrix_ready:
+            try:
+                result = await gateway.upload_file_to_deal(
+                    deal_id=int(deal_id),
+                    field_pwa_key=field_key,
+                    file_bytes=file_bytes,
+                    filename=filename,
+                )
+                logger.info(f"[upload-binary] Bitrix result for {kind} '{field_key}': {result}")
+            except Exception as bitrix_err:
+                logger.warning(f"[upload-binary] Bitrix upload failed for {kind} '{field_key}' (non-fatal): {bitrix_err}")
+        else:
+            logger.warning(f"[upload-binary] Bitrix not ready — skipping Bitrix for {kind} '{field_key}' (DB saved={db_saved})")
+
+        return FileUploadResult(
+            field_key=field_key,
+            file_id=result.get("file_id") or filename,
+            url=result.get("url"),
+            success=db_saved or bool(result.get("success")),
+        )
+
+    except ClientDisconnect:
+        logger.error(f"[upload-binary] ❌ Client disconnected mid-upload — body likely exceeded nginx client_max_body_size")
+        raise HTTPException(status_code=499, detail="Client disconnected")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ upload-binary error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/list/{deal_id}")
 async def list_uploaded_slots(deal_id: int):
     """
