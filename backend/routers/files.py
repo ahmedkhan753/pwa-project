@@ -18,6 +18,12 @@ from models.inspector import InspectionPhoto
 from database import SessionLocal
 
 router = APIRouter(prefix="/files", tags=["Files"])
+
+# Separate router mounted at /api/files so the public path
+# /api/files/upload-binary lands here through nginx /api/* proxy.
+# Existing /files/* endpoints (photos) are unchanged.
+binary_router = APIRouter(prefix="/api/files", tags=["Files"])
+
 logger = logging.getLogger("routers.files")
 
 # Allowed file types and max size
@@ -271,7 +277,7 @@ async def upload_file_json(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/upload-binary", response_model=FileUploadResult)
+@binary_router.post("/upload-binary", response_model=FileUploadResult)
 async def upload_file_binary(
     request: Request,
     deal_id: int = Form(..., description="Bitrix deal ID"),
