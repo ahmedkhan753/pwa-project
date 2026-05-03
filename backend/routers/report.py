@@ -546,7 +546,7 @@ async def get_report(deal_id: int, request: Request):
             if row.slot_id.startswith("video_"):
                 continue
             try:
-                uri = "data:image/jpeg;base64," + _b64.b64encode(row.photo_bytes).decode()
+                uri = f"/api/gallery/{deal_id}/media/{row.slot_id}"
                 if hero_photo_url is None and row.slot_id in BODY_SLOTS:
                     hero_photo_url = uri
                 label = PHOTO_LABELS.get(row.slot_id, row.slot_id.replace("_", " ").title())
