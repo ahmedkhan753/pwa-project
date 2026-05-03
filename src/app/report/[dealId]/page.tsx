@@ -474,7 +474,7 @@ function PhotoCard({ photo, index, total, onClick }: {
     >
       {photo.url && !err ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photo.url} alt={photo.label} onError={() => setErr(true)}
+        <img src={photo.url} alt={photo.label} loading="lazy" decoding="async" onError={() => setErr(true)}
           style={{ width:'100%',height:200,objectFit:'cover',display:'block',background:'#F5F5F7' }} />
       ) : (
         <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
@@ -1330,7 +1330,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                         <div style={{ position:'relative',width:'100%',aspectRatio:'4/3',overflow:'hidden',background:'#F5F5F7' }}>
                           {p.url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.url} alt={p.label}
+                            <img src={p.url} alt={p.label} loading="lazy" decoding="async"
                               style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block' }} />
                           ) : (
                             <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',
@@ -1412,6 +1412,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt={`Uszkodzenie ${d.index} — zdjęcie ${ui + 1}`}
+                                  loading="lazy" decoding="async"
                                   style={{ width:'100%',height:120,objectFit:'cover',display:'block',background:'#F5F5F7' }}
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               </button>
@@ -1719,9 +1720,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           style={{ maxWidth:240,height:'auto',display:'block',margin:'0 auto 20px',filter:'drop-shadow(0 2px 8px rgba(0,0,0,0.3))' }} />
         <div style={{ display:'flex',justifyContent:'center',gap:48,marginBottom:20,flexWrap:'wrap' }}>
           {[
-            { city:'Rybnik',    addr:'ul. Przykładowa 1\n44-200 Rybnik' },
-            { city:'Warszawa',  addr:'ul. Marszałkowska 1\n00-001 Warszawa' },
-            { city:'Wrocław',   addr:'ul. Świdnicka 1\n50-001 Wrocław' },
+            { city:'SIEDZIBA',           addr:'ul. Smolna 27a/11\n44-200 Rybnik' },
+            { city:'ODDZIAŁ WARSZAWA',   addr:'Al. Jerozolimskie 109\n02-011 Warszawa' },
+            { city:'ODDZIAŁ WROCŁAW',    addr:'ul. Leszczyńskiego 4/29\n50-078 Wrocław' },
           ].map(o => (
             <div key={o.city}>
               <div style={{ fontSize:13,fontWeight:600,color:'#fff',marginBottom:6,textTransform:'uppercase',letterSpacing:'1px' }}>{o.city}</div>

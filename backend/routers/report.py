@@ -969,7 +969,9 @@ async def get_report(deal_id: int, request: Request):
                         _safe_str(raw.get("UF_CRM_1766058194337")) or
                         _safe_str(_bi.get("inspectionPlace")))
     company_name     = _safe_str(raw.get("UF_CRM_1766057964319")) or _safe_str(_bi.get("companyName"))
-    client_name      = _safe_str(raw.get("UF_CRM_1766057941327")) or _safe_str(_bi.get("userOwner"))
+    client_name      = (_safe_str(raw.get("UF_CRM_1766057941327")) or
+                         _safe_str(raw.get("UF_CRM_1766057964319")) or
+                         _safe_str(_bi.get("userOwner")))
     order_title      = _safe_str(raw.get("TITLE")) or f"Inspekcja #{deal_id}"
 
     # ── Build & return ────────────────────────────────────────────────────

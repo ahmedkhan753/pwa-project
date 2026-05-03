@@ -87,30 +87,27 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
   const [report, setReport]       = useState<ReportData | null>(null);
   const [kosztorysErr, setKErr]   = useState<{ status: number; msg: string } | null>(null);
   const [reportErr, setRErr]      = useState<{ status: number; msg: string } | null>(null);
-  const [loading, setLoading]     = useState(true);
+  const [loadingK, setLoadingK]   = useState(true);
+  const [loadingR, setLoadingR]   = useState(true);
   const [lightbox, setLightbox]   = useState<{ photos: string[]; start: number } | null>(null);
   const [heroIdx, setHeroIdx]     = useState(0);
 
   useEffect(() => {
-    const kPromise = fetch(`/api/kosztorys/${dealId}`)
+    fetch(`/api/kosztorys/${dealId}`)
       .then(async r => {
         if (!r.ok) { setKErr({ status: r.status, msg: await r.text() }); return null; }
         return r.json() as Promise<KosztorysData>;
       })
-      .catch(e => { setKErr({ status: 0, msg: String(e) }); return null; });
+      .catch(e => { setKErr({ status: 0, msg: String(e) }); return null; })
+      .then(k => { setKosztorys(k); setLoadingK(false); });
 
-    const rPromise = fetch(`/api/report/${dealId}`)
+    fetch(`/api/report/${dealId}`)
       .then(async r => {
         if (!r.ok) { setRErr({ status: r.status, msg: await r.text() }); return null; }
         return r.json() as Promise<ReportData>;
       })
-      .catch(e => { setRErr({ status: 0, msg: String(e) }); return null; });
-
-    Promise.all([kPromise, rPromise]).then(([k, r]) => {
-      setKosztorys(k);
-      setReport(r);
-      setLoading(false);
-    });
+      .catch(e => { setRErr({ status: 0, msg: String(e) }); return null; })
+      .then(r => { setReport(r); setLoadingR(false); });
   }, [dealId]);
 
   // Hero gallery from report photos (fall back to single hero_photo_url)
@@ -129,12 +126,15 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
 
   const allInspPhotos = useMemo(() => extractAllPhotos(report), [report]);
 
+  const loading = loadingK || loadingR;
+
   // Both failed → error page
   if (!loading && !kosztorys && !report) {
     return <ErrorPage dealId={dealId} kErr={kosztorysErr} rErr={reportErr} />;
   }
 
-  if (loading) return <SkeletonPage />;
+  // Show full skeleton only when BOTH are still loading
+  if (loadingK && loadingR) return <SkeletonPage />;
 
   const veh = kosztorys?.vehicle;
   const vehSplit = splitMakeModel(veh?.make_model_type || '');
@@ -202,19 +202,32 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
         minHeight: '100vh', boxShadow: '0 0 40px rgba(0,0,0,0.06)',
       }}>
 
-        {/* Banner if Eurotax not available */}
+        {/* Banner: Eurotax loading or not available */}
         {!hasEurotax && (
-          <div style={{
-            margin: '20px 40px 0', padding: '14px 18px', borderRadius: 10,
-            background: '#FEF3C7', border: '1px solid #FBBF24',
-            display: 'flex', alignItems: 'center', gap: 12,
-          }}>
-            <i className="fas fa-info-circle" style={{ color: '#92400E', fontSize: 18 }} />
-            <div style={{ fontSize: 13, color: '#92400E' }}>
-              <strong>Eurotax PDF jeszcze nie został przesłany dla tego zlecenia.</strong>
-              {' '}Sekcje kosztów, części i podsumowania będą widoczne po przesłaniu PDF do Bitrix24.
+          loadingK ? (
+            <div style={{
+              margin: '20px 40px 0', padding: '14px 18px', borderRadius: 10,
+              background: '#EFF6FF', border: '1px solid #BFDBFE',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <i className="fas fa-spinner fa-spin" style={{ color: '#1E40AF', fontSize: 18 }} />
+              <div style={{ fontSize: 13, color: '#1E40AF' }}>
+                <strong>Ładowanie danych Eurotax…</strong>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{
+              margin: '20px 40px 0', padding: '14px 18px', borderRadius: 10,
+              background: '#FEF3C7', border: '1px solid #FBBF24',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <i className="fas fa-info-circle" style={{ color: '#92400E', fontSize: 18 }} />
+              <div style={{ fontSize: 13, color: '#92400E' }}>
+                <strong>Eurotax PDF jeszcze nie został przesłany dla tego zlecenia.</strong>
+                {' '}Sekcje kosztów, części i podsumowania będą widoczne po przesłaniu PDF do Bitrix24.
+              </div>
+            </div>
+          )
         )}
 
         {/* ═══ EXPERTISE — vehicle header ═══════════════════════════════ */}
