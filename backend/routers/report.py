@@ -1257,7 +1257,7 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
                         "Content-Range":  f"bytes {start}-{end}/{total}",
                         "Accept-Ranges":  "bytes",
                         "Content-Length": str(len(chunk)),
-                        "Cache-Control":  "public, max-age=3600",
+                        "Cache-Control":  "public, max-age=86400, immutable",
                     },
                 )
 
@@ -1267,7 +1267,7 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
             headers={
                 "Content-Length": str(total),
                 "Accept-Ranges":  "bytes",
-                "Cache-Control":  "public, max-age=3600",
+                "Cache-Control":  "public, max-age=86400, immutable",
             },
         )
     except HTTPException:
@@ -1320,7 +1320,7 @@ async def get_gallery_damage_photo(deal_id: int, source: str, dmg_idx: int, phot
 
         img_bytes = _b64m.b64decode(b64_str)
         return _Resp(content=img_bytes, media_type="image/jpeg",
-                     headers={"Cache-Control": "public, max-age=3600"})
+                     headers={"Cache-Control": "public, max-age=86400, immutable"})
     except HTTPException:
         raise
     except Exception as e:

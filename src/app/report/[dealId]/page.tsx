@@ -474,7 +474,7 @@ function PhotoCard({ photo, index, total, onClick }: {
     >
       {photo.url && !err ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photo.url} alt={photo.label} loading="lazy" decoding="async" onError={() => setErr(true)}
+        <img src={photo.url} alt={photo.label} loading="lazy" decoding="async" fetchPriority="low" onError={() => setErr(true)}
           style={{ width:'100%',height:200,objectFit:'cover',display:'block',background:'#F5F5F7' }} />
       ) : (
         <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
@@ -1293,7 +1293,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             const withUrls = g.photos.filter(p => p.url).map(p => ({ label: p.label, url: p.url! }));
             return (
               <GallerySubcategory key={g.letter} letter={g.letter} title={g.title} icon={g.icon}
-                count={g.photos.length} isDamage={g.isDamage} defaultOpen={g.letter === 'A'}>
+                count={g.photos.length} isDamage={g.isDamage} defaultOpen={false}>
                 {g.isDamage && data.damages.length > 0 && (
                   <div style={{ padding:'12px 16px',marginBottom:16,background:'#FEF2F2',
                     borderLeft:'3px solid #EF4444',borderRadius:'0 8px 8px 0',fontSize:13,color:'#991B1B',
@@ -1330,7 +1330,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                         <div style={{ position:'relative',width:'100%',aspectRatio:'4/3',overflow:'hidden',background:'#F5F5F7' }}>
                           {p.url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.url} alt={p.label} loading="lazy" decoding="async"
+                            <img src={p.url} alt={p.label} loading="lazy" decoding="async" fetchPriority="low"
                               style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block' }} />
                           ) : (
                             <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',
@@ -1412,7 +1412,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt={`Uszkodzenie ${d.index} — zdjęcie ${ui + 1}`}
-                                  loading="lazy" decoding="async"
+                                  loading="lazy" decoding="async" fetchPriority="low"
                                   style={{ width:'100%',height:120,objectFit:'cover',display:'block',background:'#F5F5F7' }}
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               </button>
@@ -1471,6 +1471,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt={`Uszkodzenie ${d.index} — zdjęcie ${ui + 1}`}
+                                  loading="lazy" decoding="async" fetchPriority="low"
                                   style={{ width:'100%',height:120,objectFit:'cover',display:'block',background:'#F5F5F7' }}
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               </button>
