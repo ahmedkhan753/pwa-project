@@ -99,24 +99,38 @@ async function tick(): Promise<void> {
       return;
     }
 
-    // Upload up to MAX_PARALLEL_UPLOADS at a time. Bounded promise pool:
-    // each worker pulls the next ready meta off a shared queue, lazy-loads
-    // that ONE item's full record (with base64) right before sending, then
-    // discards it. Peak memory therefore stays at concurrency × 1 item
-    // (~3 × 120 KB ≈ 360 KB) regardless of total queue depth — vs the
-    // old all-at-once load which scaled with queue size and OOMed iOS
-    // around 80-90 photos.
-    const queue: QueueItemMeta[] = [...ready];
-    const workers = Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, queue.length) }, async () => {
-      while (running) {
-        const meta = queue.shift();
-        if (!meta) return;
-        const full = await photoQueue.getById(meta.id);
-        if (!full) continue;  // already deleted (e.g. cleared by submit)
-        await uploadOne(full);
-      }
-    });
-    await Promise.all(workers);
+    // Split by kind: video uploads cap at 1 in flight (a 30 MB clip can
+    // saturate a mobile uplink and starve the photo workers); photos
+    // continue to use the existing parallelism.
+    const videoQueue: QueueItemMeta[] = ready.filter((m) => m.kind === 'video');
+    const photoQueueArr: QueueItemMeta[] = ready.filter((m) => m.kind !== 'video');
+
+    const photoWorkers = Array.from(
+      { length: Math.min(MAX_PARALLEL_UPLOADS, photoQueueArr.length) },
+      async () => {
+        while (running) {
+          const meta = photoQueueArr.shift();
+          if (!meta) return;
+          const full = await photoQueue.getById(meta.id);
+          if (!full) continue;  // already deleted (e.g. cleared by submit)
+          await uploadOne(full);
+        }
+      },
+    );
+
+    const videoWorker = videoQueue.length > 0
+      ? (async () => {
+          while (running) {
+            const meta = videoQueue.shift();
+            if (!meta) return;
+            const full = await photoQueue.getById(meta.id);
+            if (!full) continue;
+            await uploadOne(full);
+          }
+        })()
+      : Promise.resolve();
+
+    await Promise.all([videoWorker, ...photoWorkers]);
   } catch (err) {
     console.error('[uploadWorker] tick error:', err);
   } finally {
@@ -125,6 +139,12 @@ async function tick(): Promise<void> {
 }
 
 async function uploadOne(item: QueueItem): Promise<void> {
+  if (!token || !apiUrl) return;
+  if (item.kind === 'video') return uploadVideoOne(item);
+  return uploadPhotoOne(item);
+}
+
+async function uploadPhotoOne(item: QueueItem): Promise<void> {
   if (!token || !apiUrl) return;
   await photoQueue.markUploading(item.id);
 
@@ -175,4 +195,89 @@ async function uploadOne(item: QueueItem): Promise<void> {
     console.warn(`[uploadWorker] ❌ ${item.slotId} fetch failed: ${msg}`);
     await photoQueue.markFailed(item.id, `network: ${msg}`);
   }
+}
+
+// ── Video upload progress (per-item subscriber registry) ──────────────
+// XHR upload progress events fire only on XMLHttpRequest, not fetch().
+// VideoRecordSlot subscribes by item id to render its progress bar.
+const videoProgressListeners = new Map<string, Set<(pct: number) => void>>();
+
+function notifyVideoProgress(id: string, pct: number) {
+  videoProgressListeners.get(id)?.forEach((fn) => {
+    try { fn(pct); } catch { /* ignore */ }
+  });
+}
+
+export function subscribeVideoProgress(
+  id: string,
+  fn: (pct: number) => void,
+): () => void {
+  let set = videoProgressListeners.get(id);
+  if (!set) {
+    set = new Set();
+    videoProgressListeners.set(id, set);
+  }
+  set.add(fn);
+  return () => {
+    const s = videoProgressListeners.get(id);
+    if (!s) return;
+    s.delete(fn);
+    if (s.size === 0) videoProgressListeners.delete(id);
+  };
+}
+
+async function uploadVideoOne(item: QueueItem): Promise<void> {
+  if (!token || !apiUrl) return;
+  if (!item.bodyBlob) {
+    await photoQueue.markFailed(item.id, 'video missing bodyBlob');
+    return;
+  }
+  await photoQueue.markUploading(item.id);
+
+  const sizeKB = Math.round(item.bodyBlob.size / 1024);
+  console.log(`[uploadWorker] ▶ VIDEO ${item.slotId} deal=${item.dealId} ~${sizeKB}KB (multipart)`);
+
+  try {
+    await uploadVideoXHR(item);
+    notifyVideoProgress(item.id, 100);
+    await photoQueue.markUploaded(item.id);
+    console.log(`[uploadWorker] ✅ VIDEO ${item.slotId}`);
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    console.warn(`[uploadWorker] ❌ VIDEO ${item.slotId}: ${msg}`);
+    await photoQueue.markFailed(item.id, msg);
+  }
+}
+
+function uploadVideoXHR(item: QueueItem): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${apiUrl}/api/files/upload-binary`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    // Intentionally no Content-Type: the browser sets the multipart
+    // boundary header automatically when we hand it FormData.
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) {
+        const pct = Math.min(100, Math.round((e.loaded / e.total) * 100));
+        notifyVideoProgress(item.id, pct);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`HTTP ${xhr.status}: ${(xhr.responseText || '').slice(0, 200)}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('network error'));
+    xhr.onabort = () => reject(new Error('aborted'));
+    xhr.ontimeout = () => reject(new Error('timeout'));
+
+    const form = new FormData();
+    form.append('deal_id', String(item.dealId));
+    form.append('field_key', item.slotId);
+    form.append('file', item.bodyBlob as Blob, item.filename);
+    xhr.send(form);
+  });
 }

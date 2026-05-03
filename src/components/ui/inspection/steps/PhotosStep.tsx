@@ -4,7 +4,19 @@ import { PhotoUploadSlot } from "../PhotoUploadSlot";
 import { Camera, CheckCircle2, ChevronDown, Plus, Video, RotateCcw, Check, X, CloudUpload, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { photoQueue } from "@/lib/photoUploadQueue";
-import { MAX_UPLOAD_ATTEMPTS } from "@/lib/uploadWorker";
+import { MAX_UPLOAD_ATTEMPTS, subscribeVideoProgress } from "@/lib/uploadWorker";
+
+/** Pick a sensible filename extension from a video Blob/File for the
+ *  multipart upload. Bitrix uses the extension to set MIME on download. */
+function videoFilenameFor(blob: Blob, slotId: string): string {
+    const fileName = (blob as File).name;
+    if (fileName) return fileName;
+    const t = (blob.type || '').toLowerCase();
+    if (t.includes('webm')) return `${slotId}.webm`;
+    if (t.includes('mp4'))  return `${slotId}.mp4`;
+    if (t.includes('quicktime') || t.includes('mov')) return `${slotId}.mov`;
+    return `${slotId}.bin`;
+}
 
 // ── Video Record Slot: 6-second auto-stop with countdown ──────────────
 function VideoRecordSlot({
@@ -12,11 +24,19 @@ function VideoRecordSlot({
     onCapture,
     onClear,
     onFallbackCapture,
+    uploadStatus,
+    uploadProgress,
 }: {
     slot: PhotoSlot;
-    onCapture: (b64: string) => void;
+    onCapture: (blob: Blob) => void;
     onClear: () => void;
     onFallbackCapture: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    /** 'idle' before capture, 'uploading' while bytes are in flight,
+     *  'uploaded' once the queue entry is gone, 'failed' if the worker
+     *  hit MAX_UPLOAD_ATTEMPTS — UI never blocks on either failure. */
+    uploadStatus?: 'idle' | 'uploading' | 'uploaded' | 'failed';
+    /** 0–100, only meaningful while uploadStatus === 'uploading'. */
+    uploadProgress?: number;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -122,13 +142,13 @@ function VideoRecordSlot({
 
     const handleConfirm = () => {
         if (!recordedUrl) return;
+        // Hand the raw Blob up — the parent persists it to IndexedDB and
+        // also generates a small object-URL preview for the slot. We
+        // intentionally avoid FileReader.readAsDataURL here: a 30 MB
+        // base64 string in JS memory can OOM iOS Safari.
         fetch(recordedUrl)
             .then(r => r.blob())
-            .then(blob => {
-                const reader = new FileReader();
-                reader.onload = () => { onCapture(reader.result as string); };
-                reader.readAsDataURL(blob);
-            });
+            .then(blob => { onCapture(blob); });
         setState('idle');
     };
 
@@ -137,12 +157,16 @@ function VideoRecordSlot({
         setState('idle');
     };
 
-    // Already captured — show thumbnail
+    // Already captured — show thumbnail with upload status overlay
     if (slot.base64) {
+        const isUploading = uploadStatus === 'uploading';
+        const isFailed    = uploadStatus === 'failed';
+        const pct = Math.max(0, Math.min(100, uploadProgress ?? 0));
+        const borderColor = isFailed ? 'border-red-500' : 'border-success';
         return (
             <div className="flex flex-col gap-2 col-span-2">
                 <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
-                <div className="relative rounded-2xl overflow-hidden border-2 border-success bg-black">
+                <div className={`relative rounded-2xl overflow-hidden border-2 ${borderColor} bg-black`}>
                     <video src={slot.base64} controls playsInline className="w-full rounded-xl" style={{ maxHeight: '200px' }} />
                     <button
                         onClick={(e) => { e.stopPropagation(); onClear(); }}
@@ -150,6 +174,24 @@ function VideoRecordSlot({
                     >
                         <X size={14} />
                     </button>
+                    {isUploading && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-3 py-2 flex items-center gap-2">
+                            <CloudUpload size={14} className="text-white animate-pulse flex-shrink-0" />
+                            <div className="flex-1 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                                <div
+                                    className="h-full bg-blue-400 transition-all duration-200"
+                                    style={{ width: `${pct}%` }}
+                                />
+                            </div>
+                            <span className="text-[10px] font-black text-white tabular-nums">{pct}%</span>
+                        </div>
+                    )}
+                    {isFailed && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-red-500/90 px-3 py-1.5 flex items-center gap-2">
+                            <AlertTriangle size={12} className="text-white flex-shrink-0" />
+                            <span className="text-[10px] font-black text-white">Wysyłka nie powiodła się — można wysłać raport mimo to.</span>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -268,25 +310,11 @@ export function PhotosStep() {
         return () => { cancelled = true; };
     }, [dealId, token, apiUrl]);
 
-    // ── One-shot cleanup: drop any video items left in the queue ────
-    // Inspectors who hit the broken upload path before this fix may have
-    // stale video_* items stuck in IndexedDB. Without this, those would
-    // still count against the submit gate. Safe to run unconditionally —
-    // markUploaded just deletes the row. Meta-only walk so no base64
-    // ever hits JS memory during the cleanup pass.
-    useEffect(() => {
-        if (!dealId) return;
-        (async () => {
-            try {
-                const metas = await photoQueue.getMetaByDeal(dealId);
-                for (const m of metas) {
-                    if (m.slotId.startsWith('video_') || m.isVideoData) {
-                        await photoQueue.markUploaded(m.id);
-                    }
-                }
-            } catch { /* ignore — IndexedDB unavailable */ }
-        })();
-    }, [dealId]);
+    // ── Per-video upload status (separate from photo banner) ─────────
+    // Banner counts photo uploads only — videos have their own progress
+    // bar inside VideoRecordSlot and never block submit.
+    const [videoUploadStatus, setVideoUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'uploaded' | 'failed'>>({});
+    const [videoUploadProgress, setVideoUploadProgress] = useState<Record<string, number>>({});
 
     // ── Subscribe to IndexedDB queue changes (debounced) ───────────
     useEffect(() => {
@@ -304,7 +332,20 @@ export function PhotosStep() {
                 const items = await photoQueue.getMetaByDeal(dealId);
                 let pending = 0;
                 const dead: string[] = [];
+                const vidStatus: Record<string, 'idle' | 'uploading' | 'uploaded' | 'failed'> = {};
                 for (const i of items) {
+                    // Videos never count toward the photo banner / submit gate.
+                    // Track them separately for the slot's own progress UI.
+                    if (i.kind === 'video') {
+                        if ((i.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && i.status === 'failed') {
+                            vidStatus[i.slotId] = 'failed';
+                        } else if (i.status === 'uploading') {
+                            vidStatus[i.slotId] = 'uploading';
+                        } else {
+                            vidStatus[i.slotId] = 'uploading';  // pending / failed-but-retrying
+                        }
+                        continue;
+                    }
                     if (i.status === 'uploaded') continue;
                     if ((i.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && i.status === 'failed') {
                         dead.push(i.slotId);
@@ -315,6 +356,7 @@ export function PhotosStep() {
                 setPendingCount(pending);
                 setDeadCount(dead.length);
                 setDeadSlots(dead);
+                setVideoUploadStatus(vidStatus);
 
                 // Only re-fetch the backend list when queue shrank (an upload finished)
                 const currentSize = items.length;
@@ -338,6 +380,24 @@ export function PhotosStep() {
         return () => { unsub(); if (timer) clearTimeout(timer); };
     }, [dealId, token, apiUrl]);
 
+    // ── Subscribe to per-video upload progress events ────────────────
+    // Worker reports progress only for the video that's currently in
+    // flight; we register one listener per video slot id we know about.
+    useEffect(() => {
+        if (!dealId) return;
+        const unsubs: Array<() => void> = [];
+        for (const slot of photoSlots) {
+            if (!slot.isVideo) continue;
+            const id = `${dealId}__${slot.id}`;
+            unsubs.push(
+                subscribeVideoProgress(id, (pct) => {
+                    setVideoUploadProgress((s) => ({ ...s, [slot.id]: pct }));
+                }),
+            );
+        }
+        return () => { unsubs.forEach((u) => u()); };
+    }, [dealId, photoSlots]);
+
     // NOTE: a previous version of this file eagerly called
     // releaseUploadedPhotos(uploadedSlotIds) on every uploadedSlots change.
     // That worked for memory but caused a UX regression: as soon as the
@@ -356,27 +416,11 @@ export function PhotosStep() {
     // ── Enqueue to IndexedDB instead of fire-and-forget ──────────────
     // preview = small base64 (≤150 KB) safe for Zustand/localStorage.
     // full    = HQ base64 (~1.5 MB cap) for the upload queue → backend.
-    // Video paths skip compression and pass the same blob for both.
+    // Photo-only path. Videos go through updateVideoSlot.
     const updatePhotoSlot = (slotId: string, preview: string, full?: string) => {
         setPhotoSlot(slotId, preview);
         if (!dealId) return;
         const upload = full || preview;
-        const isVideo = upload.startsWith('data:video') || slotId.startsWith('video_');
-
-        // ── TEMPORARY: skip backend upload for videos ─────────────────
-        // The engine video kept failing upload (size + slow mobile uplink),
-        // permanently blocking submit for every inspection. Until we move
-        // videos onto a chunked/resumable upload path, we keep them on the
-        // device only — inspector still sees the recording in the slot,
-        // and the rest of the report (photos + metadata) submits cleanly.
-        // Drop any prior queue entry for this video so a stale failed item
-        // from before this fix doesn't keep counting against the gate.
-        if (isVideo) {
-            photoQueue.markUploaded(`${dealId}__${slotId}`).catch(() => {});
-            console.log(`[PhotosStep] video '${slotId}' kept local-only (backend upload disabled)`);
-            return;
-        }
-
         const ext = 'jpg';
         photoQueue.enqueue({
             id: `${dealId}__${slotId}`,
@@ -389,6 +433,30 @@ export function PhotosStep() {
         });
     };
 
+    /** Video capture path — stores the raw Blob (no base64 inflation),
+     *  surfaces a small object-URL preview to Zustand, and enqueues for
+     *  background multipart upload. Videos never block submit. */
+    const VIDEO_MAX_BYTES = 45 * 1024 * 1024;
+    const updateVideoSlot = (slotId: string, blob: Blob) => {
+        if (!dealId) return;
+        if (blob.size > VIDEO_MAX_BYTES) {
+            alert('Film jest za duży — nagraj ponownie krótszy / niższej jakości');
+            return;
+        }
+        const previewUrl = URL.createObjectURL(blob);
+        setPhotoSlot(slotId, previewUrl);
+        photoQueue.enqueue({
+            id: `${dealId}__${slotId}`,
+            dealId,
+            slotId,
+            kind: 'video',
+            bodyBlob: blob,
+            filename: videoFilenameFor(blob, slotId),
+        }).catch((err) => {
+            console.error(`[PhotosStep] video enqueue failed for ${slotId}:`, err);
+        });
+    };
+
     const handleVideoCapture = (e: React.ChangeEvent<HTMLInputElement>, slotId: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -397,17 +465,12 @@ export function PhotosStep() {
         const videoEl = document.createElement('video');
         videoEl.src = url;
         videoEl.onloadedmetadata = () => {
+            URL.revokeObjectURL(url);
             if (videoEl.duration > 6) {
                 alert('Film nie może być dłuższy niż 6 sekund. Nagraj krótszy film.');
-                URL.revokeObjectURL(url);
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                updatePhotoSlot(slotId, ev.target?.result as string);
-            };
-            reader.readAsDataURL(file);
-            URL.revokeObjectURL(url);
+            updateVideoSlot(slotId, file);
         };
     };
 
@@ -482,9 +545,11 @@ export function PhotosStep() {
                         <VideoRecordSlot
                             key={slot.id}
                             slot={slot}
-                            onCapture={(b64) => updatePhotoSlot(slot.id, b64)}
+                            onCapture={(blob) => updateVideoSlot(slot.id, blob)}
                             onClear={() => clearPhotoSlot(slot.id)}
                             onFallbackCapture={(e) => handleVideoCapture(e, slot.id)}
+                            uploadStatus={videoUploadStatus[slot.id] || 'idle'}
+                            uploadProgress={videoUploadProgress[slot.id]}
                         />
                     ) : (
                         <PhotoUploadSlot

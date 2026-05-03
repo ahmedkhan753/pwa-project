@@ -30,7 +30,16 @@ export interface QueueItem {
   id: string;            // `${dealId}__${slotId}`
   dealId: string;
   slotId: string;
-  base64: string;        // full data:image/...;base64,... or data:video/...
+  /** Photo path: full data:image/...;base64,... string. Empty for videos. */
+  base64: string;
+  /** Video path: raw Blob bytes — avoids the ~33% base64-over-JSON bloat
+   *  that previously OOM'd iOS Safari on a 30 MB clip. Photos leave this
+   *  undefined and continue using `base64`. */
+  bodyBlob?: Blob;
+  /** Routes the upload to the right endpoint:
+   *    'photo' (default) → POST JSON to /files/upload-json
+   *    'video'           → POST FormData to /api/files/upload-binary */
+  kind?: 'photo' | 'video';
   filename: string;
   status: 'pending' | 'uploading' | 'uploaded' | 'failed';
   attempts: number;
@@ -39,7 +48,7 @@ export interface QueueItem {
   lastTriedAt?: number;
 }
 
-/** Lightweight projection — everything but the base64. */
+/** Lightweight projection — everything but the base64/Blob bytes. */
 export interface QueueItemMeta {
   id: string;
   dealId: string;
@@ -48,8 +57,11 @@ export interface QueueItemMeta {
   attempts: number;
   enqueuedAt: number;
   lastTriedAt?: number;
-  /** True if the underlying base64 is a video — derived once during the cursor
-   *  walk so callers can filter without ever loading the data URL. */
+  /** Routing/category — derived from `kind` field, falling back to
+   *  base64-prefix sniff for queue rows written before the field existed. */
+  kind: 'photo' | 'video';
+  /** Legacy alias — true iff kind==='video'. Kept so existing call sites
+   *  that filter by `isVideoData` continue to compile unchanged. */
   isVideoData: boolean;
 }
 
@@ -124,11 +136,30 @@ export const photoQueue = {
    * (e.g. user re-takes a photo) gets a fresh upload cycle.
    */
   async enqueue(
-    item: Pick<QueueItem, 'id' | 'dealId' | 'slotId' | 'base64' | 'filename'>
+    item: {
+      id: string;
+      dealId: string;
+      slotId: string;
+      filename: string;
+      /** Photo upload path. */
+      base64?: string;
+      /** Video upload path — raw bytes, no base64 inflation. */
+      bodyBlob?: Blob;
+      /** Defaults to 'photo' so existing photo callers don't need to
+       *  pass it explicitly. */
+      kind?: 'photo' | 'video';
+    }
   ): Promise<void> {
     try {
+      const kind: 'photo' | 'video' = item.kind ?? 'photo';
       const full: QueueItem = {
-        ...item,
+        id: item.id,
+        dealId: item.dealId,
+        slotId: item.slotId,
+        filename: item.filename,
+        base64: item.base64 ?? '',
+        bodyBlob: item.bodyBlob,
+        kind,
         status: 'pending',
         attempts: 0,
         enqueuedAt: Date.now(),
@@ -217,6 +248,9 @@ export const photoQueue = {
             if (!cur) { resolve(out); return; }
             const v = cur.value as QueueItem;
             if (v && v.status !== 'uploaded') {
+              const isVideo =
+                v.kind === 'video' ||
+                !!(v.base64 && v.base64.startsWith('data:video'));
               out.push({
                 id: v.id,
                 dealId: v.dealId,
@@ -225,7 +259,8 @@ export const photoQueue = {
                 attempts: v.attempts || 0,
                 lastTriedAt: v.lastTriedAt,
                 enqueuedAt: v.enqueuedAt,
-                isVideoData: !!(v.base64 && v.base64.startsWith('data:video')),
+                kind: isVideo ? 'video' : 'photo',
+                isVideoData: isVideo,
               });
             }
             cur.continue();
@@ -270,6 +305,9 @@ export const photoQueue = {
             if (!cur) { resolve(out); return; }
             const v = cur.value as QueueItem;
             if (v) {
+              const isVideo =
+                v.kind === 'video' ||
+                !!(v.base64 && v.base64.startsWith('data:video'));
               out.push({
                 id: v.id,
                 dealId: v.dealId,
@@ -278,7 +316,8 @@ export const photoQueue = {
                 attempts: v.attempts || 0,
                 lastTriedAt: v.lastTriedAt,
                 enqueuedAt: v.enqueuedAt,
-                isVideoData: !!(v.base64 && v.base64.startsWith('data:video')),
+                kind: isVideo ? 'video' : 'photo',
+                isVideoData: isVideo,
               });
             }
             cur.continue();

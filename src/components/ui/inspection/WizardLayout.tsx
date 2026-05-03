@@ -81,6 +81,10 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
             let active = 0;
             let dead = 0;
             for (const it of metas) {
+                // Videos never gate submit — they upload in the background
+                // with their own retry loop and surface status inside the
+                // VideoRecordSlot. Photo gating is unchanged.
+                if (it.kind === 'video') continue;
                 if (it.status === 'uploaded') continue;
                 if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && it.status === 'failed') {
                     dead++;
@@ -204,6 +208,8 @@ async function compressImage(base64: string): Promise<string> {
         let activeNow = 0;
         const deadSlots: string[] = [];
         for (const it of queueAtClick) {
+            // Videos never gate submit — same rationale as the live poll above.
+            if (it.kind === 'video') continue;
             if (it.status === 'uploaded') continue;
             if ((it.attempts || 0) >= MAX_UPLOAD_ATTEMPTS && it.status === 'failed') {
                 deadSlots.push(it.slotId);
