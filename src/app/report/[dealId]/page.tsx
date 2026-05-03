@@ -41,6 +41,7 @@ interface ReportData {
     standard: PhotoItem[]; body: PhotoItem[]; interior: PhotoItem[];
     engine: PhotoItem[]; documents: PhotoItem[]; damages: PhotoItem[];
   };
+  videos?: Array<{ slot_id: string; label: string; url: string; is_video: true; mime?: string }>;
   documents_check: Array<{ name: string; status: string; status_type: string }>;
   tires: Array<{
     position: string; brand?: string; model?: string; size?: string;
@@ -1365,6 +1366,29 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             </div>
             <div style={{ fontSize:12,color:'#AEAEB2',marginTop:4 }}>Dokumentacja fotograficzna pojazdu</div>
           </div>
+
+          {data.videos && data.videos.length > 0 && (
+            <div style={{ marginTop:24 }}>
+              <h3 style={{ fontSize:16,fontWeight:600,color:'#1D1D1F',margin:'0 0 12px',
+                display:'flex',alignItems:'center',gap:8 }}>
+                <i className="fas fa-video" style={{ color:'#0071E3' }}/> Film z silnikiem
+              </h3>
+              {data.videos.map((v) => (
+                <div key={v.slot_id} style={{ borderRadius:10,overflow:'hidden',
+                  border:'1px solid #E8E8ED',background:'#000' }}>
+                  <video
+                    src={v.url}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    style={{ display:'block',width:'100%',maxHeight:480,background:'#000' }}
+                  >
+                    {v.mime && <source src={v.url} type={v.mime} />}
+                  </video>
+                </div>
+              ))}
+            </div>
+          )}
         </CollapsibleSection>
 
         {/* ── EXTERIOR DAMAGE ── */}

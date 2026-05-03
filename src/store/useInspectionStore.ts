@@ -1015,25 +1015,40 @@ export const useInspectionStore = create<InspectionState>()(
         })),
 
       // ── Photo Slots ──
+      // Videos store a blob: URL in the `base64` field (not actual base64).
+      // Revoking on overwrite/clear prevents the underlying Blob from being
+      // pinned in memory after the slot has moved on.
       setPhotoSlot: (slotId, base64) =>
-        set((state) => ({
-          data: {
-            ...state.data,
-            photos: state.data.photos.map((p) =>
-              p.id === slotId ? { ...p, base64 } : p
-            ),
-          },
-        })),
+        set((state) => {
+          const prev = state.data.photos.find((p) => p.id === slotId);
+          if (prev && prev.base64 && prev.base64.startsWith('blob:') && prev.base64 !== base64) {
+            try { URL.revokeObjectURL(prev.base64); } catch { /* ignore */ }
+          }
+          return {
+            data: {
+              ...state.data,
+              photos: state.data.photos.map((p) =>
+                p.id === slotId ? { ...p, base64 } : p
+              ),
+            },
+          };
+        }),
 
       clearPhotoSlot: (slotId) =>
-        set((state) => ({
-          data: {
-            ...state.data,
-            photos: state.data.photos.map((p) =>
-              p.id === slotId ? { ...p, base64: '' } : p
-            ),
-          },
-        })),
+        set((state) => {
+          const prev = state.data.photos.find((p) => p.id === slotId);
+          if (prev && prev.base64 && prev.base64.startsWith('blob:')) {
+            try { URL.revokeObjectURL(prev.base64); } catch { /* ignore */ }
+          }
+          return {
+            data: {
+              ...state.data,
+              photos: state.data.photos.map((p) =>
+                p.id === slotId ? { ...p, base64: '' } : p
+              ),
+            },
+          };
+        }),
 
       // Free base64 preview from RAM for photos that the backend already has.
       // Called by PhotosStep when uploadedSlots set updates. This is critical

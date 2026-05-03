@@ -31,7 +31,7 @@ export async function GET(
     const responseHeaders: Record<string, string> = {
       'Content-Type':  res.headers.get('content-type')  || 'application/octet-stream',
       'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': 'public, max-age=86400, immutable',
     };
 
     const contentRange  = res.headers.get('content-range');

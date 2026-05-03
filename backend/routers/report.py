@@ -534,6 +534,7 @@ async def get_report(deal_id: int, request: Request):
     photos_engine:    List[dict] = []
     photos_documents: List[dict] = []
     photos_damages:   List[dict] = []
+    videos:           List[dict] = []
     hero_photo_url: Optional[str] = None
 
     try:
@@ -544,6 +545,20 @@ async def get_report(deal_id: int, request: Request):
         pos = 1
         for row in db_rows:
             if row.slot_id.startswith("video_"):
+                # Videos surface as a separate top-level field, not in
+                # the photo arrays — the report page renders them via
+                # <video>, and the gallery already exposes them too.
+                try:
+                    mime = _detect_video_mime((row.photo_bytes or b"")[:12])
+                except Exception:
+                    mime = "video/mp4"
+                videos.append({
+                    "slot_id":  row.slot_id,
+                    "label":    PHOTO_LABELS.get(row.slot_id, row.slot_id.replace("_", " ").title()),
+                    "url":      f"/api/gallery/{deal_id}/media/{row.slot_id}",
+                    "is_video": True,
+                    "mime":     mime,
+                })
                 continue
             try:
                 uri = f"/api/gallery/{deal_id}/media/{row.slot_id}"
@@ -1011,6 +1026,9 @@ async def get_report(deal_id: int, request: Request):
             "documents": photos_documents,
             "damages":   photos_damages,
         },
+
+        "videos": videos,
+
 
         "paint_measurements": paint_measurements,
         "tires":              tires,

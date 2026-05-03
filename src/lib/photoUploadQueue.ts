@@ -69,6 +69,11 @@ const DB_NAME = 'inspection-uploads';
 const DB_VERSION = 1;
 const STORE = 'queue';
 
+/** Maximum total rows we will hold in the queue at once. A single
+ *  inspection has ~30 photos + 1 video; this cap is well above that
+ *  and exists only as a runaway-loop / corrupt-state backstop. */
+const QUEUE_HARD_CAP = 200;
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
@@ -151,6 +156,29 @@ export const photoQueue = {
     }
   ): Promise<void> {
     try {
+      // Backstop: refuse new enqueues if the queue is already huge.
+      // An overwrite of an existing id (re-take the same slot) is
+      // always allowed so the inspector can recover from a stuck row.
+      try {
+        const existing = await reqToPromise(
+          (await openDb()).transaction(STORE, 'readonly').objectStore(STORE).get(item.id),
+        );
+        if (!existing) {
+          const total = await reqToPromise(
+            (await openDb()).transaction(STORE, 'readonly').objectStore(STORE).count(),
+          );
+          if (typeof total === 'number' && total >= QUEUE_HARD_CAP) {
+            console.warn(`[photoQueue] queue at hard cap ${QUEUE_HARD_CAP}; refusing enqueue for ${item.slotId}`);
+            throw new Error(`queue full (${total}/${QUEUE_HARD_CAP})`);
+          }
+        }
+      } catch (countErr) {
+        // Soft-fail the cap check — never let it block an upload it
+        // would otherwise allow. The real error path for IDB unavailable
+        // is the put() below.
+        if (countErr instanceof Error && countErr.message.startsWith('queue full')) throw countErr;
+      }
+
       const kind: 'photo' | 'video' = item.kind ?? 'photo';
       const full: QueueItem = {
         id: item.id,
