@@ -779,6 +779,30 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
     setTimeout(doPrint, 5000);
   }, []);
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPdf = useCallback(async () => {
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/protokol/${dealId}/pdf`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Raport_stanu_pojazdu_${dealId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Nie udało się wygenerować PDF. Spróbuj ponownie.');
+      console.error('PDF download failed:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [dealId]);
+
   if (loading) return <LoadingScreen />;
 
   if (error || !data) {
@@ -945,17 +969,25 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
       {/* ── MAIN ── */}
       <main style={{ maxWidth:1200,margin:'0 auto',padding:'0 12px 60px',overflow:'hidden',width:'100%' }} id="main-content">
 
-        {/* PDF button */}
-        <div className="no-print" style={{ display:'flex',justifyContent:'flex-end',marginBottom:-10,padding:'8px 0' }}>
-          <button onClick={() => handlePrint()}
+        {/* PDF download + Print buttons */}
+        <div className="no-print" style={{ display:'flex',justifyContent:'flex-end',gap:8,marginBottom:-10,padding:'8px 0' }}>
+          <button onClick={handleDownloadPdf} disabled={pdfLoading}
             className="pdf-dl-btn"
+            style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:600,
+              color:'#fff',background:'#B71C1C',border:'1px solid #B71C1C',borderRadius:6,cursor: pdfLoading ? 'wait' : 'pointer',
+              fontFamily:'inherit',transition:'all 0.3s',opacity: pdfLoading ? 0.7 : 1 }}
+          >
+            <i className={pdfLoading ? 'fas fa-spinner fa-spin' : 'fas fa-file-pdf'} style={{ fontSize:14 }}/>
+            {pdfLoading ? 'Generowanie…' : 'Pobierz PDF'}
+          </button>
+          <button onClick={() => handlePrint()}
             style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:500,
               color:'#86868B',background:'#fff',border:'1px solid #E0E0E0',borderRadius:6,cursor:'pointer',
               fontFamily:'inherit',transition:'all 0.3s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color='#B71C1C'; (e.currentTarget as HTMLButtonElement).style.borderColor='#B71C1C'; (e.currentTarget as HTMLButtonElement).style.background='#FEF2F2'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color='#86868B'; (e.currentTarget as HTMLButtonElement).style.borderColor='#E0E0E0'; (e.currentTarget as HTMLButtonElement).style.background='#fff'; }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color='#1A1A2E'; (e.currentTarget as HTMLButtonElement).style.borderColor='#1A1A2E'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color='#86868B'; (e.currentTarget as HTMLButtonElement).style.borderColor='#E0E0E0'; }}
           >
-            <i className="fas fa-file-pdf" style={{ fontSize:14 }}/> Pobierz PDF
+            <i className="fas fa-print" style={{ fontSize:14 }}/> Drukuj
           </button>
         </div>
 
@@ -1728,12 +1760,19 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         )}
 
         {/* PDF bottom */}
-        <div className="no-print" style={{ textAlign:'center',padding:'24px 0' }}>
-          <button onClick={() => handlePrint()}
+        <div className="no-print" style={{ display:'flex',justifyContent:'center',gap:8,padding:'24px 0' }}>
+          <button onClick={handleDownloadPdf} disabled={pdfLoading}
             className="pdf-dl-btn"
+            style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:600,
+              color:'#fff',background:'#B71C1C',border:'1px solid #B71C1C',borderRadius:6,cursor: pdfLoading ? 'wait' : 'pointer',
+              fontFamily:'inherit',opacity: pdfLoading ? 0.7 : 1 }}>
+            <i className={pdfLoading ? 'fas fa-spinner fa-spin' : 'fas fa-file-pdf'}/>
+            {pdfLoading ? 'Generowanie…' : 'Pobierz PDF'}
+          </button>
+          <button onClick={() => handlePrint()}
             style={{ display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:13,fontWeight:500,
               color:'#86868B',background:'#fff',border:'1px solid #E0E0E0',borderRadius:6,cursor:'pointer',fontFamily:'inherit' }}>
-            <i className="fas fa-file-pdf"/> Pobierz PDF
+            <i className="fas fa-print"/> Drukuj
           </button>
         </div>
       </main>
