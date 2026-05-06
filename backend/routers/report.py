@@ -989,6 +989,37 @@ async def get_report(deal_id: int, request: Request):
                          _safe_str(_bi.get("userOwner")))
     order_title      = _safe_str(raw.get("TITLE")) or f"Inspekcja #{deal_id}"
 
+    # ── Eurotax equipment (auto-pull from PDF if attached) ────────────────
+    eurotax_equipment: List[str] = []
+    try:
+        import os, tempfile
+        from pathlib import Path as _Path
+        from services.bitrix_disk import get_deal_file_id, download_file_by_id
+        from services.eurotax_parser import parse_eurotax_pdf
+
+        _EUROTAX_FIELD = os.getenv("BITRIX_EUROTAX_FIELD", "UF_CRM_1775497355115")
+        _gateway = request.app.state.gateway
+        _file_id = await get_deal_file_id(_gateway, deal_id, _EUROTAX_FIELD)
+        if _file_id:
+            _pdf_bytes = await download_file_by_id(deal_id, _EUROTAX_FIELD, _file_id)
+            _tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            try:
+                _tmp.write(_pdf_bytes)
+                _tmp.flush()
+                _tmp.close()
+                _parsed = parse_eurotax_pdf(_tmp.name)
+                eurotax_equipment = _parsed.get("equipment_options") or []
+            finally:
+                try:
+                    _Path(_tmp.name).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            logger.info(f"[Report] deal={deal_id}: Eurotax equipment extracted ({len(eurotax_equipment)} items)")
+        else:
+            logger.info(f"[Report] deal={deal_id}: No Eurotax PDF attached, skipping equipment pull")
+    except Exception as _eq_err:
+        logger.warning(f"[Report] deal={deal_id}: Eurotax equipment pull failed (non-fatal): {_eq_err}")
+
     # ── Build & return ────────────────────────────────────────────────────
     return {
         "deal_id":         deal_id,
@@ -1036,6 +1067,7 @@ async def get_report(deal_id: int, request: Request):
         "interior_damages":   interior_damages,
         "equipment":          equipment,
         "full_equipment":     insp_rec_full_eq or {},
+        "eurotax_equipment":  eurotax_equipment,
         "documents_check":    documents_check,
 
         "mechanical": {

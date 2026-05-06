@@ -37,6 +37,7 @@ interface ReportData {
   quick_stats: { year?: string | number; fuel?: string; power?: string; transmission?: string };
   damage_summary: { cosmetic: number; structural: number; bodywork: number };
   equipment: Array<{ name: string; present: boolean }>;
+  eurotax_equipment?: string[];
   photos: {
     standard: PhotoItem[]; body: PhotoItem[]; interior: PhotoItem[];
     engine: PhotoItem[]; documents: PhotoItem[]; damages: PhotoItem[];
@@ -700,6 +701,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         const norm: ReportData = {
           ...d,
           equipment:          Array.isArray(d.equipment)          ? d.equipment          : [],
+          eurotax_equipment:  Array.isArray(d.eurotax_equipment)  ? d.eurotax_equipment  : [],
           documents_check:    Array.isArray(d.documents_check)    ? d.documents_check    : [],
           tires:              Array.isArray(d.tires)              ? d.tires              : [],
           paint_measurements: Array.isArray(d.paint_measurements) ? d.paint_measurements : [],
@@ -1204,12 +1206,31 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
 
 
-        {/*
-          SECTION 02 (Wyposażenie) intentionally removed from the Condition Report.
-          The VIN-decoder / Stage 1 manual checklist was unreliable as an equipment
-          source. Equipment will be sourced from the Stage 2 appraiser's uploaded
-          PDF in a future iteration; until then nothing is shown here.
-        */}
+        {/* ── SECTION 02: WYPOSAŻENIE (Eurotax) ── */}
+        {(data.eurotax_equipment && data.eurotax_equipment.length > 0) && (
+          <CollapsibleSection id="wyposazenie" icon="fas fa-list-check" num="02 / Wyposażenie" title="Wyposażenie — Eurotax">
+            <div style={{ fontSize:12,color:'#86868B',marginBottom:16,display:'flex',alignItems:'center',gap:8 }}>
+              <i className="fas fa-file-pdf" style={{ color:'#B71C1C' }}/>
+              Lista wyposażenia wyodrębniona z wyceny Eurotax
+            </div>
+            <div className="rg-photos" style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10 }}>
+              {data.eurotax_equipment.map((item, i) => (
+                <div key={i} style={{
+                  display:'flex',alignItems:'center',gap:10,
+                  padding:'10px 14px',borderRadius:10,
+                  background:'#F8F8FA',border:'1px solid #E8E8ED',
+                  transition:'all 0.2s',
+                }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background='#F0F0F5'; (e.currentTarget as HTMLDivElement).style.borderColor='#D0D0D8'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background='#F8F8FA'; (e.currentTarget as HTMLDivElement).style.borderColor='#E8E8ED'; }}
+                >
+                  <i className="fas fa-check-circle" style={{ color:'#22C55E',fontSize:14,flexShrink:0 }}/>
+                  <span style={{ fontSize:13,fontWeight:500,color:'#1D1D1F' }}>{item}</span>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+        )}
 
         {/* ── SECTION 03: ZDJĘCIA PODSTAWOWE ── */}
         <CollapsibleSection id="zdjecia-podstawowe" icon="fas fa-camera" num="03 / Zdjęcia podstawowe" title="Zdjęcia podstawowe">
