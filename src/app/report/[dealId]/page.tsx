@@ -786,18 +786,50 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
   const handleDownloadPdf = useCallback(async () => {
     setPdfLoading(true);
     try {
-      const res = await fetch(`/api/protokol/${dealId}/pdf`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Raport_stanu_pojazdu_${dealId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Dynamically import html2pdf.js (client-side only)
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default;
+
+      // Force-open all collapsible sections so content renders
+      document.body.classList.add('force-print-open');
+
+      // Wait a tick for sections to expand and images to start loading
+      await new Promise(r => setTimeout(r, 300));
+
+      // Wait for all images to finish loading
+      const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('#main-content img'));
+      const pending = imgs.filter(img => !img.complete);
+      if (pending.length > 0) {
+        await Promise.race([
+          Promise.all(pending.map(img => new Promise<void>(resolve => {
+            img.addEventListener('load', () => resolve(), { once: true });
+            img.addEventListener('error', () => resolve(), { once: true });
+          }))),
+          new Promise<void>(r => setTimeout(r, 5000)), // 5s timeout
+        ]);
+      }
+
+      const element = document.getElementById('main-content');
+      if (!element) throw new Error('Content element not found');
+
+      // Hide no-print elements (buttons, etc.) during PDF generation
+      const noPrintEls = element.querySelectorAll<HTMLElement>('.no-print');
+      noPrintEls.forEach(el => { el.style.display = 'none'; });
+
+      await html2pdf().set({
+        margin:      [8, 5, 8, 5],
+        filename:    `Raport_stanu_pojazdu_${dealId}.pdf`,
+        image:       { type: 'jpeg', quality: 0.92 },
+        html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true },
+        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] },
+      }).from(element).save();
+
+      // Restore hidden elements
+      noPrintEls.forEach(el => { el.style.display = ''; });
+      document.body.classList.remove('force-print-open');
     } catch (err) {
+      document.body.classList.remove('force-print-open');
       alert('Nie udało się wygenerować PDF. Spróbuj ponownie.');
       console.error('PDF download failed:', err);
     } finally {
