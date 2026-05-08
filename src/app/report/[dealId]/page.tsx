@@ -38,6 +38,11 @@ interface ReportData {
   damage_summary: { cosmetic: number; structural: number; bodywork: number };
   equipment: Array<{ name: string; present: boolean }>;
   eurotax_equipment?: string[];
+  wyposazenie?: {
+    standardowe: string[];
+    dodatkowe:   string[];
+    specjalne:   string[];
+  };
   photos: {
     standard: PhotoItem[]; body: PhotoItem[]; interior: PhotoItem[];
     engine: PhotoItem[]; documents: PhotoItem[]; damages: PhotoItem[];
@@ -702,6 +707,11 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           ...d,
           equipment:          Array.isArray(d.equipment)          ? d.equipment          : [],
           eurotax_equipment:  Array.isArray(d.eurotax_equipment)  ? d.eurotax_equipment  : [],
+          wyposazenie: {
+            standardowe: Array.isArray(d.wyposazenie?.standardowe) ? d.wyposazenie.standardowe.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0) : [],
+            dodatkowe:   Array.isArray(d.wyposazenie?.dodatkowe)   ? d.wyposazenie.dodatkowe.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)   : [],
+            specjalne:   Array.isArray(d.wyposazenie?.specjalne)   ? d.wyposazenie.specjalne.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)   : [],
+          },
           documents_check:    Array.isArray(d.documents_check)    ? d.documents_check    : [],
           tires:              Array.isArray(d.tires)              ? d.tires              : [],
           paint_measurements: Array.isArray(d.paint_measurements) ? d.paint_measurements : [],
@@ -1237,6 +1247,98 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         </CollapsibleSection>
 
 
+
+        {/* ── SECTION 02: WYPOSAŻENIE (manualne, Stage-2 appraiser) ── */}
+        {(() => {
+          const w = data.wyposazenie;
+          if (!w) return null;
+          const hasStd = w.standardowe.length > 0;
+          const hasDod = w.dodatkowe.length > 0;
+          const hasSpe = w.specjalne.length > 0;
+          if (!hasStd && !hasDod && !hasSpe) return null;
+
+          // Bullet card style — matches Eurotax block visual language.
+          const bulletCard = (text: React.ReactNode, right?: React.ReactNode, key?: number) => (
+            <div key={key} style={{
+              display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,
+              padding:'10px 14px',borderRadius:10,
+              background:'#F8F8FA',border:'1px solid #E8E8ED',
+              transition:'all 0.2s',
+            }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background='#F0F0F5'; (e.currentTarget as HTMLDivElement).style.borderColor='#D0D0D8'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background='#F8F8FA'; (e.currentTarget as HTMLDivElement).style.borderColor='#E8E8ED'; }}
+            >
+              <div style={{ display:'flex',alignItems:'center',gap:10,minWidth:0,flex:1 }}>
+                <i className="fas fa-check-circle" style={{ color:'#22C55E',fontSize:14,flexShrink:0 }}/>
+                <span style={{ fontSize:13,fontWeight:500,color:'#1D1D1F',wordBreak:'break-word',whiteSpace:'normal' }}>{text}</span>
+              </div>
+              {right ? <span style={{ fontSize:12,fontWeight:600,color:'#86868B',whiteSpace:'nowrap',flexShrink:0 }}>{right}</span> : null}
+            </div>
+          );
+
+          // Match "<text> <number> PLN" with optional spaces inside the number.
+          const PRICE_RE = /^(.+?)\s+(\d[\d \s]*\s*PLN)\s*$/i;
+          const renderDodatkowe = (item: string, i: number) => {
+            const m = item.match(PRICE_RE);
+            if (m) return bulletCard(m[1].trim(), m[2].trim(), i);
+            return bulletCard(item, undefined, i);
+          };
+
+          const subHeader = (label: string) => (
+            <div style={{
+              display:'flex',alignItems:'center',gap:10,
+              fontSize:14,fontWeight:700,color:'#1D1D1F',
+              margin:'18px 0 10px',
+              paddingBottom:8,borderBottom:'2px solid #FEE2E2',
+            }}>
+              <span style={{ width:4,height:16,background:'#B71C1C',borderRadius:2 }}/>
+              {label}
+            </div>
+          );
+
+          // Two-column grid kicks in when item count > 12.
+          const gridFor = (count: number) => ({
+            display:'grid',
+            gridTemplateColumns: count > 12 ? 'repeat(auto-fill,minmax(260px,1fr))' : '1fr',
+            gap:8,
+          } as React.CSSProperties);
+
+          return (
+            <CollapsibleSection id="wyposazenie-manual" icon="fas fa-clipboard-check" num="02 / Wyposażenie" title="Wyposażenie pojazdu" defaultOpen>
+              <div style={{ fontSize:12,color:'#86868B',marginBottom:8,display:'flex',alignItems:'center',gap:8 }}>
+                <i className="fas fa-user-check" style={{ color:'#B71C1C' }}/>
+                Lista wyposażenia uzupełniona przez rzeczoznawcę
+              </div>
+
+              {hasStd && (
+                <>
+                  {subHeader('Wyposażenie standardowe')}
+                  <div style={gridFor(w.standardowe.length)}>
+                    {w.standardowe.map((it, i) => bulletCard(it, undefined, i))}
+                  </div>
+                </>
+              )}
+
+              {hasDod && (
+                <>
+                  {subHeader('Wyposażenie dodatkowe')}
+                  <div style={gridFor(w.dodatkowe.length)}>
+                    {w.dodatkowe.map((it, i) => renderDodatkowe(it, i))}
+                  </div>
+                </>
+              )}
+
+              {hasSpe && (
+                <>
+                  {subHeader('Wyposażenie specjalne')}
+                  <div style={gridFor(w.specjalne.length)}>
+                    {w.specjalne.map((it, i) => bulletCard(it, undefined, i))}
+                  </div>
+                </>
+              )}
+            </CollapsibleSection>
+          );
+        })()}
 
         {/* ── SECTION 02: WYPOSAŻENIE (Eurotax) ── */}
         {(data.eurotax_equipment && data.eurotax_equipment.length > 0) && (

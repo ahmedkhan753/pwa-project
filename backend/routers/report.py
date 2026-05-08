@@ -1020,6 +1020,27 @@ async def get_report(deal_id: int, request: Request):
     except Exception as _eq_err:
         logger.warning(f"[Report] deal={deal_id}: Eurotax equipment pull failed (non-fatal): {_eq_err}")
 
+    # ── Manual equipment lists (Stage-2 appraiser fills in Bitrix) ────────
+    def _normalize_string_list(v) -> List[str]:
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            v = [v]
+        out: List[str] = []
+        for x in v:
+            if x is None:
+                continue
+            s = str(x).strip()
+            if s:
+                out.append(s)
+        return out
+
+    wyposazenie = {
+        "standardowe": _normalize_string_list(raw.get("UF_CRM_1778270887068")),
+        "dodatkowe":   _normalize_string_list(raw.get("UF_CRM_1778270911983")),
+        "specjalne":   _normalize_string_list(raw.get("UF_CRM_1778270933065")),
+    }
+
     # ── Build & return ────────────────────────────────────────────────────
     return {
         "deal_id":         deal_id,
@@ -1068,6 +1089,7 @@ async def get_report(deal_id: int, request: Request):
         "equipment":          equipment,
         "full_equipment":     insp_rec_full_eq or {},
         "eurotax_equipment":  eurotax_equipment,
+        "wyposazenie":        wyposazenie,
         "documents_check":    documents_check,
 
         "mechanical": {
