@@ -1036,9 +1036,10 @@ async def get_report(deal_id: int, request: Request):
         return out
 
     wyposazenie = {
-        "standardowe": _normalize_string_list(raw.get("UF_CRM_1778270887068")),
-        "dodatkowe":   _normalize_string_list(raw.get("UF_CRM_1778270911983")),
-        "specjalne":   _normalize_string_list(raw.get("UF_CRM_1778270933065")),
+        "standardowe":         _normalize_string_list(raw.get("UF_CRM_1778277584327")),
+        "dodatkowe":           _normalize_string_list(raw.get("UF_CRM_1778277602592")),
+        "specjalne":           _normalize_string_list(raw.get("UF_CRM_1778277628717")),
+        "czynniki_obnizajace": _normalize_string_list(raw.get("UF_CRM_1778277647172")),
     }
 
     # ── Build & return ────────────────────────────────────────────────────
