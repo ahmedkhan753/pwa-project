@@ -1022,16 +1022,27 @@ async def get_report(deal_id: int, request: Request):
 
     # ── Manual equipment lists (Stage-2 appraiser fills in Bitrix) ────────
     def _normalize_string_list(v) -> List[str]:
-        if v is None:
+        # Bitrix returns False (not None/[]) for unset multi-value fields —
+        # without this guard, str(False) becomes the literal "False" bullet.
+        if v is None or isinstance(v, bool):
             return []
         if not isinstance(v, list):
             v = [v]
         out: List[str] = []
         for x in v:
-            if x is None:
+            if x is None or isinstance(x, bool):
                 continue
             s = str(x).strip()
-            if s:
+            if not s:
+                continue
+            # Paste-friendly: a single "• ABS • ESP • Tempomat" entry expands
+            # into separate items. Items without `•` pass through unchanged.
+            if "•" in s:
+                for piece in s.split("•"):
+                    p = piece.strip()
+                    if p:
+                        out.append(p)
+            else:
                 out.append(s)
         return out
 
@@ -1040,6 +1051,22 @@ async def get_report(deal_id: int, request: Request):
         "dodatkowe":           _normalize_string_list(raw.get("UF_CRM_1778277602592")),
         "specjalne":           _normalize_string_list(raw.get("UF_CRM_1778277628717")),
         "czynniki_obnizajace": _normalize_string_list(raw.get("UF_CRM_1778277647172")),
+    }
+
+    # ── Komentarze rzeczoznawcy (single-value String fields) ──────────────
+    def _safe_comment(v) -> str:
+        if v is None or isinstance(v, bool):
+            return ""
+        s = str(v).strip()
+        return s
+
+    komentarze = {
+        "dane_pojazdu":  _safe_comment(raw.get("UF_CRM_1778444266312")),
+        "wyposazenie":   _safe_comment(raw.get("UF_CRM_1778444290027")),
+        "zdjecia":       _safe_comment(raw.get("UF_CRM_1778444308127")),
+        "opony_lakier":  _safe_comment(raw.get("UF_CRM_1778444326195")),
+        "uszkodzenia":   _safe_comment(raw.get("UF_CRM_1778444342847")),
+        "silnik":        _safe_comment(raw.get("UF_CRM_1778444358921")),
     }
 
     # ── Build & return ────────────────────────────────────────────────────
@@ -1091,6 +1118,7 @@ async def get_report(deal_id: int, request: Request):
         "full_equipment":     insp_rec_full_eq or {},
         "eurotax_equipment":  eurotax_equipment,
         "wyposazenie":        wyposazenie,
+        "komentarze":         komentarze,
         "documents_check":    documents_check,
 
         "mechanical": {

@@ -44,6 +44,14 @@ interface ReportData {
     specjalne:           string[];
     czynniki_obnizajace: string[];
   };
+  komentarze?: {
+    dane_pojazdu: string;
+    wyposazenie:  string;
+    zdjecia:      string;
+    opony_lakier: string;
+    uszkodzenia:  string;
+    silnik:       string;
+  };
   photos: {
     standard: PhotoItem[]; body: PhotoItem[]; interior: PhotoItem[];
     engine: PhotoItem[]; documents: PhotoItem[]; damages: PhotoItem[];
@@ -675,6 +683,27 @@ function LoadingScreen() {
   );
 }
 
+// ─── Komentarz rzeczoznawcy block (renders only when text non-empty) ────────────
+function KomentarzBlock({ text }: { text: string }) {
+  if (!text || !text.trim()) return null;
+  return (
+    <div style={{
+      marginTop: 20,
+      padding: '14px 16px',
+      borderLeft: '3px solid #B71C1C',
+      background: '#FFF8F8',
+      borderRadius: 6,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#B71C1C', marginBottom: 6, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+        Komentarz rzeczoznawcy
+      </div>
+      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: '#1D1D1F', fontStyle: 'italic', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        {text}
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function ReportPage({ params }: { params: { dealId: string } }) {
@@ -713,6 +742,14 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             dodatkowe:           Array.isArray(d.wyposazenie?.dodatkowe)           ? d.wyposazenie.dodatkowe.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)           : [],
             specjalne:           Array.isArray(d.wyposazenie?.specjalne)           ? d.wyposazenie.specjalne.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)           : [],
             czynniki_obnizajace: Array.isArray(d.wyposazenie?.czynniki_obnizajace) ? d.wyposazenie.czynniki_obnizajace.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0) : [],
+          },
+          komentarze: {
+            dane_pojazdu: typeof d.komentarze?.dane_pojazdu === 'string' ? d.komentarze.dane_pojazdu.trim() : '',
+            wyposazenie:  typeof d.komentarze?.wyposazenie  === 'string' ? d.komentarze.wyposazenie.trim()  : '',
+            zdjecia:      typeof d.komentarze?.zdjecia      === 'string' ? d.komentarze.zdjecia.trim()      : '',
+            opony_lakier: typeof d.komentarze?.opony_lakier === 'string' ? d.komentarze.opony_lakier.trim() : '',
+            uszkodzenia:  typeof d.komentarze?.uszkodzenia  === 'string' ? d.komentarze.uszkodzenia.trim()  : '',
+            silnik:       typeof d.komentarze?.silnik       === 'string' ? d.komentarze.silnik.trim()       : '',
           },
           documents_check:    Array.isArray(d.documents_check)    ? d.documents_check    : [],
           tires:              Array.isArray(d.tires)              ? d.tires              : [],
@@ -916,8 +953,12 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
         @media(max-width:1024px){
           .rg-4{grid-template-columns:repeat(3,minmax(0,1fr));}
           .rg-tire-paint{grid-template-columns:1fr;}
+          .rg-std-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
           .summary-specs{border-right:none;padding-right:0;padding-bottom:16px;border-bottom:1px solid #E8E8ED;}
           .summary-damages{justify-content:center;}
+        }
+        @media(max-width:640px){
+          .rg-std-grid{grid-template-columns:1fr!important;}
         }
         @media(max-width:768px){
           .rg-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
@@ -1246,6 +1287,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               </div>
             ))}
           </div>
+          <KomentarzBlock text={data.komentarze?.dane_pojazdu || ''} />
         </CollapsibleSection>
 
 
@@ -1325,6 +1367,14 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             gap:8,
           } as React.CSSProperties);
 
+          // Wyposażenie standardowe: 3 cols desktop / 2 tablet / 1 mobile.
+          // Uses a className so we can hook responsive breakpoints in CSS.
+          const stdGridStyle: React.CSSProperties = {
+            display:'grid',
+            gridTemplateColumns:'repeat(3,minmax(0,1fr))',
+            gap:8,
+          };
+
           return (
             <CollapsibleSection id="wyposazenie-manual" icon="fas fa-clipboard-check" num="02 / Wyposażenie" title="Wyposażenie pojazdu" defaultOpen>
               <div style={{ fontSize:12,color:'#86868B',marginBottom:8,display:'flex',alignItems:'center',gap:8 }}>
@@ -1335,7 +1385,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               {hasStd && (
                 <>
                   {subHeader('Wyposażenie standardowe')}
-                  <div style={gridFor(w.standardowe.length)}>
+                  <div className="rg-std-grid" style={stdGridStyle}>
                     {w.standardowe.map((it, i) => bulletCard(it, undefined, i))}
                   </div>
                 </>
@@ -1367,6 +1417,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   </div>
                 </>
               )}
+
+              <KomentarzBlock text={data.komentarze?.wyposazenie || ''} />
             </CollapsibleSection>
           );
         })()}
@@ -1496,6 +1548,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               </div>
             </div>
           </div>
+          <KomentarzBlock text={data.komentarze?.opony_lakier || ''} />
         </CollapsibleSection>
 
         <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
@@ -1607,6 +1660,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               ))}
             </div>
           )}
+          <KomentarzBlock text={data.komentarze?.zdjecia || ''} />
         </CollapsibleSection>
 
         {/* ── EXTERIOR DAMAGE ── */}
@@ -1725,6 +1779,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   </div>
                 ))}
               </div>
+              <KomentarzBlock text={data.komentarze?.uszkodzenia || ''} />
             </CollapsibleSection>
           </>
         )}
@@ -1843,6 +1898,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                     </tbody>
                   </table>
                 </div>
+                <KomentarzBlock text={data.komentarze?.silnik || ''} />
               </CollapsibleSection>
             </>
           );
