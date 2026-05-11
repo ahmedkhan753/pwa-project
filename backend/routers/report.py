@@ -9,6 +9,7 @@ No authentication required — designed for public sharing.
 import base64 as _b64
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,42 @@ from models.inspector import InspectionPhoto, InspectionRecord
 
 router = APIRouter(tags=["report"])
 logger = logging.getLogger("routers.report")
+
+
+# ─── Public helpers (kept at module level so tests can import them) ──────────
+
+def _normalize_string_list(v) -> List[str]:
+    # Bitrix returns False (not None/[]) for unset multi-value fields —
+    # without this guard, str(False) becomes the literal "False" bullet.
+    if v is None or isinstance(v, bool):
+        return []
+    if not isinstance(v, list):
+        v = [v]
+    out: List[str] = []
+    for x in v:
+        if x is None or isinstance(x, bool):
+            continue
+        s = str(x).strip()
+        if not s:
+            continue
+        # Paste-friendly: a single entry containing any of the supported
+        # delimiters (• U+2022, ● U+25CF, newline, CR) expands into separate
+        # items. Comma is NOT a delimiter — Polish names can contain commas
+        # (e.g. "Pakiet Sport, w tym fotele skórzane").
+        if re.search(r"[•●\n\r]", s):
+            for piece in re.split(r"[•●\n\r]+", s):
+                p = piece.strip()
+                if p:
+                    out.append(p)
+        else:
+            out.append(s)
+    return out
+
+
+def _safe_comment(v) -> str:
+    if v is None or isinstance(v, bool):
+        return ""
+    return str(v).strip()
 
 
 # ─── Bitrix field ID mappings (from mapping_overrides.json) ───────────────────
@@ -243,11 +280,10 @@ def _extract_file_urls(field_value: Any, auth_token: str, base_domain: str) -> L
             url = item
 
         if url:
-            import re as _re
             if auth_token:
                 # Replace empty auth= or append if missing
-                if _re.search(r'auth=(&|$)', url):
-                    url = _re.sub(r'auth=(&|$)', f'auth={auth_token}\\1', url)
+                if re.search(r'auth=(&|$)', url):
+                    url = re.sub(r'auth=(&|$)', f'auth={auth_token}\\1', url)
                 elif 'auth=' not in url:
                     sep = "&" if "?" in url else "?"
                     url = f"{url}{sep}auth={auth_token}"
@@ -801,7 +837,6 @@ async def get_report(deal_id: int, request: Request):
 
         # Last resort: parse depth from size string ("205/55 R16 4.5mm")
         if size and not depth:
-            import re
             m = re.search(r'(\d+(?:[.,]\d+)?)\s*mm', size, re.IGNORECASE)
             if m:
                 depth = _safe_float(m.group(1))
@@ -1021,31 +1056,6 @@ async def get_report(deal_id: int, request: Request):
         logger.warning(f"[Report] deal={deal_id}: Eurotax equipment pull failed (non-fatal): {_eq_err}")
 
     # ── Manual equipment lists (Stage-2 appraiser fills in Bitrix) ────────
-    def _normalize_string_list(v) -> List[str]:
-        # Bitrix returns False (not None/[]) for unset multi-value fields —
-        # without this guard, str(False) becomes the literal "False" bullet.
-        if v is None or isinstance(v, bool):
-            return []
-        if not isinstance(v, list):
-            v = [v]
-        out: List[str] = []
-        for x in v:
-            if x is None or isinstance(x, bool):
-                continue
-            s = str(x).strip()
-            if not s:
-                continue
-            # Paste-friendly: a single "• ABS • ESP • Tempomat" entry expands
-            # into separate items. Items without `•` pass through unchanged.
-            if "•" in s:
-                for piece in s.split("•"):
-                    p = piece.strip()
-                    if p:
-                        out.append(p)
-            else:
-                out.append(s)
-        return out
-
     wyposazenie = {
         "standardowe":         _normalize_string_list(raw.get("UF_CRM_1778277584327")),
         "dodatkowe":           _normalize_string_list(raw.get("UF_CRM_1778277602592")),
@@ -1054,12 +1064,6 @@ async def get_report(deal_id: int, request: Request):
     }
 
     # ── Komentarze rzeczoznawcy (single-value String fields) ──────────────
-    def _safe_comment(v) -> str:
-        if v is None or isinstance(v, bool):
-            return ""
-        s = str(v).strip()
-        return s
-
     komentarze = {
         "dane_pojazdu":  _safe_comment(raw.get("UF_CRM_1778444266312")),
         "wyposazenie":   _safe_comment(raw.get("UF_CRM_1778444290027")),
@@ -1324,7 +1328,6 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
     Stream a single photo or video binary.
     Supports HTTP Range requests so browsers can seek inside videos.
     """
-    import re as _re
     from fastapi.responses import Response as _Resp
 
     _db = None
@@ -1344,7 +1347,7 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
 
         range_header = request.headers.get("range")
         if range_header:
-            m = _re.match(r"bytes=(\d*)-(\d*)", range_header)
+            m = re.match(r"bytes=(\d*)-(\d*)", range_header)
             if m:
                 start = int(m.group(1)) if m.group(1) else 0
                 end   = int(m.group(2)) if m.group(2) else total - 1
