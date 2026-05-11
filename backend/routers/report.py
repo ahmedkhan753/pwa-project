@@ -9,6 +9,7 @@ No authentication required — designed for public sharing.
 import base64 as _b64
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -1035,10 +1036,12 @@ async def get_report(deal_id: int, request: Request):
             s = str(x).strip()
             if not s:
                 continue
-            # Paste-friendly: a single "• ABS • ESP • Tempomat" entry expands
-            # into separate items. Items without `•` pass through unchanged.
-            if "•" in s:
-                for piece in s.split("•"):
+            # Paste-friendly: a single entry containing any of the supported
+            # delimiters (• U+2022, ● U+25CF, newline, CR) expands into separate
+            # items. Comma is NOT a delimiter — Polish names can contain commas
+            # (e.g. "Pakiet Sport, w tym fotele skórzane").
+            if re.search(r"[•●\n\r]", s):
+                for piece in re.split(r"[•●\n\r]+", s):
                     p = piece.strip()
                     if p:
                         out.append(p)
