@@ -1394,7 +1394,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               {hasDod && (
                 <>
                   {subHeader('Wyposażenie dodatkowe')}
-                  <div className="rg-std-grid" style={stdGridStyle}>
+                  <div style={gridFor(w.dodatkowe.length)}>
                     {w.dodatkowe.map((it, i) => renderWithPrice(it, i))}
                   </div>
                 </>
@@ -1403,7 +1403,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               {hasSpe && (
                 <>
                   {subHeader('Wyposażenie specjalne')}
-                  <div className="rg-std-grid" style={stdGridStyle}>
+                  <div style={gridFor(w.specjalne.length)}>
                     {w.specjalne.map((it, i) => bulletCard(it, undefined, i))}
                   </div>
                 </>
@@ -1412,7 +1412,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               {hasCzy && (
                 <>
                   {subHeader('Czynniki obniżające wartość')}
-                  <div className="rg-std-grid" style={stdGridStyle}>
+                  <div style={gridFor(w.czynniki_obnizajace.length)}>
                     {w.czynniki_obnizajace.map((it, i) => renderWithPrice(it, i))}
                   </div>
                 </>
