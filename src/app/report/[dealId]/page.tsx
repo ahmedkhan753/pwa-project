@@ -1376,7 +1376,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           };
 
           return (
-            <CollapsibleSection id="wyposazenie-manual" icon="fas fa-clipboard-check" num="02 / Wyposażenie" title="Wyposażenie pojazdu" defaultOpen>
+            <CollapsibleSection id="wyposazenie-manual" icon="fas fa-clipboard-check" num="02 / Wyposażenie" title="Wyposażenie pojazdu">
               <div style={{ fontSize:12,color:'#86868B',marginBottom:8,display:'flex',alignItems:'center',gap:8 }}>
                 <i className="fas fa-user-check" style={{ color:'#B71C1C' }}/>
                 Lista wyposażenia uzupełniona przez rzeczoznawcę
@@ -1906,8 +1906,10 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         </div>{/* end sections-stack */}
 
-        {/* Attached PDF Reports — fetched from our server */}
-        <DocumentsSection dealId={data.deal_id} />
+        {/* Attached PDF Reports — rendered below inside `dodatkowe-dokumenty`
+            CollapsibleSection. The standalone <DocumentsSection> component was
+            previously rendered here too, which caused CEPIK / Historia Szkodowości
+            to appear twice on the page. Removed; the inline section is canonical. */}
 
         {/* Notes */}
         {data.notes && (
