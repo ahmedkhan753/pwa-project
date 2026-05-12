@@ -6,6 +6,7 @@ Returns structured vehicle inspection report data from Bitrix24.
 No authentication required — designed for public sharing.
 """
 
+import asyncio
 import base64 as _b64
 import json
 import logging
@@ -979,8 +980,14 @@ async def get_report(deal_id: int, request: Request):
     )
 
     # ── Signatures ────────────────────────────────────────────────────────
-    sig_appraiser_urls = _extract_file_urls(raw.get("UF_CRM_1772801573"), auth_token, base_domain)
-    sig_client_urls    = _extract_file_urls(raw.get("UF_CRM_1772190199297"), auth_token, base_domain)
+    # show_file.php URLs require a logged-in user session — the webhook
+    # auth= token gets rejected and Bitrix returns an HTML login page,
+    # which <img> can't render. Route through /api/signature/{deal_id}/{kind}
+    # which uses OAuth via services.bitrix_disk (same path as Eurotax PDF).
+    _sig_appraiser_has = bool(_extract_file_urls(raw.get("UF_CRM_1772801573"), auth_token, base_domain))
+    _sig_client_has    = bool(_extract_file_urls(raw.get("UF_CRM_1772190199297"), auth_token, base_domain))
+    sig_appraiser_url: Optional[str] = f"/api/signature/{deal_id}/inspector" if _sig_appraiser_has else None
+    sig_client_url:    Optional[str] = f"/api/signature/{deal_id}/client"    if _sig_client_has    else None
 
     # ── Attached PDF reports (CEPIK + damage history) ─────────────────────
     cepik_urls   = _extract_file_urls(raw.get("UF_CRM_1775497237180"), auth_token, base_domain)
@@ -1018,10 +1025,41 @@ async def get_report(deal_id: int, request: Request):
     inspection_place = (_safe_str(raw.get("UF_CRM_1766058185504")) or
                         _safe_str(raw.get("UF_CRM_1766058194337")) or
                         _safe_str(_bi.get("inspectionPlace")))
-    company_name     = _safe_str(raw.get("UF_CRM_1766057964319")) or _safe_str(_bi.get("companyName"))
-    client_name      = (_safe_str(raw.get("UF_CRM_1766057941327")) or
-                         _safe_str(raw.get("UF_CRM_1766057964319")) or
-                         _safe_str(_bi.get("userOwner")))
+    # Primary: appraiser-filled UF_CRM custom fields.
+    # Fallback 1: Bitrix-linked Company / Contact entities (deal 1694 showed
+    #   the UF fields can be empty while COMPANY_ID / CONTACT_ID are set).
+    # Fallback 2: inspector-record basicInfo — last resort because it can
+    #   contain deal-title noise (e.g. "Peugeot WWL8283N" in both slots).
+    company_name = _safe_str(raw.get("UF_CRM_1766057964319"))
+    client_name  = _safe_str(raw.get("UF_CRM_1766057941327"))
+
+    if not company_name and raw.get("COMPANY_ID") and bitrix_ready:
+        try:
+            co = await asyncio.wait_for(
+                gateway.call("crm.company.get", {"ID": raw["COMPANY_ID"]}),
+                timeout=3.0,
+            )
+            company_name = _safe_str((co or {}).get("TITLE"))
+        except Exception as _co_err:
+            logger.warning(f"[Report] crm.company.get failed for deal {deal_id}: {_co_err}")
+
+    if not client_name and raw.get("CONTACT_ID") and bitrix_ready:
+        try:
+            ct = await asyncio.wait_for(
+                gateway.call("crm.contact.get", {"ID": raw["CONTACT_ID"]}),
+                timeout=3.0,
+            )
+            ct = ct or {}
+            client_name = " ".join(
+                p for p in (_safe_str(ct.get("NAME")), _safe_str(ct.get("LAST_NAME"))) if p
+            ).strip()
+        except Exception as _ct_err:
+            logger.warning(f"[Report] crm.contact.get failed for deal {deal_id}: {_ct_err}")
+
+    if not company_name:
+        company_name = _safe_str(_bi.get("companyName"))
+    if not client_name:
+        client_name = _safe_str(_bi.get("userOwner"))
     order_title      = _safe_str(raw.get("TITLE")) or f"Inspekcja #{deal_id}"
 
     # ── Eurotax equipment (auto-pull from PDF if attached) ────────────────
@@ -1139,11 +1177,11 @@ async def get_report(deal_id: int, request: Request):
         "signatures": {
             "inspector": {
                 "name":          inspector_name,
-                "signature_url": sig_appraiser_urls[0] if sig_appraiser_urls else None,
+                "signature_url": sig_appraiser_url,
             },
             "client": {
                 "name":          client_name,
-                "signature_url": sig_client_urls[0] if sig_client_urls else None,
+                "signature_url": sig_client_url,
             },
         },
 
@@ -1385,6 +1423,55 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
                 _db.close()
             except Exception:
                 pass
+
+
+# Field IDs for signature file-upload fields on the deal.
+_SIGNATURE_FIELDS = {
+    "inspector": "UF_CRM_1772801573",
+    "client":    "UF_CRM_1772190199297",
+}
+
+
+@router.get("/signature/{deal_id}/{kind}")
+async def get_signature(deal_id: int, kind: str, request: Request):
+    """
+    GET /api/signature/{deal_id}/{kind}     where kind ∈ {inspector, client}
+    Stream a signature PNG that lives on the Bitrix deal as a file field.
+    Routes through services.bitrix_disk so the OAuth-authenticated
+    show_file.php call returns the actual binary instead of an HTML
+    login page (which is what the webhook auth=… query token gets).
+    """
+    from fastapi.responses import Response as _Resp
+    from services.bitrix_disk import get_deal_file_id, download_file_by_id
+
+    field_name = _SIGNATURE_FIELDS.get(kind)
+    if not field_name:
+        raise HTTPException(status_code=404, detail="Unknown signature kind")
+
+    gateway = request.app.state.gateway
+    file_id = await get_deal_file_id(gateway, deal_id, field_name)
+    if not file_id:
+        raise HTTPException(status_code=404, detail="Signature not uploaded for this deal")
+
+    try:
+        data = await download_file_by_id(deal_id, field_name, file_id)
+    except RuntimeError as e:
+        code = str(e)
+        if code in ("oauth_not_configured", "oauth_token_unavailable", "bitrix_base_domain_unset"):
+            raise HTTPException(status_code=503, detail=code)
+        # http_NNN, bitrix_returned_html_login_page, bitrix_returned_empty_body
+        raise HTTPException(status_code=502, detail=code)
+
+    # Signatures are PNG in this system; fall back to octet-stream if magic bytes differ.
+    mime = "image/png" if data[:8].startswith(b"\x89PNG") else "application/octet-stream"
+    return _Resp(
+        content=data,
+        media_type=mime,
+        headers={
+            "Content-Length": str(len(data)),
+            "Cache-Control":  "private, max-age=3600",
+        },
+    )
 
 
 @router.get("/gallery/{deal_id}/damage/{source}/{dmg_idx}/{photo_idx}")
