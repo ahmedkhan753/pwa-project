@@ -9,6 +9,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/ui/Logo";
 import { startUploadWorker, stopUploadWorker, MAX_UPLOAD_ATTEMPTS } from "@/lib/uploadWorker";
 import { photoQueue } from "@/lib/photoUploadQueue";
+import { isStep9Valid, STEP9_REQUIRED_KEYS, STEP9_FIELD_ID_PREFIX } from "./steps/MechanicalStep";
+
+// Mechanika step index in the wizard (verify against StepDispatcher.tsx).
+const MECHANICAL_STEP = 9;
 
 const STEPS = [
     { num: 1, short: "Dane", label: "Dane Pojazdu" },
@@ -27,6 +31,7 @@ const STEPS = [
 
 export function WizardLayout({ children }: { children: React.ReactNode }) {
     const { currentStep, maxVisitedStep, setStep, logout, selectJob, syncStepWithBitrix } = useInspectionStore();
+    const setStep9AttemptedNext = useInspectionStore((s) => s.setStep9AttemptedNext);
     const totalSteps = STEPS.length;
     const mainRef = useRef<HTMLElement>(null);
     const didMountRef = useRef(false);
@@ -137,8 +142,34 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     }, [currentStep, syncStepWithBitrix, isSubmitting]);
 
 
+    // Level-2 gate: inspector must fill 5 critical mechanical fields before
+    // leaving Step 9. Going BACKWARD is always allowed. Going forward without
+    // satisfying validation flips the "attempted" flag (paints the form red)
+    // and scrolls to the first empty required field.
+    const enforceStep9Gate = (): boolean => {
+        if (currentStep !== MECHANICAL_STEP) return true;
+        const mech = useInspectionStore.getState().data.mechanical as unknown as Record<string, unknown>;
+        if (isStep9Valid(mech)) return true;
+        setStep9AttemptedNext(true);
+        const firstMissing = STEP9_REQUIRED_KEYS.find((k) => {
+            const v = mech?.[k];
+            return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+        });
+        if (firstMissing) {
+            // requestAnimationFrame so the red-border ring renders before we scroll.
+            requestAnimationFrame(() => {
+                const el = document.getElementById(`${STEP9_FIELD_ID_PREFIX}${firstMissing}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        }
+        return false;
+    };
+
     const next = () => {
-        if (currentStep < totalSteps) setStep(currentStep + 1);
+        if (currentStep < totalSteps) {
+            if (!enforceStep9Gate()) return;
+            setStep(currentStep + 1);
+        }
     };
 
     const prev = () => {
@@ -146,6 +177,8 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
     };
 
     const goToStep = (step: number) => {
+        // Backward jumps always allowed — only block forward jumps past Step 9.
+        if (step > currentStep && !enforceStep9Gate()) return;
         if (step <= maxVisitedStep || step === currentStep + 1) {
             setStep(step);
         }

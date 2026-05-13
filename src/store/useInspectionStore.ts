@@ -405,6 +405,13 @@ export interface InspectionPayload extends StepData {
 interface InspectionState {
   currentStep: number;
   maxVisitedStep: number;
+  /**
+   * Set to true the first time the inspector tries to advance past Step 9
+   * (Mechanika) without filling the required fields. Drives the red-border /
+   * "To pole jest wymagane" error styling in MechanicalStep. Cleared whenever
+   * the inspector leaves Step 9 so it doesn't carry into other steps.
+   */
+  step9AttemptedNext: boolean;
   data: StepData;
   // Auth
   auth: {
@@ -438,6 +445,7 @@ interface InspectionState {
 
   // Actions
   setStep: (step: number) => void;
+  setStep9AttemptedNext: (v: boolean) => void;
   // Auth Actions
   setAuth: (auth: Partial<InspectionState['auth']>) => void;
   login: (email: string, token: string, user: AuthUser) => void;
@@ -683,6 +691,7 @@ export const useInspectionStore = create<InspectionState>()(
     (set) => ({
       currentStep: 1,
       maxVisitedStep: 1,
+      step9AttemptedNext: false,
       data: initialData,
       auth: {
         isAuthenticated: false,
@@ -714,7 +723,13 @@ export const useInspectionStore = create<InspectionState>()(
         set((state) => ({
           currentStep: step,
           maxVisitedStep: Math.max(state.maxVisitedStep, step),
+          // Reset the "attempted to leave" flag whenever we leave Step 9 so
+          // the next time the inspector visits the page they don't see
+          // pre-warmed errors.
+          step9AttemptedNext: step === 9 ? state.step9AttemptedNext : false,
         })),
+
+      setStep9AttemptedNext: (v: boolean) => set({ step9AttemptedNext: v }),
 
       // ── Auth Actions ──
       setAuth: (authUpdate) =>
