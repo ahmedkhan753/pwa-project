@@ -86,6 +86,18 @@ VEHICLE_FIELDS = {
     "version":           "UF_CRM_1766057961822",
 }
 
+# ─── Mechanical-row UF_CRM fallbacks ─────────────────────────────────────────
+# Maps frontend PWA keys (page.tsx Section 09 ROWS) to Bitrix UF_CRM IDs.
+# Used as a per-key fallback after the JSON blob (UF_CRM_1772613597958) and
+# InspectionRecord.mechanical_json. Add new entries here as Bitrix grows
+# per-row custom fields — no other code change required.
+MECHANICAL_FIELD_FALLBACKS: Dict[str, str] = {
+    "engineOilLevel": "UF_CRM_1772534488",   # mapping: engine_oil_level
+    "coolantLevel":   "UF_CRM_1772534597",   # mapping: coolant_level
+    "steeringPump":   "UF_CRM_1772534574",   # mapping: power_steering_level
+}
+
+
 # ─── Photo slot label lookup ─────────────────────────────────────────────────
 
 PHOTO_LABELS: dict = {
@@ -960,6 +972,20 @@ async def get_report(deal_id: int, request: Request):
                 mechanical = {}
         elif isinstance(mech_raw, dict):
             mechanical = mech_raw
+
+    # Per-key UF_CRM fallback — only fills slots that are still empty after
+    # InspectionRecord + mechanical_json. The frontend's ROWS table at
+    # page.tsx (Section 09 Stan mechaniczny) drives off these keys; when
+    # InspectionRecord has nothing AND the legacy mechanical_json blob
+    # is empty, individual Bitrix UF_CRM fields are the next best source.
+    # Only ROWS keys with an explicit UF_CRM mapping in
+    # backend/mapping_overrides.json are covered today; the rest stay
+    # blank (drop out of the table) until a UF_CRM ID is wired up.
+    for _pwa_key, _uf in MECHANICAL_FIELD_FALLBACKS.items():
+        if mechanical.get(_pwa_key) in (None, "", False):
+            _v = raw.get(_uf)
+            if _v not in (None, "", False, []):
+                mechanical[_pwa_key] = _v
 
     warning_lights = _safe_str(raw.get("UF_CRM_1772613819989")) or _safe_str(mechanical.get("warningLights"))
     ac_raw = mechanical.get("acWorking")
