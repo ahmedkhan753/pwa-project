@@ -645,6 +645,21 @@ async def get_report(deal_id: int, request: Request):
         except Exception:
             pass
 
+    # Fallback: Bitrix engine-video field (UF_CRM_1777843407572) for deals
+    # where the appraiser uploaded a video before the photo-stream worker
+    # landed, so it never made it into inspection_photos. The /api/gallery
+    # proxy below has the matching DB-miss → Bitrix path so the URL works.
+    if not videos:
+        for _slot, _uf in VIDEO_FIELD_BY_SLOT.items():
+            if _video_file_id_from_raw(raw.get(_uf)):
+                videos.append({
+                    "slot_id":  _slot,
+                    "label":    PHOTO_LABELS.get(_slot, _slot.replace("_", " ").title()),
+                    "url":      f"/api/gallery/{deal_id}/media/{_slot}",
+                    "is_video": True,
+                    "mime":     "video/mp4",
+                })
+
     # Fallback: Bitrix fields (older submissions without DB photos)
     if not photos_standard and not photos_body:
         for key, (label, field_id, pos_idx) in PHOTO_FIELDS.items():
@@ -1366,6 +1381,26 @@ async def document_status(deal_id: int, request: Request):
 
 VIDEO_SLOTS = {"video_engine"}
 
+# Video slot → Bitrix file-field used as the source of truth when the
+# DB has no row (deals submitted before the photo-stream worker landed,
+# or deals where the wizard uploaded straight to Bitrix Disk).
+VIDEO_FIELD_BY_SLOT: Dict[str, str] = {
+    "video_engine": "UF_CRM_1777843407572",
+}
+
+
+def _video_file_id_from_raw(field_value: Any) -> Optional[int]:
+    """Extract the Bitrix file id from a CRM file-field value (dict or list)."""
+    if isinstance(field_value, dict):
+        fid = field_value.get("id")
+        try:
+            return int(fid) if fid not in (None, "", 0) else None
+        except (TypeError, ValueError):
+            return None
+    if isinstance(field_value, list) and field_value:
+        return _video_file_id_from_raw(field_value[0])
+    return None
+
 CATEGORY_SLOTS: dict = {
     "exterior":  BODY_SLOTS,
     "interior":  INTERIOR_SLOTS,
@@ -1385,12 +1420,81 @@ def _detect_video_mime(data: bytes) -> str:
     return "video/mp4"
 
 
+async def _stream_video_from_bitrix(deal_id: int, slot_id: str, request: Request):
+    """
+    Stream a video that lives only on the Bitrix deal (no InspectionPhoto
+    row yet — e.g. deals submitted before the photo-stream worker existed).
+    Same OAuth path as /api/signature/. Supports HTTP Range so the
+    browser <video> element can seek; the proxy slices the already-
+    downloaded bytes rather than refetching per range.
+    """
+    from fastapi.responses import Response as _Resp
+    from services.bitrix_disk import get_deal_file_id, download_file_by_id
+
+    field_name = VIDEO_FIELD_BY_SLOT.get(slot_id)
+    if not field_name:
+        raise HTTPException(status_code=404, detail="Unknown video slot")
+
+    gateway = request.app.state.gateway
+    file_id = await get_deal_file_id(gateway, deal_id, field_name)
+    if not file_id:
+        raise HTTPException(status_code=404, detail="Video not uploaded for this deal")
+
+    try:
+        data = await download_file_by_id(deal_id, field_name, file_id)
+    except RuntimeError as e:
+        code = str(e)
+        if code in ("oauth_not_configured", "oauth_token_unavailable", "bitrix_base_domain_unset"):
+            raise HTTPException(status_code=503, detail=code)
+        # http_NNN, bitrix_returned_html_login_page, bitrix_returned_empty_body
+        raise HTTPException(status_code=502, detail=code)
+
+    mime = _detect_video_mime(data[:12])
+    total = len(data)
+
+    range_header = request.headers.get("range")
+    if range_header:
+        m = re.match(r"bytes=(\d*)-(\d*)", range_header)
+        if m:
+            start = int(m.group(1)) if m.group(1) else 0
+            end   = int(m.group(2)) if m.group(2) else total - 1
+            end   = min(end, total - 1)
+            chunk = data[start : end + 1]
+            return _Resp(
+                content=chunk,
+                status_code=206,
+                media_type=mime,
+                headers={
+                    "Content-Range":  f"bytes {start}-{end}/{total}",
+                    "Accept-Ranges":  "bytes",
+                    "Content-Length": str(len(chunk)),
+                    "Cache-Control":  "private, max-age=3600",
+                },
+            )
+
+    return _Resp(
+        content=data,
+        media_type=mime,
+        headers={
+            "Content-Length": str(total),
+            "Accept-Ranges":  "bytes",
+            "Cache-Control":  "private, max-age=3600",
+        },
+    )
+
+
 @router.get("/gallery/{deal_id}/media/{slot_id}")
 async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
     """
     GET /api/gallery/{deal_id}/media/{slot_id}
     Stream a single photo or video binary.
     Supports HTTP Range requests so browsers can seek inside videos.
+
+    DB-first: serves bytes from InspectionPhoto.photo_bytes (fast path).
+    Bitrix fallback for video slots: when the DB has no row for a
+    `video_*` slot, fetch the file from the corresponding UF_CRM field
+    via services.bitrix_disk (OAuth-authed show_file.php) — same pattern
+    as /api/signature/{deal_id}/{kind}.
     """
     from fastapi.responses import Response as _Resp
 
@@ -1402,6 +1506,9 @@ async def get_gallery_media(deal_id: int, slot_id: str, request: Request):
             InspectionPhoto.slot_id == slot_id,
         ).first()
         if not row or not row.photo_bytes:
+            # Bitrix fallback — only for known video slots.
+            if slot_id.startswith("video_") and slot_id in VIDEO_FIELD_BY_SLOT:
+                return await _stream_video_from_bitrix(deal_id, slot_id, request)
             raise HTTPException(status_code=404, detail="Media not found")
 
         data: bytes = row.photo_bytes
