@@ -1861,43 +1861,56 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             (mech as Record<string, unknown>).warningLights ?? ''
           ).trim();
           const testDriveComment = String((mech as Record<string, unknown>).testDriveComment ?? '').trim();
-          if (visibleRows.length === 0 && !warningLights && !testDriveComment) {
-            return null;
-          }
+          // Inspector who skipped Step 9 of the wizard leaves every key
+          // null, so visibleRows is empty and both extra rows are blank.
+          // Render a muted placeholder rather than hiding the whole section
+          // — the client should see that Stan mechaniczny was skipped, not
+          // assume the report has no such section at all.
+          const noData = visibleRows.length === 0 && !warningLights && !testDriveComment;
           return (
             <>
               <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
               <CollapsibleSection id="stan-mechaniczny" icon="fas fa-cogs" num="09 / Stan mechaniczny" title="Stan mechaniczny">
-                <div style={{ background:'#fff',borderRadius:8,border:'1px solid #E8E8ED',overflow:'hidden' }}>
-                  <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
-                    <thead>
-                      <tr style={{ background:'#F8F8FA',borderBottom:'1px solid #E8E8ED' }}>
-                        <th style={{ textAlign:'left',padding:'10px 14px',fontSize:12,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.04em' }}>Element</th>
-                        <th style={{ textAlign:'left',padding:'10px 14px',fontSize:12,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.04em' }}>Stan</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleRows.map((r, i) => (
-                        <tr key={r.key} style={{ borderBottom: i < visibleRows.length - 1 ? '1px solid #F0F0F2' : undefined }}>
-                          <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>{r.label}</td>
-                          <td style={{ padding:'10px 14px',fontWeight:700,color:r.color }}>{r.text}</td>
+                {noData ? (
+                  <div style={{
+                    background:'#F8F8FA',borderRadius:8,border:'1px dashed #D0D0D8',
+                    padding:'24px 20px',textAlign:'center',
+                    color:'#86868B',fontSize:13,fontStyle:'italic',lineHeight:1.5,
+                  }}>
+                    Brak danych — sekcja nieuzupełniona przez rzeczoznawcę
+                  </div>
+                ) : (
+                  <div style={{ background:'#fff',borderRadius:8,border:'1px solid #E8E8ED',overflow:'hidden' }}>
+                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
+                      <thead>
+                        <tr style={{ background:'#F8F8FA',borderBottom:'1px solid #E8E8ED' }}>
+                          <th style={{ textAlign:'left',padding:'10px 14px',fontSize:12,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.04em' }}>Element</th>
+                          <th style={{ textAlign:'left',padding:'10px 14px',fontSize:12,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.04em' }}>Stan</th>
                         </tr>
-                      ))}
-                      {testDriveComment && (
-                        <tr style={{ borderTop:'1px solid #E8E8ED' }}>
-                          <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>Uwagi z jazdy próbnej</td>
-                          <td style={{ padding:'10px 14px',color:'#374151' }}>{testDriveComment}</td>
-                        </tr>
-                      )}
-                      {warningLights && (
-                        <tr style={{ borderTop:'1px solid #E8E8ED' }}>
-                          <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>Kontrolki ostrzegawcze</td>
-                          <td style={{ padding:'10px 14px',color:'#DC2626',fontWeight:600 }}>{warningLights}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {visibleRows.map((r, i) => (
+                          <tr key={r.key} style={{ borderBottom: i < visibleRows.length - 1 ? '1px solid #F0F0F2' : undefined }}>
+                            <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>{r.label}</td>
+                            <td style={{ padding:'10px 14px',fontWeight:700,color:r.color }}>{r.text}</td>
+                          </tr>
+                        ))}
+                        {testDriveComment && (
+                          <tr style={{ borderTop:'1px solid #E8E8ED' }}>
+                            <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>Uwagi z jazdy próbnej</td>
+                            <td style={{ padding:'10px 14px',color:'#374151' }}>{testDriveComment}</td>
+                          </tr>
+                        )}
+                        {warningLights && (
+                          <tr style={{ borderTop:'1px solid #E8E8ED' }}>
+                            <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>Kontrolki ostrzegawcze</td>
+                            <td style={{ padding:'10px 14px',color:'#DC2626',fontWeight:600 }}>{warningLights}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <KomentarzBlock text={data.komentarze?.silnik || ''} />
               </CollapsibleSection>
             </>
