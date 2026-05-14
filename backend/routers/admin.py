@@ -13,7 +13,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.inspector import Inspector
+from models.inspector import Inspector, InspectorNotification
 from deps import require_admin
 from services.email_service import send_assignment_email
 
@@ -505,29 +505,25 @@ async def deactivate_inspector(
     db: Session = Depends(get_db),
     _=Depends(require_admin),
 ):
-    """Deactivate an inspector and remove from Bitrix dropdown."""
+    """Deactivate an inspector (status only — Bitrix linkage preserved).
+
+    Deactivation MUST NOT touch the inspector's Bitrix linkage. The previous
+    implementation nulled ``bitrix_list_id`` and deleted the dropdown entry,
+    which orphaned every deal assigned to that inspector — on reactivation a
+    brand-new dropdown id was minted, so deals still pointing at the deleted
+    id silently vanished from the inspector's dashboard. Flipping only
+    ``is_active`` keeps the link intact, so reactivation restores order
+    visibility automatically.
+    """
     inspector = db.query(Inspector).filter(Inspector.id == inspector_id).first()
     if not inspector:
         raise HTTPException(status_code=404, detail="Inspector not found")
 
-    saved_list_id = inspector.bitrix_list_id
     inspector.is_active = False
-    inspector.bitrix_list_id = None
     db.commit()
-    logger.info(f"✅ Inspector deactivated: {inspector.name}")
+    logger.info(f"✅ Inspector deactivated (Bitrix link preserved): {inspector.name}")
 
-    # Remove from Bitrix dropdown (best-effort)
-    bitrix_synced = False
-    if saved_list_id:
-        gateway = req.app.state.gateway
-        bitrix_ready = getattr(req.app.state, "bitrix_ready", False)
-        if bitrix_ready:
-            await _sync_inspector_to_bitrix(
-                gateway, "remove", inspector.name, inspector.phone, saved_list_id
-            )
-            bitrix_synced = True
-
-    return {"success": True, "bitrix_synced": bitrix_synced}
+    return {"success": True, "bitrix_synced": bool(inspector.bitrix_list_id)}
 
 
 @router.delete("/admin/inspectors/{inspector_id}")
@@ -557,6 +553,73 @@ async def delete_inspector(
             )
 
     return {"success": True}
+
+
+@router.delete("/admin/inspectors/{inspector_id}/permanent")
+async def permanent_delete_inspector(
+    inspector_id: int,
+    req: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """Permanently delete an inspector and every DB row tied to them.
+
+    Schema investigation (models/inspector.py): no table declares a
+    ForeignKey to ``inspectors``. The only inspector-scoped table is
+    ``inspector_notifications`` (linked by ``phone``). The ``inspection_*``
+    and ``submission_jobs`` tables are keyed by ``deal_id`` — they belong to
+    deals, not inspectors, so they are deliberately left intact.
+
+    The local cleanup runs in a single transaction: if any step fails the
+    whole delete is rolled back. The Bitrix dropdown entry is removed first
+    on a best-effort basis — a Bitrix hiccup must not block the local delete
+    the admin explicitly requested.
+    """
+    inspector = db.query(Inspector).filter(Inspector.id == inspector_id).first()
+    if not inspector:
+        raise HTTPException(status_code=404, detail="Inspector not found")
+
+    name = inspector.name
+    phone = inspector.phone
+    saved_list_id = inspector.bitrix_list_id
+
+    # 1. Remove from the Bitrix dropdown (best-effort).
+    bitrix_synced = False
+    if saved_list_id:
+        gateway = req.app.state.gateway
+        if getattr(req.app.state, "bitrix_ready", False):
+            await _sync_inspector_to_bitrix(gateway, "remove", name, phone, saved_list_id)
+            bitrix_synced = True
+
+    # 2. Atomic local cleanup — notifications first, then the inspector row.
+    try:
+        deleted_notifications = (
+            db.query(InspectorNotification)
+            .filter(InspectorNotification.phone == phone)
+            .delete(synchronize_session=False)
+        )
+        db.delete(inspector)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Permanent delete failed for inspector {inspector_id} ({name}): {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Permanent delete failed — changes rolled back",
+        )
+
+    logger.info(
+        f"🗑️ Inspector permanently deleted: {name} ({phone}) — "
+        f"{deleted_notifications} notification row(s) removed"
+    )
+    return {
+        "success": True,
+        "deleted_notifications": deleted_notifications,
+        "bitrix_synced": bitrix_synced,
+    }
 
 
 # ── Email Notification ──────────────────────────────

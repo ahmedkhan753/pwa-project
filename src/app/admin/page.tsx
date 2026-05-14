@@ -23,6 +23,31 @@ interface DealOrder {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
+// Order status code → Polish label. Shared by the order card render and the
+// orders search filter so both stay in sync.
+const STATUS_LABELS: Record<string, string> = {
+  new: "Nowe",
+  assigned: "Przypisane",
+  scheduled: "Zaplanowane",
+  completed: "Zakończone",
+  in_valuation: "W wycenie",
+  closed: "Zamknięte",
+  lost: "Utracone",
+}
+const statusLabel = (s: string): string => STATUS_LABELS[s] || s
+
+// Phone validation for the New / Edit inspector forms.
+// Allows digits, spaces, dashes, plus and parentheses; requires ≥9 digits.
+const PHONE_RE = /^[0-9+\-\s()]+$/
+const phoneError = (phone: string): string => {
+  const p = (phone || "").trim()
+  if (!p) return ""
+  if (!PHONE_RE.test(p)) return "Numer telefonu może zawierać tylko cyfry"
+  if ((p.match(/\d/g) || []).length < 9) return "Numer telefonu musi mieć min. 9 cyfr"
+  return ""
+}
+const MAX_NAME_LEN = 100
+
 export default function AdminPanel() {
   const [authed, setAuthed] = useState(false)
   const [password, setPassword] = useState("")
@@ -40,6 +65,7 @@ export default function AdminPanel() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState({ name: "", phone: "", email: "", pin: "" })
   const [sortBy, setSortBy] = useState<'name' | 'status' | 'bitrix'>('name')
+  const [orderSearch, setOrderSearch] = useState("")
 
   // Check for existing admin session
   useEffect(() => {
@@ -117,6 +143,11 @@ export default function AdminPanel() {
       setMessage("❌ Wypełnij wszystkie wymagane pola")
       return
     }
+    const pErr = phoneError(newInspector.phone)
+    if (pErr) {
+      setMessage(`❌ ${pErr}`)
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch(`${API_BASE}/admin/inspectors`, {
@@ -187,6 +218,35 @@ export default function AdminPanel() {
     }
   }
 
+  const deleteInspectorPermanent = async (id: number, name: string) => {
+    const ok = window.confirm(
+      `Czy na pewno chcesz trwale usunąć inspektora ${name}? Tej operacji nie można cofnąć.`
+    )
+    if (!ok) return
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/admin/inspectors/${id}/permanent`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${adminToken}` }
+      })
+      if (res.ok) {
+        setMessage("✅ Inspektor trwale usunięty")
+        if (selectedInspector?.id === id) {
+          setSelectedInspector(null)
+          setOrders([])
+        }
+        if (editingId === id) setEditingId(null)
+        fetchInspectors(adminToken)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        setMessage(`❌ ${err.detail || "Błąd trwałego usuwania inspektora"}`)
+      }
+    } catch {
+      setMessage("❌ Błąd połączenia")
+    }
+    setLoading(false)
+  }
+
   const sendNotification = async (inspectorPhone: string, order: DealOrder) => {
     try {
       const res = await fetch(`${API_BASE}/admin/inspectors/notify`, {
@@ -234,6 +294,11 @@ export default function AdminPanel() {
       setMessage("❌ Imię i nazwisko nie może być puste")
       return
     }
+    const pErr = phoneError(editForm.phone)
+    if (pErr) {
+      setMessage(`❌ ${pErr}`)
+      return
+    }
     setLoading(true)
     try {
       const body: Record<string, string> = {
@@ -269,12 +334,24 @@ export default function AdminPanel() {
 
   const selectInspector = (inspector: Inspector) => {
     setSelectedInspector(inspector)
+    setOrderSearch("")
     fetchInspectorOrders(inspector.phone)
     // On mobile, auto-hide inspector list when one is selected
     if (window.innerWidth < 1024) {
       setShowInspectorList(false)
     }
   }
+
+  // Client-side order search — matches order number/title, deal ID and status.
+  const orderQuery = orderSearch.trim().toLowerCase()
+  const filteredOrders = orderQuery
+    ? orders.filter(o =>
+        (o.TITLE || "").toLowerCase().includes(orderQuery) ||
+        String(o.ID).toLowerCase().includes(orderQuery) ||
+        (o.status || "").toLowerCase().includes(orderQuery) ||
+        statusLabel(o.status).toLowerCase().includes(orderQuery)
+      )
+    : orders
 
   // ─── Login Screen ─────────────────────────────────
   if (!authed) return (
@@ -366,6 +443,7 @@ export default function AdminPanel() {
                   value={newInspector.name}
                   onChange={e => setNewInspector({...newInspector, name: e.target.value})}
                   placeholder="Jan Kowalski"
+                  maxLength={MAX_NAME_LEN}
                   className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-blue-500 outline-none transition-colors"
                 />
               </div>
@@ -376,8 +454,13 @@ export default function AdminPanel() {
                   value={newInspector.phone}
                   onChange={e => setNewInspector({...newInspector, phone: e.target.value})}
                   placeholder="790469341"
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-blue-500 outline-none transition-colors"
+                  className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-medium outline-none transition-colors ${
+                    phoneError(newInspector.phone) ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-blue-500"
+                  }`}
                 />
+                {phoneError(newInspector.phone) && (
+                  <p className="text-red-500 text-[10px] font-bold mt-1">{phoneError(newInspector.phone)}</p>
+                )}
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block tracking-wider">Email</label>
@@ -404,8 +487,8 @@ export default function AdminPanel() {
             <div className="flex gap-3 mt-5">
               <button
                 onClick={addInspector}
-                disabled={loading}
-                className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-50 min-h-[44px]"
+                disabled={loading || !!phoneError(newInspector.phone)}
+                className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
                 {loading ? "Dodawanie..." : "Dodaj inspektora"}
               </button>
@@ -532,6 +615,12 @@ export default function AdminPanel() {
                       >
                         {inspector.is_active ? "Dezaktywuj" : "Aktywuj"}
                       </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); deleteInspectorPermanent(inspector.id, inspector.name) }}
+                        className="text-[10px] bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold transition-colors min-h-[32px]"
+                      >
+                        Usuń trwale
+                      </button>
                     </div>
 
                     {/* Inline edit form */}
@@ -546,6 +635,7 @@ export default function AdminPanel() {
                             type="text"
                             value={editForm.name}
                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            maxLength={MAX_NAME_LEN}
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium focus:border-blue-500 outline-none mt-0.5"
                           />
                         </div>
@@ -555,8 +645,13 @@ export default function AdminPanel() {
                             type="tel"
                             value={editForm.phone}
                             onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono font-medium focus:border-blue-500 outline-none mt-0.5"
+                            className={`w-full border rounded-lg px-3 py-2 text-xs font-mono font-medium outline-none mt-0.5 ${
+                              phoneError(editForm.phone) ? "border-red-400 focus:border-red-500" : "border-gray-300 focus:border-blue-500"
+                            }`}
                           />
+                          {phoneError(editForm.phone) && (
+                            <p className="text-red-500 text-[10px] font-bold mt-1">{phoneError(editForm.phone)}</p>
+                          )}
                         </div>
                         <div>
                           <label className="text-[9px] font-bold uppercase text-gray-400 tracking-wider">Email</label>
@@ -581,8 +676,8 @@ export default function AdminPanel() {
                         <div className="flex gap-2 pt-1">
                           <button
                             onClick={e => saveEdit(inspector.id, e)}
-                            disabled={loading}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
+                            disabled={loading || !!phoneError(editForm.phone)}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             {loading ? "Zapisywanie..." : "Zapisz"}
                           </button>
@@ -607,18 +702,53 @@ export default function AdminPanel() {
           }`}>
             <h2 className="font-bold text-sm sm:text-base mb-3 sm:mb-4 text-gray-900">
               {selectedInspector
-                ? `Zlecenia — ${selectedInspector.name} (${orders.length})`
+                ? `Zlecenia — ${selectedInspector.name} (${orderQuery ? `${filteredOrders.length}/${orders.length}` : orders.length})`
                 : "Wybierz inspektora"}
             </h2>
             {selectedInspector ? (
               <div className="space-y-2 sm:space-y-3">
+                {/* Search bar — client-side filter by order number, deal ID, status */}
+                {orders.length > 0 && (
+                  <div className="relative mb-1">
+                    <input
+                      type="text"
+                      value={orderSearch}
+                      onChange={e => setOrderSearch(e.target.value)}
+                      placeholder="Szukaj zamówienia..."
+                      className="w-full border-2 border-gray-200 rounded-xl pl-9 pr-9 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors"
+                    />
+                    <svg
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="M21 21l-4.35-4.35" />
+                    </svg>
+                    {orderSearch && (
+                      <button
+                        onClick={() => setOrderSearch("")}
+                        aria-label="Wyczyść wyszukiwanie"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
                 {orders.length === 0 ? (
                   <div className="text-center py-8 sm:py-12">
                     <p className="text-gray-400 text-sm">Brak zleceń</p>
                     <p className="text-gray-300 text-[10px] mt-1">Zlecenia pojawią się po przypisaniu w Bitrix24</p>
                   </div>
+                ) : filteredOrders.length === 0 ? (
+                  <div className="text-center py-8 sm:py-12">
+                    <p className="text-gray-400 text-sm">Brak wyników dla „{orderSearch}”</p>
+                    <p className="text-gray-300 text-[10px] mt-1">Spróbuj innego numeru, ID lub statusu</p>
+                  </div>
                 ) : (
-                  orders.map((order) => (
+                  filteredOrders.map((order) => (
                     <div key={order.ID} className="p-3 sm:p-4 border-2 border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
                       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                         <div className="min-w-0 flex-1">
@@ -649,14 +779,7 @@ export default function AdminPanel() {
                               ? "bg-gray-100 text-gray-700"
                               : "bg-sky-100 text-sky-700"
                           }`}>
-                            {order.status === "new" ? "Nowe" :
-                             order.status === "assigned" ? "Przypisane" :
-                             order.status === "scheduled" ? "Zaplanowane" :
-                             order.status === "completed" ? "Zakończone" :
-                             order.status === "in_valuation" ? "W wycenie" :
-                             order.status === "closed" ? "Zamknięte" :
-                             order.status === "lost" ? "Utracone" :
-                             order.status}
+                            {statusLabel(order.status)}
                           </span>
                           <button
                             onClick={() => sendNotification(selectedInspector!.phone, order)}

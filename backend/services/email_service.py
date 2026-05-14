@@ -21,6 +21,39 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "noreply@zaufajrzeczoznawcy.pl")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Zaufaj Rzeczoznawcy")
 
+# Genitive month names for Polish date formatting ("4 maja 2026").
+POLISH_MONTHS = [
+    "", "stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
+    "lipca", "sierpnia", "września", "października", "listopada", "grudnia",
+]
+
+
+def _format_polish_datetime(raw) -> str:
+    """Format a planned-date value for the assignment email.
+
+    '2026-05-04T09:00:00+03:00' -> '4 maja 2026, 09:00'
+    '2026-05-04'                -> '4 maja 2026'
+    empty / None                -> 'Do ustalenia'
+    unparseable                 -> returned unchanged (e.g. 'Nie ustalono')
+    """
+    if raw is None or not str(raw).strip():
+        return "Do ustalenia"
+    s = str(raw).strip()
+    from datetime import datetime
+    has_time = "T" in s or ":" in s
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if has_time:
+            return f"{dt.day} {POLISH_MONTHS[dt.month]} {dt.year}, {dt.hour:02d}:{dt.minute:02d}"
+        return f"{dt.day} {POLISH_MONTHS[dt.month]} {dt.year}"
+    except (ValueError, IndexError):
+        pass
+    try:
+        dt = datetime.strptime(s[:10], "%Y-%m-%d")
+        return f"{dt.day} {POLISH_MONTHS[dt.month]} {dt.year}"
+    except (ValueError, IndexError):
+        return s
+
 
 async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """Send email via SMTP. Returns True if successful."""
@@ -70,6 +103,15 @@ async def send_assignment_email(
     plates_info = f" ({registration_plates})" if registration_plates else ""
     subject = f"Zlecenie #{order_id} — {vehicle_info}{plates_info}" if vehicle_info else f"Nowe zlecenie oględzin — {order_title}"
 
+    # Display fallbacks: never render a bare "-" — show "Brak danych" instead.
+    _BRAK = "Brak danych"
+    order_no_display = (str(order_id).strip() or str(order_title).strip() or _BRAK)
+    client_display = (client_name or "").strip() or _BRAK
+    address_display = (inspection_address or "").strip() or _BRAK
+    vehicle_display = vehicle_info or _BRAK
+    plates_display = (registration_plates or "").strip() or _BRAK
+    date_display = _format_polish_datetime(inspection_date)
+
     html_body = f"""
     <!DOCTYPE html>
     <html>
@@ -85,7 +127,7 @@ async def send_assignment_email(
         .greeting {{ font-size: 16px; color: #333; margin-bottom: 16px; }}
         .card {{ background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; padding: 16px; margin: 16px 0; }}
         .card-title {{ font-weight: bold; font-size: 13px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; margin-bottom: 12px; }}
-        .field {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e2e8f0; }}
+        .field {{ display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }}
         .field:last-child {{ border-bottom: none; }}
         .field-label {{ color: #64748b; font-size: 14px; }}
         .field-value {{ color: #1e293b; font-weight: bold; font-size: 14px; }}
@@ -108,19 +150,19 @@ async def send_assignment_email(
             <div class="card-title">📋 Informacje o zleceniu</div>
             <div class="field">
               <span class="field-label">Nr zlecenia</span>
-              <span class="field-value">{order_title}</span>
+              <span class="field-value">{order_no_display}</span>
             </div>
             <div class="field">
               <span class="field-label">Klient</span>
-              <span class="field-value">{client_name or '—'}</span>
+              <span class="field-value">{client_display}</span>
             </div>
             <div class="field">
               <span class="field-label">Adres oględzin</span>
-              <span class="field-value">{inspection_address or '—'}</span>
+              <span class="field-value">{address_display}</span>
             </div>
             <div class="field">
               <span class="field-label">Planowana data</span>
-              <span class="field-value">{inspection_date or 'Do ustalenia'}</span>
+              <span class="field-value">{date_display}</span>
             </div>
           </div>
 
@@ -128,11 +170,11 @@ async def send_assignment_email(
             <div class="card-title">🚗 Pojazd</div>
             <div class="field">
               <span class="field-label">Marka / Model</span>
-              <span class="field-value">{vehicle_make or '—'} {vehicle_model or ''}</span>
+              <span class="field-value">{vehicle_display}</span>
             </div>
             <div class="field">
               <span class="field-label">Nr rejestracyjny</span>
-              <span class="field-value">{registration_plates or '—'}</span>
+              <span class="field-value">{plates_display}</span>
             </div>
           </div>
 

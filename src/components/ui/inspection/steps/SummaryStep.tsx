@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useInspectionStore } from "@/store/useInspectionStore";
 import { SignaturePad } from "../SignaturePad";
 import { Logo } from "@/components/ui/Logo";
 import { CheckCircle2, UserCheck, ShieldCheck, AlertCircle, Info, Image as ImageIcon, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { photoQueue } from "@/lib/photoUploadQueue";
 
 export function SummaryStep() {
     const { data, jobs, updateStepData, setSignature } = useInspectionStore();
@@ -22,7 +24,39 @@ export function SummaryStep() {
     const extDamages = Array.isArray(data.exteriorDamage) ? data.exteriorDamage : [];
     const intDamages = Array.isArray(data.interiorDamage) ? data.interiorDamage : [];
     const allDamages = [...extDamages, ...intDamages];
-    
+
+    // ── VIN confirmation — must reflect reality, not a hard-coded ✓ ──
+    // Confirmed when the VIN photo slot actually has an image (still in memory,
+    // or already queued/uploaded for this deal) OR the inspector explicitly
+    // verified the VIN numbers in Step 10 (Uwagi → "Badanie poprawności…").
+    const [vinPhotoPresent, setVinPhotoPresent] = useState<boolean>(
+        () => data.photos.some(p => p.id === 'photo_vin' && !!p.base64)
+    );
+    useEffect(() => {
+        let cancelled = false;
+        // base64 is stripped from localStorage and released after upload, so an
+        // in-memory hit is sufficient but not necessary — fall back to the
+        // IndexedDB upload queue, the authoritative record of taken photos.
+        if (data.photos.some(p => p.id === 'photo_vin' && !!p.base64)) {
+            setVinPhotoPresent(true);
+            return;
+        }
+        const dealId = jobs.currentJobId;
+        if (!dealId) {
+            setVinPhotoPresent(false);
+            return;
+        }
+        photoQueue.getMetaByDeal(String(dealId))
+            .then(metas => {
+                if (!cancelled) setVinPhotoPresent(metas.some(m => m.slotId === 'photo_vin'));
+            })
+            .catch(() => { if (!cancelled) setVinPhotoPresent(false); });
+        return () => { cancelled = true; };
+    }, [data.photos, jobs.currentJobId]);
+
+    const vinManuallyVerified = data.notesValuation?.vinVerification === 'OK';
+    const vinConfirmed = vinPhotoPresent || vinManuallyVerified || summary.vinConfirmed;
+
     const handleAbsentToggle = (val: boolean) => {
         updateStepData('finalSummary', { isAbsentRep: val });
         if (val) setSignature('signatureClient', ''); 
@@ -186,9 +220,16 @@ export function SummaryStep() {
                 </div>
                 
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-white/10 rounded-xl">
-                        <span className="text-[10px] font-black uppercase">VIN Potwierdzony</span>
-                        <CheckCircle2 size={16} className="text-emerald-400" />
+                    <div className={cn(
+                        "flex items-center justify-between p-3 rounded-xl",
+                        vinConfirmed ? "bg-white/10" : "bg-amber-400/15 border border-amber-400/40"
+                    )}>
+                        <span className="text-[10px] font-black uppercase">
+                            {vinConfirmed ? "VIN Potwierdzony" : "VIN niepotwierdzony"}
+                        </span>
+                        {vinConfirmed
+                            ? <CheckCircle2 size={16} className="text-emerald-400" />
+                            : <AlertCircle size={16} className="text-amber-400" />}
                     </div>
                     <div className="p-3 bg-white/10 rounded-xl">
                         <p className="text-[10px] font-bold leading-normal opacity-90 italic">

@@ -13,8 +13,25 @@ const toLocalISO = (date: Date): string => {
     return `${y}-${m}-${d}`;
 };
 
+const MONTHS_PL = [
+    'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+    'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień',
+];
+
 export const CalendarStrip: React.FC = () => {
     const { calendar, setSelectedDate, toggleCalendarExpanded, jobs } = useInspectionStore();
+
+    // Month shown in the expanded "Widok miesiąca" grid. Free to navigate to
+    // any past/future month independently of the selected date. Re-anchors to
+    // the selected date's month each time the month view is opened.
+    const [viewMonth, setViewMonth] = React.useState<Date>(
+        () => new Date(calendar.selectedDate + 'T12:00:00')
+    );
+    React.useEffect(() => {
+        if (calendar.expanded) {
+            setViewMonth(new Date(calendar.selectedDate + 'T12:00:00'));
+        }
+    }, [calendar.expanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Generate 7 days centered on the currently selected date
     const getDays = () => {
@@ -112,38 +129,82 @@ export const CalendarStrip: React.FC = () => {
                 </div>
             )}
 
-            {/* Monthly View Placeholder (Minimal Implementation for Demo) */}
-            {calendar.expanded && (
-                <div className="bg-surface/80 backdrop-blur-2xl border border-border rounded-[2rem] p-4 animate-fade-in shadow-xl">
-                    <div className="grid grid-cols-7 gap-1">
-                        {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'].map(d => (
-                            <div key={d} className="text-[9px] font-bold text-muted/40 text-center py-2 uppercase">{d}</div>
-                        ))}
-                        {/* Simplified Month Grid (only showing today's week + padding) */}
-                        {Array.from({ length: 28 }).map((_, i) => {
-                            const d = i + 1;
-                            const isSel = parseInt(calendar.selectedDate.split('-')[2]) === d;
-                            return (
-                                <button 
-                                    key={i} 
-                                    onClick={() => {
-                                        const date = new Date(calendar.selectedDate);
-                                        date.setDate(d);
-                                        formatDate(date);
-                                        toggleCalendarExpanded();
-                                    }}
-                                    className={cn(
-                                        "aspect-square flex items-center justify-center rounded-xl text-xs font-bold transition-all",
-                                        isSel ? "bg-primary text-white shadow-glow" : "text-foreground hover:bg-surface-raised"
-                                    )}
-                                >
-                                    {d}
-                                </button>
-                            );
-                        })}
+            {/* Monthly View — full month grid with prev/next navigation */}
+            {calendar.expanded && (() => {
+                const vy = viewMonth.getFullYear();
+                const vm = viewMonth.getMonth();
+                const daysInMonth = new Date(vy, vm + 1, 0).getDate();
+                // Monday-based weekday offset for the 1st of the month.
+                let startDow = new Date(vy, vm, 1).getDay() - 1;
+                if (startDow < 0) startDow = 6;
+                const monthCells: (number | null)[] = [
+                    ...Array(startDow).fill(null),
+                    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+                ];
+                const cellISO = (d: number) =>
+                    `${vy}-${String(vm + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+                return (
+                    <div className="bg-surface/80 backdrop-blur-2xl border border-border rounded-[2rem] p-4 animate-fade-in shadow-xl">
+                        {/* Month navigation */}
+                        <div className="flex items-center justify-between mb-3">
+                            <button
+                                onClick={() => setViewMonth(new Date(vy, vm - 1, 1))}
+                                aria-label="Poprzedni miesiąc"
+                                className="p-2 hover:bg-surface-raised rounded-xl transition-colors active:scale-95"
+                            >
+                                <ChevronLeft className="w-4 h-4 text-foreground" />
+                            </button>
+                            <button
+                                onClick={() => setViewMonth(new Date())}
+                                title="Przejdź do bieżącego miesiąca"
+                                className="text-xs font-black text-foreground uppercase tracking-tight px-3 py-1.5 rounded-lg hover:bg-surface-raised transition-colors"
+                            >
+                                {MONTHS_PL[vm]} {vy}
+                            </button>
+                            <button
+                                onClick={() => setViewMonth(new Date(vy, vm + 1, 1))}
+                                aria-label="Następny miesiąc"
+                                className="p-2 hover:bg-surface-raised rounded-xl transition-colors active:scale-95"
+                            >
+                                <ChevronRight className="w-4 h-4 text-foreground" />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1">
+                            {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'].map(d => (
+                                <div key={d} className="text-[9px] font-bold text-muted/40 text-center py-2 uppercase">{d}</div>
+                            ))}
+                            {monthCells.map((d, i) => {
+                                if (!d) return <div key={`blank-${i}`} />;
+                                const iso = cellISO(d);
+                                const isSel = calendar.selectedDate === iso;
+                                const dayHasTasks = (jobs.allDeals || []).some(job => job.scheduledDate?.startsWith(iso));
+                                return (
+                                    <button
+                                        key={iso}
+                                        onClick={() => {
+                                            setSelectedDate(iso);
+                                            toggleCalendarExpanded();
+                                        }}
+                                        className={cn(
+                                            "relative aspect-square flex items-center justify-center rounded-xl text-xs font-bold transition-all",
+                                            isSel ? "bg-primary text-white shadow-glow" : "text-foreground hover:bg-surface-raised"
+                                        )}
+                                    >
+                                        {d}
+                                        {dayHasTasks && (
+                                            <span className={cn(
+                                                "absolute bottom-1 w-1 h-1 rounded-full",
+                                                isSel ? "bg-white" : "bg-primary/50"
+                                            )} />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 };

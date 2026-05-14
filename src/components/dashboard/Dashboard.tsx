@@ -22,6 +22,16 @@ import { Logo } from '@/components/ui/Logo';
 
 const FINISHED = ['completed', 'in_valuation', 'closed', 'lost'];
 
+// Polish plural for "zlecenie": 1 → zlecenie, 2-4 → zlecenia, else → zleceń
+// (with the 12-14 exception). Keeps the "Plan dnia" header grammatically correct.
+const plZlecenie = (n: number): string => {
+    if (n === 1) return 'zlecenie';
+    const tens = n % 100;
+    const ones = n % 10;
+    if (ones >= 2 && ones <= 4 && !(tens >= 12 && tens <= 14)) return 'zlecenia';
+    return 'zleceń';
+};
+
 export const Dashboard: React.FC = () => {
     const {
         auth,
@@ -93,6 +103,11 @@ export const Dashboard: React.FC = () => {
     const scheduledJobs = (jobs.scheduled || []).filter(j => submissionStatuses?.[j.id] !== 'done');
     const newJobs = (jobs.unscheduled || []).filter(j => submissionStatuses?.[j.id] !== 'done');
 
+    // Single source of truth for the "Plan dnia" header counter — it MUST be
+    // the exact value rendered in the Zaplanowane section badge below so the
+    // header and body can never drift out of sync.
+    const dailyScheduledCount = scheduledJobs.length;
+
     // NOWE (unscheduled) orders have no date — show them only when viewing today
     const todayISO = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
     const isViewingToday = calendar.selectedDate === todayISO;
@@ -132,7 +147,7 @@ export const Dashboard: React.FC = () => {
                             <div className="flex items-center gap-1.5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                                 <span className="text-[10px] text-muted font-bold uppercase tracking-wider">
-                                    Plan dnia: {scheduledJobs.length} zleceń
+                                    Plan dnia: {dailyScheduledCount} {plZlecenie(dailyScheduledCount)}
                                 </span>
                             </div>
                         </div>
@@ -184,8 +199,8 @@ export const Dashboard: React.FC = () => {
                         <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
                         <h3 className="text-sm font-black tracking-tight text-foreground uppercase flex items-center gap-2">
                             Zaplanowane
-                            <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-700">
-                                {scheduledJobs.length}
+                            <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-700">
+                                {dailyScheduledCount}
                             </span>
                         </h3>
                     </div>
@@ -209,7 +224,7 @@ export const Dashboard: React.FC = () => {
                         <span className="w-2.5 h-2.5 rounded-full bg-orange-400 flex-shrink-0" />
                         <h3 className="text-sm font-black tracking-tight text-foreground uppercase flex items-center gap-2">
                             Nowe
-                            <span className="text-[11px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-lg border border-orange-200 dark:border-orange-700">
+                            <span className="text-[11px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-lg border border-orange-200 dark:border-orange-700">
                                 {newJobs.length}
                             </span>
                         </h3>
@@ -218,8 +233,8 @@ export const Dashboard: React.FC = () => {
                     {jobs.loading ? (
                         <SkeletonCard />
                     ) : newJobs.length === 0 ? (
-                        <div className="bg-surface-raised/10 border border-dashed border-border/50 rounded-2xl py-6 flex flex-col items-center justify-center text-center px-6 grayscale">
-                            <p className="text-[10px] text-muted/50 font-bold uppercase tracking-widest">Wszystkie misje są przypisane do dat</p>
+                        <div className="bg-surface-raised/30 border border-dashed border-border rounded-2xl py-6 flex flex-col items-center justify-center text-center px-6">
+                            <p className="text-xs text-muted font-bold uppercase tracking-widest">Wszystkie misje są przypisane do dat</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-4">
@@ -263,7 +278,7 @@ export const Dashboard: React.FC = () => {
             <div className="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-50 dark:from-slate-950 via-slate-50/80 dark:via-slate-950/80 to-transparent pointer-events-none z-40 transition-opacity" />
 
             <footer className="fixed bottom-6 left-6 right-6 h-16 bg-surface/60 backdrop-blur-3xl border border-border rounded-2xl shadow-xl flex items-center justify-around z-50 transform transition-all hover:border-primary/20">
-                <button className="flex flex-col items-center gap-1 text-primary">
+                <button className="flex flex-col items-center gap-1 text-primary bg-primary/10 border border-primary/20 px-4 py-1.5 rounded-xl transition-colors">
                     <UserCircle className="w-6 h-6" />
                     <span className="text-[9px] font-black uppercase">Dashboard</span>
                 </button>

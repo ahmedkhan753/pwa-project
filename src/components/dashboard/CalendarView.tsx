@@ -106,9 +106,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onClose }) => {
                         >
                             <ChevronLeft className="w-5 h-5 text-foreground" />
                         </button>
-                        <span className="font-black text-base text-foreground uppercase tracking-tight">
+                        <button
+                            onClick={() => setViewDate(new Date())}
+                            title="Przejdź do bieżącego miesiąca"
+                            className="font-black text-base text-foreground uppercase tracking-tight px-3 py-1 rounded-lg hover:bg-surface-raised transition-colors"
+                        >
                             {MONTHS_PL[month]} {year}
-                        </span>
+                        </button>
                         <button
                             onClick={nextMonth}
                             className="p-2 hover:bg-surface-raised rounded-xl transition-colors active:scale-95"
