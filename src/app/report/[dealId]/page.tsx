@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { DamageMap } from '@/components/ui/report/DamageMap';
+import { HIGHLIGHT_COLOR } from '@/lib/damageMapConfig';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -779,13 +781,17 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
     setLightbox({ photos, idx });
   }, []);
 
-  const scrollToDamage = useCallback((index: number) => {
-    const el = document.getElementById(`damage-${index}`);
+  const scrollToDamage = useCallback((kind: 'ext' | 'int', index: number) => {
+    const el = document.getElementById(`damage-${kind}-${index}`);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const prev = el.style.boxShadow;
-    el.style.boxShadow = '0 0 0 3px rgba(239,68,68,0.55)';
-    window.setTimeout(() => { el.style.boxShadow = prev; }, 1400);
+    // Capture the existing background (set inline by React) so we can restore
+    // it cleanly after the yellow flash fades — otherwise the tinted exterior
+    // card backgrounds would be wiped to transparent until the next render.
+    const prev = el.style.backgroundColor;
+    el.style.transition = 'background-color 0.3s';
+    el.style.backgroundColor = HIGHLIGHT_COLOR;
+    window.setTimeout(() => { el.style.backgroundColor = prev; }, 2000);
   }, []);
 
   // ⚠️ ALL HOOKS MUST BE DECLARED BEFORE EARLY RETURNS — Rules of Hooks (React #310)
@@ -1572,7 +1578,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                     display:'flex',flexWrap:'wrap',gap:6,alignItems:'center' }}>
                     <span style={{ fontWeight:600 }}>Zarejestrowano {data.damages.length} uszkodzeń:</span>
                     {data.damages.map((d, i) => (
-                      <button key={i} onClick={() => scrollToDamage(d.index)}
+                      <button key={i} onClick={() => scrollToDamage('ext', d.index)}
                         style={{ appearance:'none',border:'1px solid rgba(239,68,68,0.35)',
                           background:'#fff',color:'#991B1B',borderRadius:999,padding:'4px 10px',
                           fontSize:12,fontWeight:600,cursor:'pointer',minHeight:28,
@@ -1670,7 +1676,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             <CollapsibleSection id="uszkodzenia" icon="fas fa-exclamation-triangle" num="07 / Uszkodzenia zewnętrzne" title="Uszkodzenia zewnętrzne" defaultOpen>
               <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
                 {data.damages.map((d, i) => (
-                  <div key={i} id={`damage-${d.index}`} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
+                  <div key={i} id={`damage-ext-${d.index}`} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
                     background: d.severity === 'structural' ? '#FEF2F2' : '#FFFBEB',
                     border: `1px solid ${d.severity === 'structural' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'}`,
                     alignItems:'flex-start',scrollMarginTop:100,transition:'box-shadow 0.3s' }}>
@@ -1731,8 +1737,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             <CollapsibleSection id="uszkodzenia-wnetrze" icon="fas fa-couch" num="08 / Uszkodzenia wnętrza" title="Uszkodzenia wnętrza">
               <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
                 {(data.interior_damages ?? []).map((d, i) => (
-                  <div key={i} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
-                    background:'#F5F5F7',border:'1px solid #E8E8ED',alignItems:'flex-start' }}>
+                  <div key={i} id={`damage-int-${d.index}`} style={{ display:'flex',gap:14,padding:'14px 16px',borderRadius:8,
+                    background:'#F5F5F7',border:'1px solid #E8E8ED',alignItems:'flex-start',scrollMarginTop:100,transition:'background-color 0.3s' }}>
                     <div style={{ width:32,height:32,borderRadius:6,flexShrink:0,
                       background:'#6B7280',display:'flex',alignItems:'center',
                       justifyContent:'center',color:'#fff',fontWeight:700,fontSize:13 }}>
@@ -1780,6 +1786,27 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 ))}
               </div>
               <KomentarzBlock text={data.komentarze?.uszkodzenia || ''} />
+            </CollapsibleSection>
+          </>
+        )}
+
+        {/* ── DAMAGE MAP (Position 8 — Mapa uszkodzeń) ── */}
+        {(data.damages.length > 0 || (data.interior_damages?.length ?? 0) > 0) && (
+          <>
+            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+            <CollapsibleSection
+              id="mapa-uszkodzen"
+              icon="fas fa-map-marker-alt"
+              num=""
+              title="Mapa uszkodzeń"
+              defaultOpen
+            >
+              <DamageMap
+                damages={data.damages}
+                interiorDamages={data.interior_damages ?? []}
+                bodyType={data.vehicle.body_type || ''}
+                scrollToDamage={scrollToDamage}
+              />
             </CollapsibleSection>
           </>
         )}
