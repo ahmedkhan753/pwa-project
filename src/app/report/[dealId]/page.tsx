@@ -1675,6 +1675,27 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
           <KomentarzBlock text={data.komentarze?.zdjecia || ''} />
         </CollapsibleSection>
 
+        {/* ── DAMAGE MAP (Mapa uszkodzeń) ── */}
+        {(data.damages.length > 0 || (data.interior_damages?.length ?? 0) > 0) && (
+          <>
+            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
+            <CollapsibleSection
+              id="mapa-uszkodzen"
+              icon="fas fa-map-marker-alt"
+              num=""
+              title="Mapa uszkodzeń"
+              defaultOpen
+            >
+              <DamageMap
+                damages={data.damages}
+                interiorDamages={data.interior_damages ?? []}
+                bodyType={data.vehicle.body_type || ''}
+                scrollToDamage={scrollToDamage}
+              />
+            </CollapsibleSection>
+          </>
+        )}
+
         {/* ── EXTERIOR DAMAGE ── */}
         {data.damages.length > 0 && (
           <>
@@ -1792,27 +1813,6 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 ))}
               </div>
               <KomentarzBlock text={data.komentarze?.uszkodzenia || ''} />
-            </CollapsibleSection>
-          </>
-        )}
-
-        {/* ── DAMAGE MAP (Position 8 — Mapa uszkodzeń) ── */}
-        {(data.damages.length > 0 || (data.interior_damages?.length ?? 0) > 0) && (
-          <>
-            <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
-            <CollapsibleSection
-              id="mapa-uszkodzen"
-              icon="fas fa-map-marker-alt"
-              num=""
-              title="Mapa uszkodzeń"
-              defaultOpen
-            >
-              <DamageMap
-                damages={data.damages}
-                interiorDamages={data.interior_damages ?? []}
-                bodyType={data.vehicle.body_type || ''}
-                scrollToDamage={scrollToDamage}
-              />
             </CollapsibleSection>
           </>
         )}
