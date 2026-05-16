@@ -110,6 +110,18 @@ PAINT_ENUM_LABELS: Dict[str, str] = {
     "424": "500-2000um",
 }
 
+# ─── Overall-condition enumeration translation ───────────────────────────────
+# Bitrix UF_CRM_1766057661321 is an enum; the API returns the option ID, not
+# the label. Five options exist (verified via crm.deal.userfield.list).
+# Unknown/empty values pass through unchanged.
+OVERALL_CONDITION_LABELS: Dict[str, str] = {
+    "44": "Nieuszkodzony",
+    "46": "Uszkodzony-Zdemontowany",
+    "48": "Uszkodzony",
+    "50": "Rynek pierwotny",
+    "52": "Rynek wtórny",
+}
+
 
 # ─── Photo slot label lookup ─────────────────────────────────────────────────
 
@@ -516,6 +528,14 @@ async def get_report(deal_id: int, request: Request):
         "paint_type":            _f("paint_type"),
         "version":               _f("version"),
     }
+
+    # Translate Bitrix overall_condition enum ID → human label.
+    # Empty/None or unknown values pass through unchanged.
+    _oc_raw = vehicle.get("overall_condition")
+    if _oc_raw:
+        _oc_key = str(_oc_raw).strip()
+        if _oc_key in OVERALL_CONDITION_LABELS:
+            vehicle["overall_condition"] = OVERALL_CONDITION_LABELS[_oc_key]
 
     # ── Vehicle field reconciliation with InspectionRecord ──────────────
     #
