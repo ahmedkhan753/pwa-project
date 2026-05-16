@@ -5,6 +5,12 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { DamageMap } from '@/components/ui/report/DamageMap';
 import { HIGHLIGHT_COLOR } from '@/lib/damageMapConfig';
 
+// Per-deal override: completely hide the Stan mechaniczny (09) section
+// for these deal IDs — no header, no placeholder, no card. Manager-mandated
+// for specific contracts where the section is irrelevant. Acknowledged tech
+// debt; remove the deal id once the section is needed again.
+const HIDE_MECHANICAL_FOR_DEALS = new Set<number>([1862]);
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface PhotoItem {
@@ -1813,6 +1819,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
         {/* ── MECHANICAL CONDITION ── */}
         {(() => {
+          // Per-deal hide override — return null *before* any header / divider
+          // so the section is completely absent from the report.
+          if (HIDE_MECHANICAL_FOR_DEALS.has(data.deal_id)) return null;
           const mech = data.mechanical || {};
           // Same label set + value mapping as the Protokół Wycena PDF
           // (services/protokol_wycena_pdf.py::MECHANICAL_ROWS) so the
