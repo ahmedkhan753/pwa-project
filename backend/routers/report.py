@@ -97,6 +97,19 @@ MECHANICAL_FIELD_FALLBACKS: Dict[str, str] = {
     "steeringPump":   "UF_CRM_1772534574",   # mapping: power_steering_level
 }
 
+# ─── Paint-thickness enumeration translation ─────────────────────────────────
+# The Bitrix UI saves the per-panel paint-thickness field as an *enumeration*
+# (the option's numeric ID, not a µm measurement). Five options exist, all
+# listed below. The PWA wizard writes string labels like "0-150µm" straight to
+# the DB, so this map only applies to the Bitrix-side fallback path.
+PAINT_ENUM_LABELS: Dict[str, str] = {
+    "416": "0-150um",
+    "418": "150-200um",
+    "420": "150-300um",
+    "422": "500-1000um",
+    "424": "500-2000um",
+}
+
 
 # ─── Photo slot label lookup ─────────────────────────────────────────────────
 
@@ -313,6 +326,21 @@ def _paint_status(value_um: float) -> str:
     if value_um <= 300:
         return "repainted"  # yellow
     return "repair"         # red
+
+
+def _paint_enum_translation(raw_v: Any) -> Optional[tuple]:
+    """If ``raw_v`` is a Bitrix paint-thickness enumeration ID (the option ID
+    stored as a string, e.g. "416"), return ``(range_label, status)`` —
+    "0-150um" is the only factory band, every wider band is repair work per
+    spec. Returns ``None`` for anything else so the caller falls through to
+    the normal numeric (`_safe_float`) path."""
+    if raw_v in (None, "", 0):
+        return None
+    key = str(raw_v).strip()
+    label = PAINT_ENUM_LABELS.get(key)
+    if not label:
+        return None
+    return (label, "factory" if label == "0-150um" else "repair")
 
 
 def _paint_parse_range_label(raw: Any) -> Optional[str]:
@@ -713,17 +741,28 @@ async def get_report(deal_id: int, request: Request):
 
     for idx, (key, label, field_id) in enumerate(PAINT_PANELS_19, 1):
         val, range_label = _paint_val_from_record(key)
+        enum_status: Optional[str] = None
+        # Bitrix-side fallback. The UI saves an enumeration ID string
+        # ("416"…"424") rather than a µm reading, so translate that to a
+        # range label first; only fall through to float parsing when the
+        # value isn't one of the five known enum IDs.
         if (val is None or val <= 0) and field_id:
-            val = _safe_float(raw.get(field_id))
-        if val and val > 0:
-            status = _paint_status(val)
+            raw_field = raw.get(field_id)
+            translated = _paint_enum_translation(raw_field)
+            if translated is not None:
+                range_label, enum_status = translated
+                val = None  # enum values carry no precise µm reading
+            else:
+                val = _safe_float(raw_field)
+        if (val and val > 0) or enum_status is not None:
+            status = enum_status or _paint_status(val)
             if status in ("repainted", "repair"):
                 repaint_count += 1
             paint_measurements.append({
                 "point":       idx,
                 "key":         key,
                 "name":        label,
-                "value_um":    val,
+                "value_um":    val if (val and val > 0) else None,
                 "range_label": range_label,
                 "status":      status,
             })
