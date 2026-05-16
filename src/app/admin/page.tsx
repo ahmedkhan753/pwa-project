@@ -72,6 +72,9 @@ export default function AdminPanel() {
     const saved = localStorage.getItem("admin_token")
     if (saved) {
       setAdminToken(saved)
+      // Mirror to sessionStorage so /admin/reports/* sub-pages can read the
+      // same token without re-prompting for the password.
+      sessionStorage.setItem("admin_token", saved)
       setAuthed(true)
       fetchInspectors(saved)
     }
@@ -96,6 +99,7 @@ export default function AdminPanel() {
         const data = await res.json()
         setAdminToken(data.access_token)
         localStorage.setItem("admin_token", data.access_token)
+        sessionStorage.setItem("admin_token", data.access_token)
         setAuthed(true)
         fetchInspectors(data.access_token)
       } else {
@@ -108,6 +112,7 @@ export default function AdminPanel() {
 
   const logout = () => {
     localStorage.removeItem("admin_token")
+    sessionStorage.removeItem("admin_token")
     setAdminToken("")
     setAuthed(false)
     setInspectors([])
@@ -404,7 +409,13 @@ export default function AdminPanel() {
             <h1 className="text-lg lg:text-xl font-bold text-gray-900">Panel Administracyjny</h1>
             <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">Zarządzanie inspektorami i zleceniami</p>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            <a
+              href="/admin/reports"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors shadow-sm min-h-[44px]"
+            >
+              📝 Edytuj raporty
+            </a>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors shadow-sm min-h-[44px]"
