@@ -1138,13 +1138,6 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   </div>
                 </div>
               )}
-              {v.overall_condition && (
-                <div style={{ background:'rgba(255,255,255,0.95)',backdropFilter:'blur(12px)',
-                  padding:'10px 18px',borderRadius:10,border:'1px solid #22C55E',boxShadow:'0 2px 12px rgba(0,0,0,0.1)' }}>
-                  <div style={{ fontSize:9,color:'#86868B',textTransform:'uppercase',letterSpacing:'1.5px',fontWeight:600 }}>Stan ogólny</div>
-                  <div style={{ fontSize:17,color:'#22C55E',fontWeight:700 }}>{v.overall_condition}</div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1270,11 +1263,10 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               { icon:'fas fa-calendar-check',label:'Data pierwszej rejestracji', value: v.first_registration_date },
               { icon:'fas fa-user',          label:'Liczba właścicieli',  value: v.owners_count },
               { icon:'fas fa-star',          label:'Wersja wyposażenia',  value: v.version },
-              { icon:'fas fa-check-circle',  label:'Stan ogólny',         value: v.overall_condition, highlight: true, fullWidth: true },
             ].filter(f => f.value !== null && f.value !== undefined && String(f.value) !== '').map((f, i) => (
               <div key={i} style={{
                 display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',
-                borderRadius:8,gridColumn: f.fullWidth ? '1/-1' : undefined,
+                borderRadius:8,
                 background: f.highlight ? '#FEF2F2' : '#F5F5F7',
                 border: f.highlight ? '1px solid rgba(183,28,28,0.12)' : '1px solid transparent',
                 transition:'all 0.3s',overflow:'hidden',minWidth:0,
