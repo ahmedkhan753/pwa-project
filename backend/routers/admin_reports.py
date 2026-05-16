@@ -422,7 +422,7 @@ class ChangeBatch(BaseModel):
 
 # ─── Endpoint 1: list reports ─────────────────────────────────────────────────
 
-@router.get("/api/admin/reports")
+@router.get("/admin/reports")
 async def list_reports(
     request: Request,
     page: int = Query(1, ge=1),
@@ -514,7 +514,7 @@ def _load_json(raw: Optional[str], default: Any) -> Any:
         return default
 
 
-@router.get("/api/admin/reports/{deal_id}/edit")
+@router.get("/admin/reports/{deal_id}/edit")
 async def get_report_edit(
     deal_id: int,
     request: Request,
@@ -562,7 +562,7 @@ async def get_report_edit(
 
 # ─── Endpoint 3: apply changes ────────────────────────────────────────────────
 
-@router.put("/api/admin/reports/{deal_id}")
+@router.put("/admin/reports/{deal_id}")
 async def update_report(
     deal_id: int,
     body: ChangeBatch,
