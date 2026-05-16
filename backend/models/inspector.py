@@ -4,7 +4,7 @@ Inspector Model
 SQLAlchemy model for the inspectors table.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, UniqueConstraint, LargeBinary, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, UniqueConstraint, LargeBinary, Text, Index
 from sqlalchemy.sql import func
 from database import Base
 
@@ -99,3 +99,20 @@ class InspectionRecord(Base):
     paint_json          = Column(Text, nullable=True)   # paintMeasurement (19 panels)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())
+
+
+class InspectionEdit(Base):
+    """Audit log for admin edits to Condition Report fields."""
+    __tablename__ = "inspection_edits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, nullable=False, index=True)
+    admin_username = Column(String(100), nullable=False)
+    edited_at = Column(DateTime, server_default=func.now())
+    field_path = Column(String(255), nullable=False)
+    old_value = Column(Text, nullable=True)   # JSON-serialised
+    new_value = Column(Text, nullable=True)   # JSON-serialised
+
+    __table_args__ = (
+        Index("ix_inspection_edits_deal_edited", "deal_id", "edited_at"),
+    )

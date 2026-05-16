@@ -285,6 +285,7 @@ async def log_requests(request: Request, call_next):
 from routers import health, deals, inspection, files, metadata
 from routers import auth as auth_router
 from routers import admin as admin_router
+from routers import admin_reports as admin_reports_router
 from routers import webhook as webhook_router
 from routers import report as report_router
 from routers import kosztorys as kosztorys_router
@@ -297,6 +298,7 @@ app.include_router(files.binary_router)
 app.include_router(metadata.router)
 app.include_router(auth_router.router)
 app.include_router(admin_router.router)
+app.include_router(admin_reports_router.router)
 app.include_router(webhook_router.router)
 # Public report endpoint — no auth required
 app.include_router(report_router.router)
