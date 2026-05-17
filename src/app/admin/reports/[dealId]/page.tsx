@@ -289,7 +289,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
         <select
           value={inputStr}
           onChange={e => onFieldChange(path, schema, e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px] bg-white"
+          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px] bg-white text-gray-900"
         >
           {merged.map(opt => (
             <option key={opt} value={opt}>
@@ -308,7 +308,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
           min={schema.min}
           max={schema.max}
           onChange={e => onFieldChange(path, schema, e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px]"
+          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px] bg-white text-gray-900 placeholder:text-gray-400"
         />
       )
     }
@@ -320,7 +320,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
           value={inputStr}
           rows={4}
           onChange={e => onFieldChange(path, schema, e.target.value)}
-          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors"
+          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors bg-white text-gray-900 placeholder:text-gray-400"
         />
       )
     }
@@ -329,7 +329,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
         type="text"
         value={inputStr}
         onChange={e => onFieldChange(path, schema, e.target.value)}
-        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px]"
+        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px] bg-white text-gray-900 placeholder:text-gray-400"
       />
     )
   }
@@ -488,7 +488,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
               <button
                 onClick={save}
                 disabled={changedPaths.length === 0 || saving}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors shadow-sm min-h-[44px]"
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors shadow-sm min-h-[44px]"
               >
                 {saving ? "Zapisywanie…" : `Zapisz zmiany (${changedPaths.length})`}
               </button>
