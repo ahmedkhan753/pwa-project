@@ -543,20 +543,19 @@ async def get_report_edit(
         except Exception as e:
             logger.warning(f"[admin_reports] Bitrix fetch failed for deal {deal_id}: {e}")
 
+    # Only return what the v1 editor actually renders. The other JSON columns
+    # (equipment / full_equipment / tires / mechanical / notes / exterior &
+    # interior damages) carry base64 photo payloads that explode the response
+    # to multi-MB sizes — the form never reads them, so omit them entirely.
+    # PUT still accepts changes against those roots when ever they're added
+    # back to the schema.
     return {
         "deal_id": deal_id,
         "title": title,
-        "vehicle":          _load_json(rec.vehicle_json, {}),
-        "paint":            _load_json(rec.paint_json, {}),
-        "equipment":        _load_json(rec.equipment_json, {}),
-        "full_equipment":   _load_json(rec.full_equipment_json, {}),
-        "tires":            _load_json(rec.tires_json, {}),
-        "mechanical":       _load_json(rec.mechanical_json, {}),
-        "exterior_damages": _load_json(rec.exterior_damage_json, []),
-        "interior_damages": _load_json(rec.interior_damage_json, []),
-        "notes":            _load_json(rec.notes_json, {}),
-        "bitrix_extras":    bitrix_extras,
-        "schema":           SCHEMA_CACHE,
+        "vehicle":       _load_json(rec.vehicle_json, {}),
+        "paint":         _load_json(rec.paint_json, {}),
+        "bitrix_extras": bitrix_extras,
+        "schema":        SCHEMA_CACHE,
     }
 
 
