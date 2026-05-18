@@ -32,6 +32,85 @@ const formatDate = (iso: string | null): string => {
   }
 }
 
+// Section / page chrome shared across both admin/reports views. Mirrors the
+// CollapsibleSection header style from src/app/report/[dealId]/page.tsx so
+// the admin tooling stays visually aligned with the report it edits.
+function PageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="min-h-screen px-3 py-4 sm:px-6 sm:py-6"
+      style={{ background: "#F5F5F7", color: "#1D1D1F" }}
+    >
+      <div className="max-w-4xl mx-auto flex flex-col gap-4">{children}</div>
+    </div>
+  )
+}
+
+function SectionCard({
+  eyebrow, icon, title, subtitle, children,
+}: {
+  eyebrow?: string
+  icon?: string
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section
+      className="bg-white relative overflow-hidden transition-shadow"
+      style={{
+        borderRadius: 12,
+        border: "1px solid #E8E8ED",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+      }}
+    >
+      {/* Left red accent bar */}
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 bottom-0"
+        style={{ width: 3, background: "#B71C1C", borderRadius: "0 3px 3px 0" }}
+      />
+      <div className="flex items-center gap-3 sm:gap-4 px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
+        {icon && (
+          <div
+            className="flex items-center justify-center flex-shrink-0"
+            style={{
+              width: 42, height: 42, borderRadius: 8,
+              background: "#FEF2F2", color: "#B71C1C", fontSize: 17,
+            }}
+          >
+            <i className={icon} />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          {eyebrow && (
+            <div
+              className="font-bold uppercase"
+              style={{ fontSize: 11, color: "#B71C1C", letterSpacing: 2, lineHeight: 1.2, marginBottom: 2 }}
+            >
+              {eyebrow}
+            </div>
+          )}
+          <div className="font-bold" style={{ fontSize: 19, color: "#1D1D1F", lineHeight: 1.3 }}>
+            {title}
+          </div>
+          {subtitle && (
+            <div className="text-xs sm:text-sm mt-1" style={{ color: "#86868B" }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </div>
+      <div
+        className="px-5 sm:px-7 pb-5 sm:pb-6 pt-2"
+        style={{ borderTop: "1px solid #E8E8ED" }}
+      >
+        {children}
+      </div>
+    </section>
+  )
+}
+
 export default function AdminReportsListPage() {
   const router = useRouter()
   const [token, setToken] = useState<string | null>(null)
@@ -42,7 +121,7 @@ export default function AdminReportsListPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  // Auth guard — read once on mount.
+  // Auth guard.
   useEffect(() => {
     const t = sessionStorage.getItem("admin_token")
     if (!t) {
@@ -52,7 +131,7 @@ export default function AdminReportsListPage() {
     setToken(t)
   }, [router])
 
-  // Debounce search input by 300ms.
+  // Debounced search.
   useEffect(() => {
     const h = setTimeout(() => {
       setDebouncedSearch(search.trim())
@@ -79,9 +158,7 @@ export default function AdminReportsListPage() {
         router.push("/admin")
         return
       }
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`)
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json: ListResponse = await res.json()
       setData(json)
     } catch (e: unknown) {
@@ -92,9 +169,7 @@ export default function AdminReportsListPage() {
     }
   }, [token, page, debouncedSearch, router])
 
-  useEffect(() => {
-    fetchList()
-  }, [fetchList])
+  useEffect(() => { fetchList() }, [fetchList])
 
   const totalPages = useMemo(
     () => (data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1),
@@ -103,126 +178,278 @@ export default function AdminReportsListPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-500">Przekierowywanie…</p>
-      </div>
+      <PageShell>
+        <p className="text-sm text-center py-12" style={{ color: "#86868B" }}>
+          Przekierowywanie…
+        </p>
+      </PageShell>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 lg:p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-6 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-          <div>
-            <h1 className="text-lg lg:text-xl font-bold text-gray-900">Raporty — edycja</h1>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
-              Edycja danych Condition Report (tekst / liczby / enum)
-            </p>
-          </div>
-          <a
-            href="/admin"
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors min-h-[44px] inline-flex items-center"
+    <PageShell>
+      {/* Header card */}
+      <header
+        className="bg-white px-5 sm:px-7 py-5 sm:py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        style={{
+          borderRadius: 12,
+          border: "1px solid #E8E8ED",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+      >
+        <div className="min-w-0">
+          <div
+            className="font-bold uppercase mb-1.5"
+            style={{ fontSize: 11, color: "#B71C1C", letterSpacing: 2 }}
           >
-            ← Panel
-          </a>
-        </div>
-
-        {/* Search */}
-        <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-4 border border-gray-100 mb-4">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Szukaj po ID zlecenia lub tytule…"
-            className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-blue-500 outline-none transition-colors min-h-[44px]"
-          />
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 text-red-700 border border-red-200 rounded-xl px-4 py-3 mb-4 text-sm font-medium">
-            {error}
-            <button
-              onClick={fetchList}
-              className="ml-3 underline hover:no-underline font-bold"
-            >
-              Spróbuj ponownie
-            </button>
+            Panel administracyjny
           </div>
-        )}
-
-        {/* List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          {loading && (
-            <div className="p-8 text-center text-sm text-gray-500">Ładowanie…</div>
-          )}
-
-          {!loading && data && data.items.length === 0 && (
-            <div className="p-12 text-center text-sm text-gray-400">
-              {debouncedSearch
-                ? `Brak wyników dla „${debouncedSearch}”`
-                : "Brak raportów do edycji"}
-            </div>
-          )}
-
-          {!loading && data && data.items.length > 0 && (
-            <ul className="divide-y divide-gray-100">
-              {data.items.map(row => (
-                <li
-                  key={row.deal_id}
-                  className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/admin/reports/${row.deal_id}`)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-gray-900">#{row.deal_id}</span>
-                      <span className="text-sm text-gray-700 truncate">
-                        {row.title || <em className="text-gray-400">bez tytułu</em>}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-gray-500 mt-1">
-                      Aktualizacja: {formatDate(row.updated_at)}
-                    </div>
-                  </div>
-                  <button
-                    onClick={e => {
-                      e.stopPropagation()
-                      router.push(`/admin/reports/${row.deal_id}`)
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors min-h-[40px] sm:flex-none w-full sm:w-auto"
-                  >
-                    Edytuj
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <h1
+            className="font-bold"
+            style={{ fontSize: 24, color: "#1D1D1F", lineHeight: 1.2 }}
+          >
+            Raporty — edycja
+          </h1>
+          <p className="text-xs sm:text-sm mt-1" style={{ color: "#86868B" }}>
+            Edycja danych Condition Report (tekst / liczby / enum)
+          </p>
         </div>
+        <a
+          href="/admin"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors"
+          style={{
+            minHeight: 44,
+            borderRadius: 10,
+            background: "#F5F5F7",
+            color: "#1D1D1F",
+            border: "1px solid #E8E8ED",
+          }}
+        >
+          <i className="fa-solid fa-arrow-left" style={{ fontSize: 12 }} />
+          Panel
+        </a>
+      </header>
 
-        {/* Pagination */}
-        {data && data.total > PAGE_SIZE && (
-          <div className="flex items-center justify-between mt-4 bg-white rounded-2xl shadow-sm p-3 border border-gray-100">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-              className="bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors min-h-[40px]"
-            >
-              ← Poprzednia
-            </button>
-            <span className="text-xs sm:text-sm font-medium text-gray-500">
-              Strona {page} z {totalPages} · {data.total} zleceń
-            </span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
-              className="bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors min-h-[40px]"
-            >
-              Następna →
-            </button>
-          </div>
+      {/* Search card */}
+      <div
+        className="bg-white px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3"
+        style={{
+          borderRadius: 12,
+          border: "1px solid #E8E8ED",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+      >
+        <i
+          className="fa-solid fa-magnifying-glass"
+          style={{ fontSize: 14, color: "#86868B" }}
+          aria-hidden
+        />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Szukaj po ID zlecenia lub tytule…"
+          className="flex-1 outline-none bg-white text-sm font-medium placeholder:text-gray-400"
+          style={{ color: "#1D1D1F", minHeight: 36 }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="text-xs font-semibold"
+            style={{ color: "#86868B" }}
+            aria-label="Wyczyść"
+          >
+            <i className="fa-solid fa-xmark" />
+          </button>
         )}
       </div>
-    </div>
+
+      {/* Error */}
+      {error && (
+        <div
+          className="px-4 py-3 text-sm font-medium flex items-center gap-3"
+          style={{
+            background: "#FEF2F2",
+            color: "#B71C1C",
+            border: "1px solid rgba(183,28,28,0.2)",
+            borderRadius: 12,
+          }}
+        >
+          <i className="fa-solid fa-triangle-exclamation" />
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={fetchList}
+            className="font-bold underline hover:no-underline"
+          >
+            Spróbuj ponownie
+          </button>
+        </div>
+      )}
+
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2, 3].map(i => (
+            <div
+              key={i}
+              className="bg-white animate-pulse"
+              style={{
+                borderRadius: 12,
+                border: "1px solid #E8E8ED",
+                height: 76,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && data && data.items.length === 0 && (
+        <SectionCard
+          eyebrow="Brak wyników"
+          icon="fa-solid fa-folder-open"
+          title={
+            debouncedSearch
+              ? `Brak raportów dla „${debouncedSearch}”`
+              : "Wszystkie raporty zostały sprawdzone"
+          }
+          subtitle={
+            debouncedSearch
+              ? "Spróbuj innego ID lub fragmentu tytułu."
+              : "Nowe raporty pojawią się tutaj po przesłaniu inspekcji."
+          }
+        >
+          <div className="py-2" />
+        </SectionCard>
+      )}
+
+      {/* List */}
+      {!loading && data && data.items.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {data.items.map(row => (
+            <li
+              key={row.deal_id}
+              onClick={() => router.push(`/admin/reports/${row.deal_id}`)}
+              className="bg-white flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 cursor-pointer group transition-all"
+              style={{
+                borderRadius: 12,
+                border: "1px solid #E8E8ED",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = "rgba(183,28,28,0.3)"
+                e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.06)"
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = "#E8E8ED"
+                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"
+              }}
+            >
+              {/* Deal ID badge */}
+              <div
+                className="flex items-center justify-center flex-shrink-0 font-bold"
+                style={{
+                  width: 56, height: 56, borderRadius: 10,
+                  background: "#FEF2F2", color: "#B71C1C",
+                  fontSize: 13, letterSpacing: 0.5,
+                }}
+              >
+                #{row.deal_id}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div
+                  className="font-semibold truncate"
+                  style={{ fontSize: 15, color: "#1D1D1F" }}
+                >
+                  {row.title || (
+                    <span className="italic" style={{ color: "#86868B" }}>
+                      Bez tytułu
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="mt-1 flex items-center gap-2 text-xs"
+                  style={{ color: "#86868B" }}
+                >
+                  <i className="fa-regular fa-clock" style={{ fontSize: 11 }} />
+                  <span>Aktualizacja: {formatDate(row.updated_at)}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  router.push(`/admin/reports/${row.deal_id}`)
+                }}
+                className="inline-flex items-center justify-center gap-2 font-bold text-sm transition-transform active:scale-[0.98]"
+                style={{
+                  minHeight: 44,
+                  borderRadius: 10,
+                  padding: "10px 16px",
+                  background: "#B71C1C",
+                  color: "#fff",
+                  boxShadow: "0 2px 6px rgba(183,28,28,0.18)",
+                }}
+              >
+                Edytuj
+                <i className="fa-solid fa-pen-to-square" style={{ fontSize: 12 }} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Pagination */}
+      {data && data.total > PAGE_SIZE && (
+        <div
+          className="bg-white flex items-center justify-between gap-3 px-4 sm:px-5 py-3 sm:py-4"
+          style={{
+            borderRadius: 12,
+            border: "1px solid #E8E8ED",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          }}
+        >
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1 || loading}
+            className="inline-flex items-center gap-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed"
+            style={{
+              minHeight: 40,
+              borderRadius: 10,
+              padding: "8px 14px",
+              background: page <= 1 ? "#F5F5F7" : "#fff",
+              color: page <= 1 ? "#86868B" : "#1D1D1F",
+              border: "1px solid #E8E8ED",
+              opacity: page <= 1 ? 0.6 : 1,
+            }}
+          >
+            <i className="fa-solid fa-arrow-left" style={{ fontSize: 11 }} />
+            Poprzednia
+          </button>
+          <span className="text-xs sm:text-sm font-medium text-center" style={{ color: "#86868B" }}>
+            Strona <span style={{ color: "#1D1D1F" }}>{page}</span> z {totalPages}
+            <span className="hidden sm:inline"> · {data.total} zleceń</span>
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || loading}
+            className="inline-flex items-center gap-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed"
+            style={{
+              minHeight: 40,
+              borderRadius: 10,
+              padding: "8px 14px",
+              background: page >= totalPages ? "#F5F5F7" : "#fff",
+              color: page >= totalPages ? "#86868B" : "#1D1D1F",
+              border: "1px solid #E8E8ED",
+              opacity: page >= totalPages ? 0.6 : 1,
+            }}
+          >
+            Następna
+            <i className="fa-solid fa-arrow-right" style={{ fontSize: 11 }} />
+          </button>
+        </div>
+      )}
+    </PageShell>
   )
 }
