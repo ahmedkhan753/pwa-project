@@ -110,6 +110,46 @@ JSON_COLUMN_BY_ROOT: Dict[str, str] = {
 
 ALLOWED_ROOTS = set(JSON_COLUMN_BY_ROOT) | {"bitrix_extras"}
 
+# Schema → DB-column translation for the vehicle blob. The wizard persists
+# vehicle_json with camelCase keys (driveType, bodyType, gearboxType, …),
+# while the public-facing schema uses snake_case (drive_type, body_type, …).
+# Edits must translate to the camelCase storage key, otherwise we silently
+# create a *new* snake_case sibling and the report keeps reading the original
+# empty camelCase value. Confirmed root cause for the May 2026 audit log full
+# of "successful" drive_type writes that never showed up on the report.
+VEHICLE_SCHEMA_TO_DB_KEY: Dict[str, str] = {
+    "body_type":               "bodyType",
+    "drive_type":              "driveType",
+    "transmission":            "gearboxType",
+    "fuel_type":               "fuelType",
+    "doors":                   "doorsCount",
+    "seats":                   "seatsCount",
+    "engine_capacity_cc":      "engineCapacity",
+    "engine_power_hp":         "enginePower",
+    "registration_plate":      "registrationPlates",
+    "first_registration_date": "firstRegistration",
+    "weight_kg":               "ownWeight",
+}
+VEHICLE_DB_KEY_TO_SCHEMA: Dict[str, str] = {v: k for k, v in VEHICLE_SCHEMA_TO_DB_KEY.items()}
+
+
+def _to_storage_parts(parts: List[str]) -> List[str]:
+    """Rewrite a vehicle.* path's leaf so reads/writes hit the camelCase DB key."""
+    if len(parts) >= 2 and parts[0] == "vehicle" and parts[1] in VEHICLE_SCHEMA_TO_DB_KEY:
+        return [parts[0], VEHICLE_SCHEMA_TO_DB_KEY[parts[1]], *parts[2:]]
+    return parts
+
+
+def _vehicle_db_to_view(raw: Any) -> Dict[str, Any]:
+    """Expose camelCase vehicle keys under their snake_case schema names so
+    the edit form pre-fills with the actual stored values."""
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for k, v in raw.items():
+        out[VEHICLE_DB_KEY_TO_SCHEMA.get(k, k)] = v
+    return out
+
 # Hard-block paths that touch any media/signature surface.
 FORBIDDEN_PATH_TOKENS = ("photo", "video", "signature", "image")
 
@@ -354,7 +394,6 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     schema["vehicle.color"]               = {"type": "text",   "label": "Kolor"}
     schema["vehicle.engine_capacity_cc"]  = {"type": "number", "label": "Pojemność (cm³)", "min": 0}
     schema["vehicle.engine_power_hp"]     = {"type": "number", "label": "Moc (KM)", "min": 0}
-    schema["vehicle.engine_power_kw"]     = {"type": "number", "label": "Moc (kW)", "min": 0}
     schema["vehicle.fuel_type"]           = {"type": "enum",   "label": "Rodzaj paliwa", "options": FUEL_TYPES}
     schema["vehicle.body_type"]           = {"type": "enum",   "label": "Rodzaj nadwozia", "options": BODY_TYPES}
     schema["vehicle.transmission"]        = {"type": "enum",   "label": "Skrzynia biegów", "options": GEARBOX_TYPES}
@@ -365,14 +404,10 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     schema["vehicle.doors"]               = {"type": "number", "label": "Liczba drzwi", "min": 0, "max": 10}
     schema["vehicle.seats"]               = {"type": "number", "label": "Liczba miejsc", "min": 0, "max": 50}
     schema["vehicle.weight_kg"]           = {"type": "number", "label": "Masa własna (kg)", "min": 0}
-    schema["vehicle.owners_count"]        = {"type": "number", "label": "Liczba właścicieli", "min": 0}
-    schema["vehicle.overall_condition"]   = {
-        "type": "enum",
-        "label": "Stan ogólny",
-        "options": [""] + list(OVERALL_CONDITION_LABELS.values()),
-    }
-    schema["vehicle.paint_type"]          = {"type": "text",   "label": "Typ lakieru"}
-    schema["vehicle.version"]             = {"type": "text",   "label": "Wersja wyposażenia"}
+    # Removed (no DB-side equivalent — writes were silently dropped):
+    # vehicle.engine_power_kw, vehicle.owners_count, vehicle.paint_type,
+    # vehicle.version, vehicle.overall_condition. The overall_condition value
+    # is still editable via bitrix_extras.overall_condition below.
 
     # Paint — per-panel value enum.
     for panel in PAINT_PANEL_KEYS:
@@ -552,7 +587,9 @@ async def get_report_edit(
     return {
         "deal_id": deal_id,
         "title": title,
-        "vehicle":       _load_json(rec.vehicle_json, {}),
+        # vehicle_json is stored with camelCase keys; expose them under the
+        # snake_case schema paths so the form pre-fills correctly.
+        "vehicle":       _vehicle_db_to_view(_load_json(rec.vehicle_json, {})),
         "paint":         _load_json(rec.paint_json, {}),
         "bitrix_extras": bitrix_extras,
         "schema":        SCHEMA_CACHE,
@@ -577,11 +614,14 @@ async def update_report(
         raise HTTPException(status_code=404, detail=f"No InspectionRecord for deal {deal_id}")
 
     # 1) Validate every change first — reject the batch atomically on failure.
-    parsed: List[Tuple[str, List[str], Any]] = []
+    # api_parts keeps the snake_case schema path (used for audit + Bitrix
+    # mapping lookups); storage_parts is the camelCase-translated path used
+    # for the JSON-column read/write.
+    parsed: List[Tuple[str, List[str], List[str], Any]] = []
     for ch in body.changes:
         root, parts = _validate_path(ch.path)
         _validate_change(ch.path, ch.value, SCHEMA_CACHE.get(ch.path))
-        parsed.append((root, parts, ch.value))
+        parsed.append((root, parts, _to_storage_parts(parts), ch.value))
 
     # 2) Build per-column working copies of the affected JSON blobs.
     column_blobs: Dict[str, Any] = {}
@@ -590,20 +630,21 @@ async def update_report(
     audit_rows: List[InspectionEdit] = []
     admin_name = str(current_user.get("name") or current_user.get("sub") or "Admin")
 
-    for root, parts, value in parsed:
+    for root, api_parts, storage_parts, value in parsed:
+        api_path = ".".join(api_parts)
         # bitrix_extras paths skip DB entirely and only feed the Bitrix payload.
         if root == "bitrix_extras":
-            uf = _get_bitrix_field_for_path(".".join(parts))
+            uf = _get_bitrix_field_for_path(api_path)
             if not uf:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"bitrix_extras key '{parts[1] if len(parts) > 1 else ''}' has no Bitrix mapping",
+                    detail=f"bitrix_extras key '{api_parts[1] if len(api_parts) > 1 else ''}' has no Bitrix mapping",
                 )
-            bitrix_payload[uf] = _value_to_bitrix(".".join(parts), value)
+            bitrix_payload[uf] = _value_to_bitrix(api_path, value)
             audit_rows.append(InspectionEdit(
                 deal_id=deal_id,
                 admin_username=admin_name,
-                field_path=".".join(parts),
+                field_path=api_path,
                 old_value=None,  # not fetched — Bitrix is the source of truth.
                 new_value=json.dumps(value, ensure_ascii=False, default=str),
             ))
@@ -616,21 +657,25 @@ async def update_report(
             column_blobs[column] = _load_json(raw, default_container)
             column_defaults[column] = default_container
 
-        old_value = _read_path(column_blobs[column], parts) if len(parts) > 1 else column_blobs[column]
-        column_blobs[column] = _apply_change_to_json(column_blobs[column], parts, value)
+        # Read/write hit storage_parts (camelCase for vehicle.*, unchanged elsewhere).
+        old_value = (
+            _read_path(column_blobs[column], storage_parts)
+            if len(storage_parts) > 1 else column_blobs[column]
+        )
+        column_blobs[column] = _apply_change_to_json(column_blobs[column], storage_parts, value)
 
         audit_rows.append(InspectionEdit(
             deal_id=deal_id,
             admin_username=admin_name,
-            field_path=".".join(parts),
+            field_path=api_path,
             old_value=json.dumps(old_value, ensure_ascii=False, default=str),
             new_value=json.dumps(value, ensure_ascii=False, default=str),
         ))
 
-        # Dual-write candidates.
-        uf = _get_bitrix_field_for_path(".".join(parts))
+        # Dual-write candidates — Bitrix field map keys off the snake_case API path.
+        uf = _get_bitrix_field_for_path(api_path)
         if uf:
-            bitrix_payload[uf] = _value_to_bitrix(".".join(parts), value)
+            bitrix_payload[uf] = _value_to_bitrix(api_path, value)
 
     # 3) Persist DB + audit in a single transaction.
     try:

@@ -24,7 +24,7 @@ logger = logging.getLogger("routers.auth")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey123")
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_DAYS = 90
+TOKEN_EXPIRE_DAYS = 7
 
 
 class PhoneLoginRequest(BaseModel):
