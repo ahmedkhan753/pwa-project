@@ -68,11 +68,35 @@ def _is_boilerplate(text: str) -> bool:
 
 
 def _clean_item(text: str) -> str:
-    """Normalise one assembled item: collapse spaces, fix known glue runs."""
+    """Normalise one assembled item: collapse spaces, fix known glue runs,
+    strip trailing page chrome."""
     t = re.sub(r"\s+", " ", text).strip()
     # Known extraction glue: a digit fused to "cali" (e.g. "10cali" → "10 cali").
     t = re.sub(r"(\d)(cali)", r"\1 \2", t)
-    return t
+    # Trailing page number ("… szybka 2/3") — footer chrome glued onto the
+    # last item on a page because it shares the item's column band.
+    t = re.sub(r"\s+\d+/\d+\s*$", "", t)
+    # Trailing "Zakup" — the column header of the *next* section
+    # (WYPOSAŻENIE DODATKOWE … Zakup) leaking into the final item.
+    t = re.sub(r"\s+Zakup\s*$", "", t)
+    return t.strip()
+
+
+# Known-template fixup: the Wycena layout occasionally omits the ● bullet
+# between two adjacent items, gluing the tail of one onto the head of the
+# next. The only confirmed occurrence is "Kessy Advanced" (end of one item)
+# fused to "Kieszenie na telefon…" (start of the next). Split is targeted on
+# that exact glue point — deliberately not generalised, since a loose
+# heuristic would risk cutting genuine multi-word item names.
+_KNOWN_MERGE_GLUE = "Advanced Kieszenie"
+
+
+def _split_known_merges(item: str) -> List[str]:
+    """Split an item at a known missing-bullet glue point. Returns 1 or 2."""
+    if _KNOWN_MERGE_GLUE not in item:
+        return [item]
+    head, tail = item.split(_KNOWN_MERGE_GLUE, 1)
+    return [(head + "Advanced").strip(), ("Kieszenie" + tail).strip()]
 
 
 def _column_items(words: List[Dict[str, Any]]) -> List[str]:
@@ -172,11 +196,16 @@ def parse_equipment_from_pdf(pdf_bytes: bytes) -> List[str]:
             if is_end_page:
                 break
 
-    # Post-process: normalise, drop empties and residual boilerplate.
+    # Post-process: normalise, split known missing-bullet merges, drop
+    # empties and residual boilerplate. Source insertion order is preserved
+    # (left column then right column, per page) — deliberately not sorted.
     out: List[str] = []
     for item in raw_items:
         cleaned = _clean_item(item)
-        if not cleaned or _is_boilerplate(cleaned):
+        if not cleaned:
             continue
-        out.append(cleaned)
+        for piece in _split_known_merges(cleaned):
+            piece = piece.strip()
+            if piece and not _is_boilerplate(piece):
+                out.append(piece)
     return out
