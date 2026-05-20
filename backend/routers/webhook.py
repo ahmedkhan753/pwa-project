@@ -36,6 +36,10 @@ EUROTAX_PDF_FIELD = os.getenv("BITRIX_EUROTAX_FIELD", "UF_CRM_1775497355115")
 KOSZTORYS_URL_FIELD = "UF_CRM_1777661533952"
 PUBLIC_APP_BASE = os.getenv("PUBLIC_APP_BASE", "https://app.zaufajrzeczoznawcy.pl")
 
+# Equipment auto-parse: input Wycena PDF field + output standard-equipment field.
+WYCENA_PDF_FIELD = os.getenv("BITRIX_WYCENA_FIELD", "UF_CRM_1779285905944")
+WYPOSAZENIE_STD_FIELD = "UF_CRM_1778277584327"
+
 # Local storage for downloaded docs
 DOCS_DIR = Path("/app/data/report_docs")
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -235,6 +239,61 @@ async def sync_deal_kosztorys_url(gateway, deal_id: int, deal: dict) -> None:
         logger.warning(f"[Kosztorys URL] Failed for deal {deal_id}: {e}")
 
 
+# ─── Equipment auto-parse ─────────────────────────────────────────────────────
+
+async def sync_deal_equipment(gateway, deal_id: int, deal: dict) -> None:
+    """
+    When a Wycena PDF is attached to WYCENA_PDF_FIELD, parse the standard
+    equipment list and write it to WYPOSAZENIE_STD_FIELD.
+
+    Idempotent — only parses when the equipment field is currently empty, so
+    re-firing webhooks on every deal update doesn't re-download and re-parse
+    the PDF. Failures are logged but never propagate (called via
+    BackgroundTasks alongside other webhook handlers — must not derail
+    siblings).
+    """
+    try:
+        # 1. Is a Wycena PDF attached?
+        pdf_field = deal.get(WYCENA_PDF_FIELD)
+        if not pdf_field:
+            return  # no PDF → nothing to do
+
+        # 2. Idempotency: skip if equipment already populated.
+        existing = deal.get(WYPOSAZENIE_STD_FIELD)
+        if existing and isinstance(existing, list) and any(
+            str(x).strip() for x in existing
+        ):
+            logger.info(f"[Equipment] deal={deal_id}: equipment already "
+                        f"populated, skipping parse")
+            return
+
+        # 3. Resolve file ID + download bytes.
+        from services.bitrix_disk import get_deal_file_id, download_file_by_id
+        file_id = await get_deal_file_id(gateway, deal_id, WYCENA_PDF_FIELD)
+        if not file_id:
+            logger.info(f"[Equipment] deal={deal_id}: no file_id resolved")
+            return
+        pdf_bytes = await download_file_by_id(deal_id, WYCENA_PDF_FIELD, file_id)
+
+        # 4. Parse.
+        from services.equipment_parser import parse_equipment_from_pdf
+        items = parse_equipment_from_pdf(pdf_bytes)
+        if not items:
+            logger.warning(f"[Equipment] deal={deal_id}: parser returned "
+                           f"0 items, not writing")
+            return
+
+        # 5. Write the equipment list to Bitrix.
+        await gateway.call("crm.deal.update", {
+            "ID": deal_id,
+            "fields": {WYPOSAZENIE_STD_FIELD: items},
+        })
+        logger.info(f"[Equipment] deal={deal_id}: wrote {len(items)} "
+                    f"equipment items from Wycena PDF")
+    except Exception as e:
+        logger.warning(f"[Equipment] deal={deal_id}: failed (non-fatal): {e}")
+
+
 # ─── OAuth install / callback endpoints ───────────────────────────────────────
 
 @router.post("/bitrix/oauth/install")
@@ -402,6 +461,11 @@ async def bitrix_webhook(request: Request, background_tasks: BackgroundTasks, db
         # PDF is attached to UF_CRM_1775497355115. Idempotent. Runs
         # alongside doc sync — independent failure domain.
         background_tasks.add_task(sync_deal_kosztorys_url, gateway, int(deal_id), deal)
+
+        # ─── Background: Auto-parse standard equipment when a Wycena PDF
+        # is attached to UF_CRM_1779285905944. Idempotent (skips when the
+        # equipment field is already populated). Independent failure domain.
+        background_tasks.add_task(sync_deal_equipment, gateway, int(deal_id), deal)
 
         # ─── Email notification logic ─────────────────────────────────
         # Get inspector list ID from deal
