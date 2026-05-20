@@ -74,8 +74,10 @@ def _clean_item(text: str) -> str:
     # Known extraction glue: a digit fused to "cali" (e.g. "10cali" → "10 cali").
     t = re.sub(r"(\d)(cali)", r"\1 \2", t)
     # Trailing page number ("… szybka 2/3") — footer chrome glued onto the
-    # last item on a page because it shares the item's column band.
-    t = re.sub(r"\s+\d+/\d+\s*$", "", t)
+    # last item on a page because it shares the item's column band. The
+    # broken template always renders the denominator as 3 (2/3, 3/3 … 30/3),
+    # so anchor on /3 — this leaves real tire sizes like "215/55" intact.
+    t = re.sub(r"\s+\d{1,2}/3\s*$", "", t)
     # Trailing "Zakup" — the column header of the *next* section
     # (WYPOSAŻENIE DODATKOWE … Zakup) leaking into the final item.
     t = re.sub(r"\s+Zakup\s*$", "", t)
