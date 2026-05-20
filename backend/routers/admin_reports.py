@@ -18,7 +18,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from deps import require_admin
 from models.inspector import InspectionEdit, InspectionRecord
+from services.equipment_parser import parse_equipment_from_pdf
 from routers.report import (
     OVERALL_CONDITION_LABELS,
     PAINT_ENUM_LABELS,
@@ -712,5 +713,77 @@ async def update_report(
         "applied": len(parsed),
         "audit_rows": len(audit_rows),
         "bitrix_fields_synced": list(bitrix_payload.keys()),
+        "warnings": warnings,
+    }
+
+
+# ─── Endpoint 4: parse standard equipment from a Wycena PDF ────────────────────
+
+@router.post("/admin/reports/{deal_id}/parse-equipment")
+async def parse_equipment(
+    deal_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_admin),
+):
+    """Extract the standard-equipment list from an uploaded Wycena PDF and
+    write it to the Bitrix wyposazenie_standardowe field."""
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=400, detail="Empty file upload")
+
+    try:
+        items = parse_equipment_from_pdf(pdf_bytes)
+    except Exception as e:
+        logger.error(f"[admin_reports] equipment parse failed for deal {deal_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"PDF parse failed: {e}")
+
+    if not items:
+        raise HTTPException(
+            status_code=422,
+            detail="No standard-equipment section found in the PDF",
+        )
+
+    warnings: List[str] = []
+
+    # Write to Bitrix (multi-value string field — a list is the safe shape).
+    uf = BITRIX_EXTRAS_FIELDS["wyposazenie_standardowe"]
+    gateway = getattr(request.app.state, "gateway", None)
+    if gateway and getattr(request.app.state, "bitrix_ready", False):
+        try:
+            await gateway.call("crm.deal.update", {
+                "ID": deal_id,
+                "fields": {uf: items},
+            })
+        except Exception as e:
+            msg = f"Bitrix update failed (items parsed OK): {e}"
+            logger.warning(f"[admin_reports] {msg}")
+            warnings.append(msg)
+    else:
+        warnings.append("Bitrix not ready — items parsed but not written")
+
+    # Audit log (best-effort — never block the response on a logging failure).
+    admin_name = str(current_user.get("name") or current_user.get("sub") or "Admin")
+    try:
+        db.add(InspectionEdit(
+            deal_id=deal_id,
+            admin_username=admin_name,
+            field_path="wyposazenie_standardowe.pdf_parse",
+            old_value=None,
+            new_value=json.dumps({"item_count": len(items)}, ensure_ascii=False),
+        ))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[admin_reports] equipment audit log failed for deal {deal_id}: {e}")
+        warnings.append(f"Audit log failed: {e}")
+
+    return {
+        "success": True,
+        "deal_id": deal_id,
+        "count": len(items),
+        "items": items,
+        "preview": items[:10],
         "warnings": warnings,
     }
