@@ -442,6 +442,12 @@ interface InspectionState {
   drafts: Record<string, StepData>;
   isSubmitting: boolean;
   submissionStatuses: Record<string, string>;
+  /**
+   * Step numbers whose per-step save to the backend failed (offline / 5xx).
+   * Persisted so a reconnect or app reopen can re-attempt them. Holds step
+   * NUMBERS only — never inspection data — so it is safe in localStorage.
+   */
+  pendingStepSyncs: number[];
 
   // Actions
   setStep: (step: number) => void;
@@ -488,6 +494,10 @@ interface InspectionState {
   // ── Bitrix Sync Actions (Phases 7 & 8) ──
   syncStepWithBitrix: (stepNumber: number) => Promise<void>;
   submitToBitrix: () => Promise<{ success: boolean; message: string }>;
+  /** Re-attempt a submission stranded in 'error'/'pending' (offline resilience). */
+  resyncPendingSubmission: () => Promise<void>;
+  /** Re-attempt per-step saves that failed offline (offline resilience). */
+  resyncPendingSteps: () => Promise<void>;
   clearInspection: () => void;
   fetchAllDeals: () => Promise<void>;
   fetchDealsForCalendar: (date: string) => Promise<void>;
@@ -686,6 +696,10 @@ const initialData: StepData = {
 };
 
 // ─── Store ────────────────────────────────────────────────
+// Offline-resilience guard: ensures only one resyncPendingSubmission runs at
+// a time, so a mount + 'online' double-trigger can never fire two submits.
+let resyncSubmissionInFlight = false;
+
 export const useInspectionStore = create<InspectionState>()(
   persist(
     (set) => ({
@@ -718,6 +732,7 @@ export const useInspectionStore = create<InspectionState>()(
       drafts: {},
       isSubmitting: false,
       submissionStatuses: {},
+      pendingStepSyncs: [],
 
       setStep: (step: number) =>
         set((state) => ({
@@ -1178,9 +1193,19 @@ export const useInspectionStore = create<InspectionState>()(
           console.log(`[Bitrix Sync] Syncing step ${stepNumber} for deal ${dealId}`);
           await api.saveStep(dealId, stepNumber, stepPayload);
           console.log(`[Bitrix Sync] Step ${stepNumber} synced successfully.`);
+          // Offline resilience: this step reached the server — clear it from
+          // the durable failed-step list so a later reconnect won't re-send it.
+          set((s) => ({
+            pendingStepSyncs: (s.pendingStepSyncs || []).filter((n) => n !== stepNumber),
+          }));
         } catch (error) {
           console.warn(`[Bitrix Sync] Step ${stepNumber} sync failed (offline?). Saved to draft.`, error);
-          // Phase 8: Data is already in persisted Zustand store, so it's "queued" for next sync
+          // Phase 8: Data is already in persisted Zustand store, so it's "queued" for next sync.
+          // Offline resilience: durably record the failed step so a reconnect
+          // or app reopen can re-attempt this exact save (see resyncPendingSteps).
+          set((s) => ({
+            pendingStepSyncs: Array.from(new Set([...(s.pendingStepSyncs || []), stepNumber])),
+          }));
         }
       },
 
@@ -1326,6 +1351,64 @@ export const useInspectionStore = create<InspectionState>()(
         set((state) => ({
           submissionStatuses: { ...state.submissionStatuses, [dealId]: status },
         })),
+
+      // ── Offline Resilience: re-sync stranded submissions ──
+      // A failed inspection submission leaves submissionStatus in 'error' or
+      // 'pending' with all data intact in the persisted store. The in-memory
+      // submissionQueue retry loop dies when the app is closed, so these
+      // triggers (mount + 'online', wired in WizardLayout) re-drive the
+      // existing submitToBitrix path when it is safe to.
+      resyncPendingSubmission: async () => {
+        // Double-submit guard: another resync is already mid-flight.
+        if (resyncSubmissionInFlight) return;
+        const state = useInspectionStore.getState();
+        // A normal submit is running — let it finish, don't pile on.
+        if (state.isSubmitting) return;
+        // Only re-send a submission that was started but never confirmed.
+        const status = state.data.finalSummary.submissionStatus;
+        if (status !== 'error' && status !== 'pending') return;
+        const dealId = state.jobs.currentJobId;
+        if (!dealId || dealId.startsWith('mock-')) return;
+        console.log('[Resync] Re-attempting stranded submission for deal', dealId);
+        resyncSubmissionInFlight = true;
+        try {
+          // Reuse the existing, working submission path.
+          await state.submitToBitrix();
+        } finally {
+          resyncSubmissionInFlight = false;
+        }
+      },
+
+      // ── Offline Resilience: re-sync per-step saves that failed offline ──
+      // syncStepWithBitrix records failed step numbers in pendingStepSyncs
+      // (persisted). On reconnect / reopen we re-send each one; steps that
+      // still fail are kept for the next attempt.
+      resyncPendingSteps: async () => {
+        const state = useInspectionStore.getState();
+        const pending = state.pendingStepSyncs || [];
+        if (pending.length === 0) return;
+        const dealId = state.jobs.currentJobId;
+        if (!dealId || dealId.startsWith('mock-')) return;
+        const stepKeys: Record<number, keyof StepData> = {
+          1: 'vehicleData', 2: 'equipmentCompleteness', 3: 'fullEquipment',
+          4: 'paintMeasurement', 5: 'tires', 7: 'exteriorDamage',
+          8: 'interiorDamage', 9: 'mechanical', 10: 'notesValuation',
+          11: 'vehicleData', 12: 'finalSummary',
+        };
+        const stillFailed: number[] = [];
+        for (const stepNum of pending) {
+          if (stepNum === 6) continue; // photos handled by the photo queue
+          const fieldName = stepKeys[stepNum];
+          if (!fieldName) continue;
+          try {
+            await api.saveStep(dealId, stepNum, state.data[fieldName]);
+            console.log(`[Resync] Step ${stepNum} re-synced for deal ${dealId}`);
+          } catch {
+            stillFailed.push(stepNum); // keep for the next retry
+          }
+        }
+        set({ pendingStepSyncs: stillFailed });
+      },
     }),
     {
       name: 'inspection-storage',
@@ -1358,6 +1441,9 @@ export const useInspectionStore = create<InspectionState>()(
           drafts: Object.fromEntries(
             Object.entries(state.drafts).map(([k, v]) => [k, stripData(v as StepData)])
           ),
+          // Offline resilience: explicitly persist the failed-step list so it
+          // survives an app close (step numbers only — no inspection data).
+          pendingStepSyncs: state.pendingStepSyncs,
         };
       },
       storage: createJSONStorage(() => ({

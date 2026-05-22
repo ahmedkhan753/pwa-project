@@ -58,6 +58,25 @@ export function WizardLayout({ children }: { children: React.ReactNode }) {
         return () => { stopUploadWorker(); };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // ── Offline resilience: re-sync stranded submissions / step saves ──
+    // The in-memory submissionQueue retry loop dies when the inspector closes
+    // the app, so a failed submission can sit in localStorage forever (deal
+    // 1916). Re-drive the existing submit / step-save paths at two safe moments:
+    //   • on mount    → handles app-reopen with a stranded submission
+    //   • on 'online' → handles signal returning while the app stays open
+    useEffect(() => {
+        const store = useInspectionStore.getState();
+        void store.resyncPendingSubmission();
+        void store.resyncPendingSteps();
+        const onOnline = () => {
+            const s = useInspectionStore.getState();
+            void s.resyncPendingSubmission();
+            void s.resyncPendingSteps();
+        };
+        window.addEventListener('online', onOnline);
+        return () => window.removeEventListener('online', onOnline);
+    }, []);
+
     // ── Submit gate: track photo upload health for the current deal ──
     // Submit body has photos:{} so the wizard relies on the worker having
     // already drained every photo to backend storage. If we let submit fire
