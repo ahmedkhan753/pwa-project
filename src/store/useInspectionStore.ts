@@ -58,6 +58,12 @@ export interface VehicleData {
   mileage: string;
   engineCapacity: string;
   enginePower: string;
+  /**
+   * Unit marker for enginePower. Set to "kW" on records entered through the
+   * May 2026 kW form so the backend treats the value as kW. Empty / absent
+   * on legacy records, which keep their original KM/HP semantics.
+   */
+  enginePowerUnit: string;
   fuelType: string;
   bodyType: string;
   ownWeight: string;
@@ -566,7 +572,7 @@ const initialData: StepData = {
     },
     vin: '', registrationPlates: '', make: '', model: '',
     year: '', color: '', mileage: '', engineCapacity: '',
-    enginePower: '', fuelType: '', bodyType: '', ownWeight: '',
+    enginePower: '', enginePowerUnit: '', fuelType: '', bodyType: '', ownWeight: '',
     loadCapacity: '', totalWeight: '', seatsCount: '', doorsCount: '',
     firstRegistration: '', productionDate: '', registrationCertificate: '',
     gearboxType: '', driveType: '',

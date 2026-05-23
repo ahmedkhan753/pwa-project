@@ -98,7 +98,13 @@ export function VehicleDataStep() {
         if (data.model) updateField('vehicleData', 'model', data.model);
         if (data.year) updateField('vehicleData', 'year', data.year);
         if (data.engineCapacity) updateField('vehicleData', 'engineCapacity', data.engineCapacity);
-        if (data.enginePower) updateField('vehicleData', 'enginePower', data.enginePower);
+        // Polish dowód rejestracyjny (field P.2) reports engine power in kW,
+        // so a QR scan IS kW — stamp the unit marker so the backend display
+        // path takes the kW branch.
+        if (data.enginePower) {
+            updateField('vehicleData', 'enginePower', data.enginePower);
+            updateField('vehicleData', 'enginePowerUnit', 'kW');
+        }
         if (data.fuelType) updateField('vehicleData', 'fuelType', data.fuelType);
         if (data.ownWeight) updateField('vehicleData', 'ownWeight', data.ownWeight);
         if (data.totalWeight) updateField('vehicleData', 'totalWeight', data.totalWeight);
@@ -262,7 +268,38 @@ export function VehicleDataStep() {
                     />
                     <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" />
                     <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" />
-                    <FormField label="Moc (KM)" value={v.enginePower} onChange={(val) => handleChange('enginePower', val)} placeholder="np. 150" type="number" />
+                    {/* Engine power — kW (May 2026 migration). Any keystroke here
+                        also stamps enginePowerUnit="kW" so the report's display
+                        path takes the kW branch. Legacy records (no unit marker)
+                        continue to render as KM unchanged. */}
+                    <div>
+                        <label className="text-xs font-black text-muted uppercase tracking-widest mb-2 block px-1">
+                            Moc silnika (kW)
+                        </label>
+                        <input
+                            type="number"
+                            value={v.enginePower}
+                            min={50}
+                            max={900}
+                            onChange={(e) => {
+                                handleChange('enginePower', e.target.value);
+                                handleChange('enginePowerUnit', 'kW');
+                            }}
+                            placeholder="np. 136"
+                            aria-label="Moc silnika (kW)"
+                            className="w-full py-3.5 px-4 rounded-xl border-2 border-border bg-surface text-foreground text-sm font-bold placeholder:text-muted/40 focus:border-primary transition-all"
+                        />
+                        {(() => {
+                            if (!v.enginePower) return null;
+                            const n = Number(v.enginePower);
+                            const invalid = isNaN(n) || n < 50 || n > 900;
+                            return invalid ? (
+                                <p className="text-xs text-danger mt-2 font-black uppercase tracking-tight">
+                                    Moc musi być między 50 a 900 kW
+                                </p>
+                            ) : null;
+                        })()}
+                    </div>
                     
                     <SmartDropdown 
                         label="Rodzaj paliwa" 

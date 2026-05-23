@@ -512,6 +512,9 @@ async def get_report(deal_id: int, request: Request):
         "engine_capacity_cc":    _f("engine_capacity"),
         "engine_power_hp":       _f("engine_power"),
         "engine_power_kw":       str(round(float(_f("engine_power")) / 1.341)) if _f("engine_power").replace('.','',1).isdigit() else "",
+        # Empty on legacy / Bitrix-only data; flipped to "kW" further down if
+        # the InspectionRecord was written by the May 2026 kW form.
+        "engine_power_unit":     "",
         "fuel_type":             _f("fuel_type"),
         "body_type":             _f("body_type"),
         "transmission":          _f("transmission"),
@@ -577,6 +580,20 @@ async def get_report(deal_id: int, request: Request):
             _hp = str(vehicle["engine_power_hp"])
             if _hp.replace(".", "", 1).isdigit():
                 vehicle["engine_power_kw"] = str(round(float(_hp) / 1.341))
+
+        # ── Engine-power unit handling (May 2026 kW migration) ──────────
+        # New records carry enginePowerUnit="kW"; legacy records have no
+        # unit marker and the KM/HP logic above stays untouched. When the
+        # marker is present AND the DB carries a numeric value, that value
+        # IS kW — reassign so engine_power_kw holds it and engine_power_hp
+        # holds a derived hp number (for consumers that still read hp).
+        _engine_power_unit = _safe_str(iv.get("enginePowerUnit"))
+        if _engine_power_unit == "kW":
+            _kw_str = _safe_str(iv.get("enginePower"))
+            if _kw_str and _kw_str.replace(".", "", 1).isdigit():
+                vehicle["engine_power_kw"] = _kw_str
+                vehicle["engine_power_hp"] = str(round(float(_kw_str) * 1.341))
+                vehicle["engine_power_unit"] = "kW"
 
     # ── Enum ID → label resolution (fuel/body/transmission/drive) ───────────
     # Bitrix returns numeric enum IDs (e.g. "316"). If the DB InspectionRecord
@@ -1229,7 +1246,11 @@ async def get_report(deal_id: int, request: Request):
         "quick_stats": {
             "year":         vehicle["year"],
             "fuel":         vehicle["fuel_type"],
-            "power":        f"{vehicle['engine_power_hp']} KM" if vehicle["engine_power_hp"] else "",
+            "power":        (
+                f"{vehicle['engine_power_kw']} kW"
+                if vehicle.get("engine_power_unit") == "kW" and vehicle.get("engine_power_kw")
+                else (f"{vehicle['engine_power_hp']} KM" if vehicle["engine_power_hp"] else "")
+            ),
             "transmission": vehicle["transmission"],
             "mileage":      f"{vehicle['mileage']} km" if vehicle["mileage"] else "",
         },
