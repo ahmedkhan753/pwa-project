@@ -362,6 +362,14 @@ def _value_to_bitrix(path: str, value: Any) -> Any:
     """
     parts = path.split(".")
     root = parts[0]
+    # Bitrix list-type fields don't clear on an empty string — they ignore it
+    # and keep the previous enum id. Sending False (→ JSON false) actually
+    # clears them. Without this, deleting a paint panel in the admin UI
+    # cleared the DB but left the Bitrix enum stale; the report's DB-then-
+    # Bitrix fall-through then served the old "0-150um" instead of "Brak
+    # danych" (deal 1864 incident).
+    if value in (None, "") and root == "paint" and len(parts) >= 3 and parts[2] == "value":
+        return False
     if value in (None, ""):
         return ""
     str_v = str(value)
