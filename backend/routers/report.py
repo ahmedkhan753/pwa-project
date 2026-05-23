@@ -776,6 +776,13 @@ async def get_report(deal_id: int, request: Request):
             return _paint_range_upper(raw_v), label
         return _safe_float(raw_v), None
 
+    # A populated paint_json means the inspector submitted measurements;
+    # any panel they left blank is an intentional "no data", so we must NOT
+    # fall back to the Bitrix enum (which would silently show factory paint
+    # for an unmeasured panel — deals 1924/1898/1864 incident). For legacy
+    # Bitrix-only deals (no DB record), the fallback below still fires.
+    _has_paint_record = isinstance(insp_rec_paint, dict) and len(insp_rec_paint) > 0
+
     for idx, (key, label, field_id) in enumerate(PAINT_PANELS_19, 1):
         val, range_label = _paint_val_from_record(key)
         enum_status: Optional[str] = None
@@ -783,7 +790,7 @@ async def get_report(deal_id: int, request: Request):
         # ("416"…"424") rather than a µm reading, so translate that to a
         # range label first; only fall through to float parsing when the
         # value isn't one of the five known enum IDs.
-        if (val is None or val <= 0) and field_id:
+        if (val is None or val <= 0) and field_id and not _has_paint_record:
             raw_field = raw.get(field_id)
             translated = _paint_enum_translation(raw_field)
             if translated is not None:
