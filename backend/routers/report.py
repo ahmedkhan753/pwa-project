@@ -103,11 +103,11 @@ MECHANICAL_FIELD_FALLBACKS: Dict[str, str] = {
 # listed below. The PWA wizard writes string labels like "0-150µm" straight to
 # the DB, so this map only applies to the Bitrix-side fallback path.
 PAINT_ENUM_LABELS: Dict[str, str] = {
-    "416": "0-150um",
-    "418": "150-200um",
-    "420": "150-300um",
-    "422": "500-1000um",
-    "424": "500-2000um",
+    "416": "0-150 µm",
+    "418": "150-200 µm",
+    "420": "150-300 µm",
+    "422": "500-1000 µm",
+    "424": "500-2000 µm",
 }
 
 # ─── Overall-condition enumeration translation ───────────────────────────────
@@ -352,7 +352,7 @@ def _paint_enum_translation(raw_v: Any) -> Optional[tuple]:
     label = PAINT_ENUM_LABELS.get(key)
     if not label:
         return None
-    return (label, "factory" if label == "0-150um" else "repair")
+    return (label, "factory" if label == "0-150 µm" else "repair")
 
 
 def _paint_parse_range_label(raw: Any) -> Optional[str]:
