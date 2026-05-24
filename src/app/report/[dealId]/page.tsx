@@ -1441,12 +1441,13 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                   padding:'10px 14px',borderRadius:10,
                   background:'#F8F8FA',border:'1px solid #E8E8ED',
                   transition:'all 0.2s',
+                  minWidth:0,
                 }}
                   onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background='#F0F0F5'; (e.currentTarget as HTMLDivElement).style.borderColor='#D0D0D8'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background='#F8F8FA'; (e.currentTarget as HTMLDivElement).style.borderColor='#E8E8ED'; }}
                 >
                   <i className="fas fa-check-circle" style={{ color:'#22C55E',fontSize:14,flexShrink:0 }}/>
-                  <span style={{ fontSize:13,fontWeight:500,color:'#1D1D1F' }}>{item}</span>
+                  <span style={{ fontSize:13,fontWeight:500,color:'#1D1D1F',wordBreak:'break-word',whiteSpace:'normal',minWidth:0,overflowWrap:'anywhere' }}>{item}</span>
                 </div>
               ))}
             </div>
