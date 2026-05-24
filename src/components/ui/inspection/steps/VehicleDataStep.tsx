@@ -86,6 +86,22 @@ export function VehicleDataStep() {
     }, []);
 
     const handleChange = (field: string, value: string) => {
+        // Przebieg + Pojemność: positive numbers only — strip any minus sign
+        // so "-5" becomes "5". HTML min=0 is just a hint; type=number still
+        // accepts "-" via paste / arrow key. This is the real guard.
+        if (field === 'mileage' || field === 'engineCapacity') {
+            value = value.replace('-', '');
+        }
+        // Moc (kW): hard-block keystrokes that can never be valid (negative,
+        // or > 900). Don't hard-block the < 50 lower bound — that would
+        // prevent the user from ever typing "50" because the leading "5"
+        // would be < 50. The soft red reminder below the input handles < 50.
+        if (field === 'enginePower' && value !== '') {
+            const n = Number(value);
+            if (Number.isNaN(n) || n < 0 || n > 900) {
+                return;  // reject — do not store the out-of-range keystroke
+            }
+        }
         updateField('vehicleData', field, value);
     };
 
@@ -266,8 +282,8 @@ export function VehicleDataStep() {
                         onChange={(val) => handleChange('color', val)} 
                         placeholder="Wybierz kolor"
                     />
-                    <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" />
-                    <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" />
+                    <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" min={0} />
+                    <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" min={0} />
                     {/* Engine power — kW (May 2026 migration). Any keystroke here
                         also stamps enginePowerUnit="kW" so the report's display
                         path takes the kW branch. Legacy records (no unit marker)
@@ -282,7 +298,16 @@ export function VehicleDataStep() {
                             min={50}
                             max={900}
                             onChange={(e) => {
-                                handleChange('enginePower', e.target.value);
+                                const val = e.target.value;
+                                // Mirror the handleChange guard: reject negative
+                                // or > 900 so the enginePowerUnit stamp doesn't
+                                // get applied to a rejected value. handleChange
+                                // re-runs the same check as a backstop.
+                                if (val !== '') {
+                                    const n = Number(val);
+                                    if (Number.isNaN(n) || n < 0 || n > 900) return;
+                                }
+                                handleChange('enginePower', val);
                                 handleChange('enginePowerUnit', 'kW');
                             }}
                             placeholder="np. 136"
