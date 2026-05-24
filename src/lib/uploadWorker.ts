@@ -235,18 +235,107 @@ async function uploadVideoOne(item: QueueItem): Promise<void> {
   await photoQueue.markUploading(item.id);
 
   const sizeKB = Math.round(item.bodyBlob.size / 1024);
-  console.log(`[uploadWorker] ▶ VIDEO ${item.slotId} deal=${item.dealId} ~${sizeKB}KB (multipart)`);
+  console.log(`[uploadWorker] ▶ VIDEO ${item.slotId} deal=${item.dealId} ~${sizeKB}KB (chunked)`);
 
+  // 1) Preferred path: chunked upload (resilient to flaky cellular — a
+  //    dropped chunk is retried in-place instead of restarting the whole
+  //    file). The outer queue's retry loop wraps this for crash recovery.
+  try {
+    await uploadVideoChunked(item);
+    notifyVideoProgress(item.id, 100);
+    await photoQueue.markUploaded(item.id);
+    console.log(`[uploadWorker] ✅ VIDEO ${item.slotId} (chunked)`);
+    return;
+  } catch (chunkErr: any) {
+    const cmsg = chunkErr?.message || String(chunkErr);
+    console.warn(`[uploadWorker] chunked failed, falling back to whole-file: ${cmsg}`);
+  }
+
+  // 2) Fallback: existing whole-file multipart path — unchanged behavior.
+  //    If chunked is unavailable (e.g. older backend) or every chunk-retry
+  //    burned out, we still get exactly the same upload as before this change.
   try {
     await uploadVideoXHR(item);
     notifyVideoProgress(item.id, 100);
     await photoQueue.markUploaded(item.id);
-    console.log(`[uploadWorker] ✅ VIDEO ${item.slotId}`);
+    console.log(`[uploadWorker] ✅ VIDEO ${item.slotId} (whole-file fallback)`);
   } catch (err: any) {
     const msg = err?.message || String(err);
     console.warn(`[uploadWorker] ❌ VIDEO ${item.slotId}: ${msg}`);
     await photoQueue.markFailed(item.id, msg);
   }
+}
+
+// ── Chunked video upload (req 1) ─────────────────────────────────────
+// 256 KB chunks. On flaky cellular, dropping a single chunk is far cheaper
+// than restarting a 2 MB POST from byte zero. Retry + backoff lives at
+// the chunk level here; the outer photoQueue retry loop still wraps the
+// whole call for crash-recovery and app-close survival (req 4).
+const CHUNK_SIZE = 256 * 1024;
+const CHUNK_RETRY_DELAYS = [1000, 2000, 4000, 8000];  // req 2: per-chunk exp backoff
+
+async function uploadVideoChunked(item: QueueItem): Promise<void> {
+  const blob = item.bodyBlob!;
+  const total = Math.max(1, Math.ceil(blob.size / CHUNK_SIZE));
+  // Deterministic per upload session — the backend uses this to key its
+  // chunk buffer. enqueuedAt is the persistent timestamp from when the
+  // queue row was created, so retries of the same item reuse the same id.
+  const uploadId = `${item.dealId}_${item.slotId}_${item.enqueuedAt}`;
+
+  for (let i = 0; i < total; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, blob.size);
+    const chunkBlob = blob.slice(start, end);
+
+    let ok = false;
+    let lastErr = '';
+    for (let attempt = 0; attempt <= CHUNK_RETRY_DELAYS.length; attempt++) {
+      try {
+        await sendChunk(item, uploadId, i, total, chunkBlob);
+        ok = true;
+        break;
+      } catch (e: any) {
+        lastErr = e?.message || String(e);
+        if (attempt < CHUNK_RETRY_DELAYS.length) {
+          await new Promise((r) => setTimeout(r, CHUNK_RETRY_DELAYS[attempt]));
+        }
+      }
+    }
+    if (!ok) throw new Error(`chunk ${i + 1}/${total} failed after retries: ${lastErr}`);
+
+    // req 3: progress fires per chunk (existing VideoRecordSlot bar tracks this).
+    notifyVideoProgress(item.id, Math.round(((i + 1) / total) * 100));
+  }
+}
+
+function sendChunk(
+  item: QueueItem,
+  uploadId: string,
+  index: number,
+  total: number,
+  chunkBlob: Blob,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${apiUrl}/api/files/upload-chunk`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`HTTP ${xhr.status}: ${(xhr.responseText || '').slice(0, 200)}`));
+    };
+    xhr.onerror = () => reject(new Error('network error'));
+    xhr.ontimeout = () => reject(new Error('timeout'));
+
+    const form = new FormData();
+    form.append('deal_id', String(item.dealId));
+    form.append('field_key', item.slotId);
+    form.append('upload_id', uploadId);
+    form.append('chunk_index', String(index));
+    form.append('total_chunks', String(total));
+    form.append('filename', item.filename);
+    form.append('chunk', chunkBlob, item.filename);
+    xhr.send(form);
+  });
 }
 
 function uploadVideoXHR(item: QueueItem): Promise<void> {

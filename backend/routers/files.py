@@ -8,7 +8,7 @@ Validates file type (jpg/png/pdf) and size (<10MB).
 import asyncio
 import base64
 import logging
-from typing import List
+from typing import Dict, List
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from starlette.requests import ClientDisconnect
@@ -29,6 +29,12 @@ logger = logging.getLogger("routers.files")
 # Allowed file types and max size
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB (videos can be large)
+
+# In-memory chunk accumulator for /upload-chunk. One backend instance, so
+# a plain dict is fine; a backend restart loses partial uploads and the
+# client's whole-file fallback (/upload-binary) covers that case.
+#   key: upload_id  →  value: {chunk_index: bytes}
+_chunk_buffers: Dict[str, Dict[int, bytes]] = {}
 
 
 def _validate_file(file: UploadFile) -> str:
@@ -277,6 +283,84 @@ async def upload_file_json(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _save_uploaded_file(
+    request: Request,
+    deal_id: int,
+    field_key: str,
+    file_bytes: bytes,
+    filename: str,
+) -> FileUploadResult:
+    """
+    Shared persistence path for /upload-binary and /upload-chunk.
+    Step 1 (DB save) is canonical; Step 2 (Bitrix) is best-effort.
+    Lifted verbatim from the original /upload-binary handler so that both
+    endpoints produce byte-identical DB rows and the same Bitrix result.
+    """
+    is_video = field_key.startswith("video_")
+    kind = "VIDEO" if is_video else "binary"
+    size_mb = len(file_bytes) / 1024 / 1024
+
+    logger.info(
+        f"[upload-save] ▶ {kind} '{field_key}' deal={deal_id} "
+        f"size={len(file_bytes)}B ({size_mb:.2f}MB) filename={filename}"
+    )
+
+    # ── Step 1: Save to DB (ALWAYS — source of truth) ──
+    db_saved = False
+    db = None
+    try:
+        db = SessionLocal()
+        existing = db.query(InspectionPhoto).filter_by(
+            deal_id=int(deal_id), slot_id=field_key
+        ).first()
+        if existing:
+            existing.photo_bytes = file_bytes
+            logger.info(f"[upload-save] DB updated (overwrite): {kind} '{field_key}' deal={deal_id}")
+        else:
+            db.add(InspectionPhoto(
+                deal_id=int(deal_id),
+                slot_id=field_key,
+                photo_bytes=file_bytes,
+            ))
+            logger.info(f"[upload-save] DB inserted: {kind} '{field_key}' deal={deal_id}")
+        db.commit()
+        db_saved = True
+        logger.info(f"[upload-save] ✅ DB saved: {kind} '{field_key}' deal={deal_id}")
+    except Exception as db_err:
+        logger.error(f"[upload-save] ❌ DB save FAILED for {kind} '{field_key}' deal={deal_id}: {db_err}")
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    # ── Step 2: Best-effort Bitrix upload (never blocks Step 1) ──
+    gateway = request.app.state.gateway
+    bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
+    result: dict = {"file_id": filename, "url": None, "success": db_saved}
+    if bitrix_ready:
+        try:
+            result = await gateway.upload_file_to_deal(
+                deal_id=int(deal_id),
+                field_pwa_key=field_key,
+                file_bytes=file_bytes,
+                filename=filename,
+            )
+            logger.info(f"[upload-save] Bitrix result for {kind} '{field_key}': {result}")
+        except Exception as bitrix_err:
+            logger.warning(f"[upload-save] Bitrix upload failed for {kind} '{field_key}' (non-fatal): {bitrix_err}")
+    else:
+        logger.warning(f"[upload-save] Bitrix not ready — skipping Bitrix for {kind} '{field_key}' (DB saved={db_saved})")
+
+    return FileUploadResult(
+        field_key=field_key,
+        file_id=result.get("file_id") or filename,
+        url=result.get("url"),
+        success=db_saved or bool(result.get("success")),
+    )
+
+
 @binary_router.post("/upload-binary", response_model=FileUploadResult)
 async def upload_file_binary(
     request: Request,
@@ -310,62 +394,7 @@ async def upload_file_binary(
                 detail=f"File too large: {size_mb:.1f}MB. Max: {MAX_FILE_SIZE // 1024 // 1024}MB.",
             )
 
-        logger.info(f"[upload-binary] ▶ {kind} '{field_key}' deal={deal_id} size={len(file_bytes)}B ({size_mb:.2f}MB) filename={filename}")
-
-        # ── Step 1: Save to DB (ALWAYS — source of truth) ──
-        db_saved = False
-        db = None
-        try:
-            db = SessionLocal()
-            existing = db.query(InspectionPhoto).filter_by(
-                deal_id=int(deal_id), slot_id=field_key
-            ).first()
-            if existing:
-                existing.photo_bytes = file_bytes
-                logger.info(f"[upload-binary] DB updated (overwrite): {kind} '{field_key}' deal={deal_id}")
-            else:
-                db.add(InspectionPhoto(
-                    deal_id=int(deal_id),
-                    slot_id=field_key,
-                    photo_bytes=file_bytes,
-                ))
-                logger.info(f"[upload-binary] DB inserted: {kind} '{field_key}' deal={deal_id}")
-            db.commit()
-            db_saved = True
-            logger.info(f"[upload-binary] ✅ DB saved: {kind} '{field_key}' deal={deal_id}")
-        except Exception as db_err:
-            logger.error(f"[upload-binary] ❌ DB save FAILED for {kind} '{field_key}' deal={deal_id}: {db_err}")
-        finally:
-            if db is not None:
-                try:
-                    db.close()
-                except Exception:
-                    pass
-
-        # ── Step 2: Best-effort Bitrix upload (never blocks Step 1) ──
-        gateway = request.app.state.gateway
-        bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
-        result: dict = {"file_id": filename, "url": None, "success": db_saved}
-        if bitrix_ready:
-            try:
-                result = await gateway.upload_file_to_deal(
-                    deal_id=int(deal_id),
-                    field_pwa_key=field_key,
-                    file_bytes=file_bytes,
-                    filename=filename,
-                )
-                logger.info(f"[upload-binary] Bitrix result for {kind} '{field_key}': {result}")
-            except Exception as bitrix_err:
-                logger.warning(f"[upload-binary] Bitrix upload failed for {kind} '{field_key}' (non-fatal): {bitrix_err}")
-        else:
-            logger.warning(f"[upload-binary] Bitrix not ready — skipping Bitrix for {kind} '{field_key}' (DB saved={db_saved})")
-
-        return FileUploadResult(
-            field_key=field_key,
-            file_id=result.get("file_id") or filename,
-            url=result.get("url"),
-            success=db_saved or bool(result.get("success")),
-        )
+        return await _save_uploaded_file(request, deal_id, field_key, file_bytes, filename)
 
     except ClientDisconnect:
         logger.error(f"[upload-binary] ❌ Client disconnected mid-upload — body likely exceeded nginx client_max_body_size")
@@ -374,6 +403,92 @@ async def upload_file_binary(
         raise
     except Exception as e:
         logger.error(f"❌ upload-binary error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@binary_router.post("/upload-chunk", response_model=FileUploadResult)
+async def upload_chunk(
+    request: Request,
+    deal_id: int = Form(..., description="Bitrix deal ID"),
+    field_key: str = Form(..., description="PWA field key (e.g. video_engine)"),
+    upload_id: str = Form(..., description="Client-generated id, unique per upload session"),
+    chunk_index: int = Form(..., description="0-based chunk index"),
+    total_chunks: int = Form(..., description="Total number of chunks the client will send"),
+    filename: str = Form(..., description="Original filename"),
+    chunk: UploadFile = File(..., description="Chunk bytes"),
+):
+    """
+    POST /api/files/upload-chunk
+    Accumulate one chunk at a time keyed by (upload_id, chunk_index). All
+    chunks except the last return a small ack; the last chunk triggers
+    reassembly in index order and the same DB-save + best-effort Bitrix
+    path used by /upload-binary, so the persisted result is identical
+    regardless of which endpoint the client used.
+
+    Edge cases:
+      - Missing chunks on assembly → 409 so the client can resend the gap.
+      - Duplicate chunk index → overwrites with same bytes (idempotent).
+      - Backend restart mid-upload loses _chunk_buffers; the client's
+        whole-file fallback (/upload-binary) covers that case.
+    """
+    try:
+        chunk_bytes = await chunk.read()
+        buf = _chunk_buffers.setdefault(upload_id, {})
+        buf[chunk_index] = chunk_bytes
+
+        # Not the last chunk yet → ack and wait for more.
+        if len(buf) < total_chunks:
+            logger.info(
+                f"[upload-chunk] ◦ {chunk_index + 1}/{total_chunks} "
+                f"({len(chunk_bytes)}B) upload_id={upload_id} field='{field_key}' deal={deal_id}"
+            )
+            return FileUploadResult(
+                field_key=field_key,
+                file_id=f"{upload_id}:{chunk_index}",
+                url=None,
+                success=True,
+            )
+
+        # All chunks present → reassemble in order.
+        try:
+            file_bytes = b"".join(buf[i] for i in range(total_chunks))
+        except KeyError:
+            have = sorted(buf.keys())
+            logger.warning(
+                f"[upload-chunk] ⚠ missing chunks for upload_id={upload_id} field='{field_key}'; have={have}"
+            )
+            raise HTTPException(status_code=409, detail=f"missing chunks, have {have}")
+
+        # Cleanup buffer before we run the (potentially slow) save path so a
+        # client-disconnect mid-save doesn't leave the buffer pinned.
+        _chunk_buffers.pop(upload_id, None)
+
+        # Size guard (same limit as /upload-binary).
+        size_mb = len(file_bytes) / 1024 / 1024
+        if len(file_bytes) > MAX_FILE_SIZE:
+            logger.error(
+                f"[upload-chunk] ❌ '{field_key}' deal={deal_id} — reassembled "
+                f"too large: {size_mb:.1f}MB (limit {MAX_FILE_SIZE // 1024 // 1024}MB)"
+            )
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large: {size_mb:.1f}MB. Max: {MAX_FILE_SIZE // 1024 // 1024}MB.",
+            )
+
+        logger.info(
+            f"[upload-chunk] ▶ reassembled '{field_key}' deal={deal_id} "
+            f"{total_chunks} chunks → {len(file_bytes)}B ({size_mb:.2f}MB)"
+        )
+
+        return await _save_uploaded_file(request, deal_id, field_key, file_bytes, filename)
+
+    except ClientDisconnect:
+        logger.error(f"[upload-chunk] ❌ Client disconnected mid-chunk for upload_id={upload_id}")
+        raise HTTPException(status_code=499, detail="Client disconnected")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ upload-chunk error: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
