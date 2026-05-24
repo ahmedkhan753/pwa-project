@@ -58,6 +58,30 @@ PAINT_PANEL_KEYS: List[str] = [
     "frontBumper", "rearBumper",
 ]
 
+# Polish display labels for paint panels — schema path (paint.{key}.value)
+# stays in English; only the human-facing label is translated.
+PAINT_PANEL_LABELS_PL: Dict[str, str] = {
+    "hood":             "Pokrywa przednia",
+    "leftFrontFender":  "Błotnik przedni lewy",
+    "rightFrontFender": "Błotnik przedni prawy",
+    "leftFrontDoor":    "Drzwi przednie lewe",
+    "rightFrontDoor":   "Drzwi przednie prawe",
+    "leftRearDoor":     "Drzwi tylne lewe",
+    "rightRearDoor":    "Drzwi tylne prawe",
+    "leftRearFender":   "Błotnik tylny lewy",
+    "rightRearFender":  "Błotnik tylny prawy",
+    "trunk":            "Pokrywa tylna / klapa",
+    "roof":             "Dach",
+    "leftAColumn":      "Słupek przedni lewy",
+    "rightAColumn":     "Słupek przedni prawy",
+    "leftBColumn":      "Słupek środkowy lewy",
+    "rightBColumn":     "Słupek środkowy prawy",
+    "leftSill":         "Próg lewy",
+    "rightSill":        "Próg prawy",
+    "frontBumper":      "Zderzak przedni",
+    "rearBumper":       "Zderzak tylny",
+}
+
 # Paint enum options offered to the admin (labels — frontend writes these
 # strings, the report reader translates Bitrix IDs back via PAINT_ENUM_LABELS).
 PAINT_OPTIONS = [""] + list(PAINT_ENUM_LABELS.values())
@@ -418,11 +442,12 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     # vehicle.version, vehicle.overall_condition. The overall_condition value
     # is still editable via bitrix_extras.overall_condition below.
 
-    # Paint — per-panel value enum.
+    # Paint — per-panel value enum. Schema path key stays English (paint.hood.value),
+    # only the display label is Polish (matches inspector wizard naming).
     for panel in PAINT_PANEL_KEYS:
         schema[f"paint.{panel}.value"] = {
             "type": "enum",
-            "label": f"Lakier — {panel}",
+            "label": PAINT_PANEL_LABELS_PL.get(panel, panel),
             "options": PAINT_OPTIONS,
         }
 

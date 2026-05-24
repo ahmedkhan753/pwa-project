@@ -86,10 +86,10 @@ export function VehicleDataStep() {
     }, []);
 
     const handleChange = (field: string, value: string) => {
-        // Przebieg + Pojemność: positive numbers only — strip any minus sign
-        // so "-5" becomes "5". HTML min=0 is just a hint; type=number still
+        // Numeric fields: positive numbers only — strip any minus sign so
+        // "-5" becomes "5". HTML min=0/1 is just a hint; type=number still
         // accepts "-" via paste / arrow key. This is the real guard.
-        if (field === 'mileage' || field === 'engineCapacity') {
+        if (['mileage','engineCapacity','ownWeight','totalWeight','loadCapacity'].includes(field)) {
             value = value.replace('-', '');
         }
         // Moc (kW): hard-block keystrokes that can never be valid (negative,
@@ -342,7 +342,7 @@ export function VehicleDataStep() {
                         placeholder="Wybierz nadwozie"
                     />
 
-                    <FormField label="Pierwsza rejestracja" value={v.firstRegistration} onChange={(val) => handleChange('firstRegistration', val)} placeholder="DD.MM.YYYY" />
+                    <FormField label="Pierwsza rejestracja" value={(v.firstRegistration||'').slice(0,10)} onChange={(val) => handleChange('firstRegistration', val)} placeholder="" type="date" />
                     
                     <SmartDropdown 
                         label="Skrzynia biegów" 
@@ -360,8 +360,8 @@ export function VehicleDataStep() {
                         placeholder="Wybierz napęd"
                     />
                     
-                    <FormField label="Masa własna (kg)" value={v.ownWeight} onChange={(val) => handleChange('ownWeight', val)} placeholder="np. 1500" type="number" />
-                    <FormField label="Masa całkowita (kg)" value={v.totalWeight} onChange={(val) => handleChange('totalWeight', val)} placeholder="np. 2000" type="number" />
+                    <FormField label="Masa własna (kg)" value={v.ownWeight} onChange={(val) => handleChange('ownWeight', val)} placeholder="np. 1500" type="number" min={1} />
+                    <FormField label="Masa całkowita (kg)" value={v.totalWeight} onChange={(val) => handleChange('totalWeight', val)} placeholder="np. 2000" type="number" min={1} />
                     
                     <SmartDropdown 
                         label="Liczba miejsc" 
