@@ -565,9 +565,26 @@ async def get_report(deal_id: int, request: Request):
             "registration_plate":      _safe_str(iv.get("registrationPlates")),
             "first_registration_date": _safe_str(iv.get("firstRegistration")),
             "mileage":                 _safe_str(iv.get("mileage")),
+            # camelCase DB keys mirror VEHICLE_SCHEMA_TO_DB_KEY in
+            # admin_reports.py — required so an admin edit on these three
+            # fields has a DB read path back into the report.
+            "doors":                   _safe_str(iv.get("doorsCount")),
+            "seats":                   _safe_str(iv.get("seatsCount")),
+            "weight_kg":               _safe_str(iv.get("ownWeight")),
         }
-        # Enum fields where DB record (label) takes priority over Bitrix (numeric ID)
-        _prefer_db = {"fuel_type", "body_type", "transmission", "drive_type"}
+        # Fields where a non-empty DB record overrides Bitrix. The four enum
+        # fields are here because Bitrix returns numeric IDs and the DB holds
+        # the readable label. The remaining six (engine_capacity_cc,
+        # engine_power_hp, first_registration_date, doors, seats, weight_kg)
+        # are here so admin-editor writes actually surface on the report —
+        # without this, Bitrix's stale value silently won. Empty DB values
+        # are still falsy (line below: `if v`) so Bitrix-only deals and any
+        # field the inspector left blank still take the Bitrix value.
+        _prefer_db = {
+            "fuel_type", "body_type", "transmission", "drive_type",
+            "engine_capacity_cc", "engine_power_hp", "first_registration_date",
+            "doors", "seats", "weight_kg",
+        }
         for k, v in _fallbacks.items():
             if k in _prefer_db:
                 if v:                           # DB has a value → use it
