@@ -86,11 +86,15 @@ export function VehicleDataStep() {
     }, []);
 
     const handleChange = (field: string, value: string) => {
-        // Numeric fields: positive numbers only — strip any minus sign so
-        // "-5" becomes "5". HTML min=0/1 is just a hint; type=number still
-        // accepts "-" via paste / arrow key. This is the real guard.
-        if (['mileage','engineCapacity','ownWeight','totalWeight','loadCapacity'].includes(field)) {
-            value = value.replace('-', '');
+        // Numeric fields: positive integers ≥ 1 only. Strip any minus sign
+        // so "-5" becomes "5", and clear bare "0"/"00"/… so 0 isn't stored.
+        // HTML min=1 is just a hint; type=number still accepts "-" / "0" via
+        // paste / arrow key. This is the real guard. Mid-typing "10" still
+        // works: "1" stays, then "10" passes (not all zeros).
+        const NUMERIC_MIN1 = ['mileage','engineCapacity','ownWeight','totalWeight','loadCapacity','year','doors','seats'];
+        if (NUMERIC_MIN1.includes(field)) {
+            value = value.replace('-', '');         // no negatives
+            if (/^0+$/.test(value)) value = '';     // bare 0 / 00 / 000 → ''
         }
         // Moc (kW): hard-block keystrokes that can never be valid (negative,
         // or > 900). Don't hard-block the < 50 lower bound — that would
@@ -282,8 +286,8 @@ export function VehicleDataStep() {
                         onChange={(val) => handleChange('color', val)} 
                         placeholder="Wybierz kolor"
                     />
-                    <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" min={0} />
-                    <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" min={0} />
+                    <FormField label="Przebieg (km)" value={v.mileage} onChange={(val) => handleChange('mileage', val)} placeholder="np. 85000" type="number" min={1} />
+                    <FormField label="Poj. silnika (cm³)" value={v.engineCapacity} onChange={(val) => handleChange('engineCapacity', val)} placeholder="np. 1998" type="number" min={1} />
                     {/* Engine power — kW (May 2026 migration). Any keystroke here
                         also stamps enginePowerUnit="kW" so the report's display
                         path takes the kW branch. Legacy records (no unit marker)
