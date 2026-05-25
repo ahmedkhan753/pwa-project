@@ -265,6 +265,23 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                                 ))}
                             </div>
 
+                            {/* No-data option — explicitly mark panel as not measured */}
+                            <button
+                                onClick={() => {
+                                    setModalValue('');
+                                    setCustomInput('');
+                                    setModalStatus('');
+                                }}
+                                className={cn(
+                                    "w-full py-4 rounded-2xl text-sm font-black transition-all border-2 flex items-center justify-center gap-2",
+                                    (!modalValue && !customInput)
+                                        ? "bg-muted/20 border-muted text-foreground shadow-lg scale-[1.02]"
+                                        : "bg-surface-raised border-transparent text-muted hover:border-border"
+                                )}
+                            >
+                                Brak danych
+                            </button>
+
                             {/* Custom exact value input */}
                             <div className="space-y-2">
                                 <span className="text-xs font-black text-muted/40 uppercase tracking-widest px-1">Lub wpisz dokładną wartość</span>

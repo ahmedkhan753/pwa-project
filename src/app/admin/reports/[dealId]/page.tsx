@@ -190,6 +190,12 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
   )
 
   const onFieldChange = (path: string, schema: SchemaEntry, raw: string) => {
+    // Number fields: reject negatives + bare zero before storing.
+    // Schema's own min (e.g. year=1900) still applies on top via the input.
+    if (schema?.type === "number") {
+      raw = String(raw).replace("-", "")
+      if (/^0+$/.test(raw)) raw = ""
+    }
     const coerced = coerceForApi(raw, schema.type)
     const orig = originalValueFor(path)
     setChanges(prev => {

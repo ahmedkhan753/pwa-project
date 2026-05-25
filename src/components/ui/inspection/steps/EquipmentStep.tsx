@@ -73,7 +73,12 @@ export function EquipmentStep() {
                     <input
                         type="number"
                         value={eq.keysCount}
-                        onChange={(e) => updateField('equipmentCompleteness', 'keysCount', e.target.value)}
+                        min={1}
+                        onChange={(e) => {
+                            let val = e.target.value.replace('-', '');
+                            if (/^0+$/.test(val)) val = '';
+                            updateField('equipmentCompleteness', 'keysCount', val);
+                        }}
                         placeholder="np. 2"
                         aria-label="Keys count"
                         className="w-24 py-2.5 px-4 rounded-xl border-2 border-border bg-surface text-foreground text-lg font-bold text-center"

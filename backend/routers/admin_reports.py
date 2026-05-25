@@ -426,7 +426,7 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     schema["vehicle.year"]                = {"type": "number", "label": "Rok produkcji", "min": 1900, "max": 2100}
     schema["vehicle.color"]               = {"type": "text",   "label": "Kolor"}
     schema["vehicle.engine_capacity_cc"]  = {"type": "number", "label": "Pojemność (cm³)", "min": 0}
-    schema["vehicle.engine_power_hp"]     = {"type": "number", "label": "Moc (KM)", "min": 0}
+    schema["vehicle.engine_power_hp"]     = {"type": "number", "label": "Moc (kW)", "min": 0}
     schema["vehicle.fuel_type"]           = {"type": "enum",   "label": "Rodzaj paliwa", "options": FUEL_TYPES}
     schema["vehicle.body_type"]           = {"type": "enum",   "label": "Rodzaj nadwozia", "options": BODY_TYPES}
     schema["vehicle.transmission"]        = {"type": "enum",   "label": "Skrzynia biegów", "options": GEARBOX_TYPES}
