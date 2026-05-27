@@ -175,7 +175,30 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
     return () => clearTimeout(h)
   }, [toast])
 
-  const schemaPaths = useMemo(() => Object.keys(data?.schema || {}).sort(), [data])
+  // Paint panel display order — mirrors backend PAINT_PANEL_KEYS /
+  // report.py PAINT_PANELS_19 / inspector wizard order. Keeps the admin
+  // edit list aligned with the Condition Report instead of alphabetical.
+  const PAINT_ORDER = [
+    "hood","leftFrontFender","rightFrontFender","leftFrontDoor","rightFrontDoor",
+    "leftRearDoor","rightRearDoor","leftRearFender","rightRearFender","trunk",
+    "roof","leftAColumn","rightAColumn","leftBColumn","rightBColumn",
+    "leftSill","rightSill","frontBumper","rearBumper",
+  ]
+
+  const schemaPaths = useMemo(() => {
+    const keys = Object.keys(data?.schema || {})
+    const paintIdx = (p: string) => {
+      const panel = p.split(".")[1] || ""
+      const i = PAINT_ORDER.indexOf(panel)
+      return i === -1 ? 999 : i
+    }
+    return keys.sort((a, b) => {
+      const ra = a.split(".")[0], rb = b.split(".")[0]
+      if (ra !== rb) return ra.localeCompare(rb)
+      if (ra === "paint") return paintIdx(a) - paintIdx(b)
+      return a.localeCompare(b)
+    })
+  }, [data])
 
   const originalValueFor = useCallback(
     (path: string): unknown => {

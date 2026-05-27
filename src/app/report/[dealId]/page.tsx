@@ -723,6 +723,15 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
   const [backTop, setBackTop]   = useState(false);
   const [docs, setDocs] = useState<{ has_cepik: boolean; has_damage_history: boolean }>({ has_cepik: false, has_damage_history: false });
 
+  const formatPower = (v: any) => {
+    const kw = v?.engine_power_kw ? String(v.engine_power_kw).trim() : '';
+    const hp = v?.engine_power_hp ? String(v.engine_power_hp).trim() : '';
+    if (kw && hp) return `${kw} kW / ${hp} KM`;
+    if (kw) return `${kw} kW`;
+    if (hp) return `${hp} KM`;
+    return null;
+  };
+
   useEffect(() => {
     const onScroll = () => setBackTop(window.scrollY > 400);
     window.addEventListener('scroll', onScroll);
@@ -853,21 +862,26 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
 
       // Force-open all collapsible sections so content renders
       document.body.classList.add('force-print-open');
-
-      // Wait a tick for sections to expand and images to start loading
-      await new Promise(r => setTimeout(r, 300));
-
-      // Wait for all images to finish loading
-      const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('#main-content img'));
-      const pending = imgs.filter(img => !img.complete);
+      // Give collapsibles time to expand and inject their <img> elements
+      await new Promise(r => setTimeout(r, 800));
+      // Force-eager any native lazy images so they start fetching now
+      const allImgs = Array.from(document.querySelectorAll<HTMLImageElement>('#main-content img'));
+      allImgs.forEach(img => {
+        if (img.loading === 'lazy') img.loading = 'eager';
+      });
+      // Wait for them to finish (or 30s cap — covers ~50 photos at typical speeds)
+      const pending = allImgs.filter(img => !img.complete);
       if (pending.length > 0) {
+        console.log(`[PDF] waiting for ${pending.length}/${allImgs.length} images to load…`);
         await Promise.race([
           Promise.all(pending.map(img => new Promise<void>(resolve => {
+            if (img.complete) { resolve(); return; }
             img.addEventListener('load', () => resolve(), { once: true });
             img.addEventListener('error', () => resolve(), { once: true });
           }))),
-          new Promise<void>(r => setTimeout(r, 5000)), // 5s timeout
+          new Promise<void>(r => setTimeout(r, 30000)),
         ]);
+        console.log(`[PDF] image preload complete (or timed out at 30s)`);
       }
 
       const element = document.getElementById('main-content');
@@ -920,7 +934,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
   const vehicleName = [v.make, v.model, v.version].filter(Boolean).join(' ');
   const heroSubtitle = [
     (v as any).engine_capacity_cc ? `${(v as any).engine_capacity_cc} cc` : null,
-    (v as any).engine_power_hp ? `${(v as any).engine_power_hp} KM` : null,
+    formatPower(v),
     v.transmission,
     v.fuel_type,
     v.year ? String(v.year) : null,
@@ -1146,7 +1160,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             {[
               { icon:'fas fa-calendar-alt', value: data.quick_stats.year || v.year, label:'Rok produkcji' },
               { icon:'fas fa-gas-pump',     value: data.quick_stats.fuel || v.fuel_type, label:'Rodzaj paliwa' },
-              { icon:'fas fa-bolt',         value: data.quick_stats.power || ((v as any).engine_power_hp ? `${(v as any).engine_power_hp} KM` : null), label: (v as any).engine_power_kw ? `${(v as any).engine_power_kw} kW` : 'Moc' },
+              { icon:'fas fa-bolt',         value: data.quick_stats.power || formatPower(v), label: 'Moc' },
               { icon:'fas fa-cogs',         value: data.quick_stats.transmission || v.transmission, label:'Skrzynia biegów' },
             ].map(s => s.value && (
               <div key={s.label} style={{ background:'#fff',borderRadius:12,padding:'18px 14px',
@@ -1170,7 +1184,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                 { label:'Rocznik',    val: v.year },
                 { label:'Przebieg',   val: v.mileage ? `${Number(v.mileage).toLocaleString('pl-PL')} km` : null },
                 { label:'Pojemność',  val: v.engine_capacity_cc ? `${v.engine_capacity_cc} cc` : null },
-                { label:'Moc',        val: v.engine_power_hp ? `${v.engine_power_hp} KM` : null },
+                { label:'Moc',        val: formatPower(v) },
                 { label:'Paliwo',     val: v.fuel_type },
                 { label:'Napęd',      val: v.drive_type },
                 { label:'Skrzynia',   val: v.transmission },
@@ -1252,7 +1266,7 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               { icon:'fas fa-palette',       label:'Kolor',               value: v.color },
               { icon:'fas fa-gas-pump',      label:'Rodzaj paliwa',       value: v.fuel_type },
               { icon:'fas fa-paint-roller',  label:'Lakier',              value: v.paint_type },
-              { icon:'fas fa-bolt',          label:'Moc silnika',         value: v.engine_power_hp ? `${v.engine_power_kw ? v.engine_power_kw+' kW / ' : ''}${v.engine_power_hp} KM` : null },
+              { icon:'fas fa-bolt',          label:'Moc silnika',         value: formatPower(v) },
               { icon:'fas fa-cog',           label:'Pojemność',           value: v.engine_capacity_cc ? `${v.engine_capacity_cc} cc` : null },
               { icon:'fas fa-cogs',          label:'Skrzynia biegów',     value: v.transmission },
               { icon:'fas fa-road',          label:'Napęd',               value: v.drive_type },

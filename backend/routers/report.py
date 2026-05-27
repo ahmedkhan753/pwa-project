@@ -410,6 +410,18 @@ def _tire_status(tread_mm: Optional[float]) -> str:
     return "danger"
 
 
+def _format_power(v):
+    kw = str(v.get('engine_power_kw') or '').strip()
+    hp = str(v.get('engine_power_hp') or '').strip()
+    if kw and hp:
+        return f"{kw} kW / {hp} KM"
+    if kw:
+        return f"{kw} kW"
+    if hp:
+        return f"{hp} KM"
+    return ""
+
+
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.get("/report/{deal_id}")
@@ -1270,11 +1282,7 @@ async def get_report(deal_id: int, request: Request):
         "quick_stats": {
             "year":         vehicle["year"],
             "fuel":         vehicle["fuel_type"],
-            "power":        (
-                f"{vehicle['engine_power_kw']} kW"
-                if vehicle.get("engine_power_unit") == "kW" and vehicle.get("engine_power_kw")
-                else (f"{vehicle['engine_power_hp']} KM" if vehicle["engine_power_hp"] else "")
-            ),
+            "power":        _format_power(vehicle),
             "transmission": vehicle["transmission"],
             "mileage":      f"{vehicle['mileage']} km" if vehicle["mileage"] else "",
         },
