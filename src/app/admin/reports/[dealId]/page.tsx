@@ -29,6 +29,19 @@ interface SaveResponse {
   warnings: string[]
 }
 
+interface AdminPhoto {
+  slot_id: string
+  label: string
+  url: string
+  size_bytes: number
+  is_video: boolean
+}
+
+interface AdminPhotosResponse {
+  deal_id: number
+  photos: AdminPhoto[]
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 // Sections rendered in this order. Eyebrow numbering mirrors the
@@ -168,6 +181,97 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
   }, [token, dealId, router])
 
   useEffect(() => { fetchEdit() }, [fetchEdit])
+
+  // ── Photo management (list / replace / delete) ─────────────────────────
+  const [photos, setPhotos] = useState<AdminPhoto[]>([])
+  const [photosLoading, setPhotosLoading] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState<Set<string>>(new Set())
+  const [photoCacheBust, setPhotoCacheBust] = useState<Record<string, number>>({})
+
+  const setSlotBusy = (slot: string, busy: boolean) => {
+    setPhotoBusy(prev => {
+      const next = new Set(prev)
+      if (busy) next.add(slot)
+      else next.delete(slot)
+      return next
+    })
+  }
+
+  const fetchPhotos = useCallback(async () => {
+    if (!token) return
+    setPhotosLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/admin/reports/${dealId}/photos`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401) {
+        sessionStorage.removeItem("admin_token")
+        router.push("/admin")
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json: AdminPhotosResponse = await res.json()
+      setPhotos(json.photos || [])
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się pobrać zdjęć: ${msg}` })
+    } finally {
+      setPhotosLoading(false)
+    }
+  }, [token, dealId, router])
+
+  useEffect(() => { fetchPhotos() }, [fetchPhotos])
+
+  const onReplacePhoto = async (slot: string, file: File) => {
+    if (!token) return
+    setSlotBusy(slot, true)
+    try {
+      const fd = new FormData()
+      fd.append("deal_id", String(dealId))
+      fd.append("field_key", slot)
+      fd.append("file", file)
+      const res = await fetch(`${API_BASE}/api/files/upload-binary`, {
+        method: "POST",
+        body: fd,
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPhotoCacheBust(prev => ({ ...prev, [slot]: Date.now() }))
+      setToast({ kind: "ok", msg: `Zamieniono zdjęcie: ${slot}` })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się zamienić: ${msg}` })
+    } finally {
+      setSlotBusy(slot, false)
+    }
+  }
+
+  const onDeletePhoto = async (slot: string) => {
+    if (!token) return
+    const ok = window.confirm(
+      `Czy na pewno chcesz trwale usunąć to zdjęcie?\n\nSlot: ${slot}\n\nTej operacji nie można cofnąć.`
+    )
+    if (!ok) return
+    setSlotBusy(slot, true)
+    try {
+      const res = await fetch(`${API_BASE}/admin/reports/${dealId}/photo/${slot}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401) {
+        sessionStorage.removeItem("admin_token")
+        router.push("/admin")
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPhotos(prev => prev.filter(p => p.slot_id !== slot))
+      setToast({ kind: "ok", msg: `Usunięto zdjęcie: ${slot}` })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się usunąć: ${msg}` })
+    } finally {
+      setSlotBusy(slot, false)
+    }
+  }
 
   useEffect(() => {
     if (!toast) return
@@ -639,6 +743,186 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
             </section>
           )
         })}
+
+        {/* Zdjęcia — photo management (list / replace / delete) */}
+        <section
+          className="bg-white relative overflow-hidden"
+          style={{
+            borderRadius: 12,
+            border: "1px solid #E8E8ED",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          }}
+        >
+          <span
+            aria-hidden
+            className="absolute left-0 top-0 bottom-0"
+            style={{ width: 3, background: "#B71C1C", borderRadius: "0 3px 3px 0" }}
+          />
+          <div className="px-5 sm:px-7 py-4 sm:py-5 flex items-start gap-3">
+            <div
+              className="flex items-center justify-center flex-shrink-0"
+              style={{
+                width: 42, height: 42, borderRadius: 8,
+                background: "#FEF2F2", color: "#B71C1C", fontSize: 17,
+              }}
+            >
+              <i className="fa-solid fa-images" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div
+                className="font-bold uppercase"
+                style={{ fontSize: 11, color: "#B71C1C", letterSpacing: 2, marginBottom: 2 }}
+              >
+                04 / Zdjęcia
+              </div>
+              <div className="font-bold" style={{ fontSize: 19, color: "#1D1D1F", lineHeight: 1.3 }}>
+                Zarządzanie zdjęciami
+              </div>
+              <div className="text-xs sm:text-sm mt-1" style={{ color: "#86868B" }}>
+                Zamień lub usuń zdjęcia z raportu. Usuwanie jest trwałe.
+              </div>
+            </div>
+          </div>
+          <div
+            className="px-5 sm:px-7 pb-5 sm:pb-6 pt-4"
+            style={{ borderTop: "1px solid #E8E8ED" }}
+          >
+            {photosLoading && (
+              <div className="text-sm" style={{ color: "#86868B" }}>
+                <i className="fa-solid fa-spinner fa-spin mr-2" />
+                Ładowanie zdjęć…
+              </div>
+            )}
+            {!photosLoading && photos.length === 0 && (
+              <div className="text-sm" style={{ color: "#86868B" }}>
+                Brak zdjęć dla tego zlecenia.
+              </div>
+            )}
+            {!photosLoading && photos.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {photos.map(p => {
+                  const busy = photoBusy.has(p.slot_id)
+                  const bust = photoCacheBust[p.slot_id]
+                  const src = `${API_BASE}${p.url}${bust ? `?t=${bust}` : ""}`
+                  const sizeKb = Math.round(p.size_bytes / 1024)
+                  return (
+                    <div
+                      key={p.slot_id}
+                      style={{
+                        border: "1px solid #E8E8ED",
+                        borderRadius: 10,
+                        background: "#fff",
+                        overflow: "hidden",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <div
+                        style={{
+                          aspectRatio: "4 / 3",
+                          background: "#F5F5F7",
+                          position: "relative",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {p.is_video ? (
+                          <div className="flex flex-col items-center gap-1" style={{ color: "#86868B" }}>
+                            <i className="fa-solid fa-film" style={{ fontSize: 28 }} />
+                            <span className="text-xs font-bold">FILM</span>
+                          </div>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={src}
+                            alt={p.label}
+                            loading="lazy"
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          />
+                        )}
+                        {busy && (
+                          <div
+                            style={{
+                              position: "absolute", inset: 0,
+                              background: "rgba(255,255,255,0.7)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "#B71C1C", fontSize: 24,
+                            }}
+                          >
+                            <i className="fa-solid fa-spinner fa-spin" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-3 py-2.5 flex flex-col gap-2">
+                        <div
+                          className="font-semibold truncate"
+                          style={{ fontSize: 12, color: "#1D1D1F" }}
+                          title={p.label}
+                        >
+                          {p.label}
+                        </div>
+                        <div
+                          className="font-mono truncate"
+                          style={{ fontSize: 10, color: "#AEAEB2" }}
+                          title={p.slot_id}
+                        >
+                          {p.slot_id} · {sizeKb} KB
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <label
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer transition-colors"
+                            style={{
+                              minHeight: 36,
+                              borderRadius: 8,
+                              background: busy ? "#F5F5F7" : "#fff",
+                              color: busy ? "#AEAEB2" : "#1D1D1F",
+                              border: "1px solid #E8E8ED",
+                              opacity: busy ? 0.6 : 1,
+                              pointerEvents: busy ? "none" : "auto",
+                            }}
+                          >
+                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }} />
+                            Zamień
+                            <input
+                              type="file"
+                              accept={p.is_video ? "video/*" : "image/*"}
+                              style={{ display: "none" }}
+                              onChange={e => {
+                                const f = e.target.files?.[0]
+                                if (f) onReplacePhoto(p.slot_id, f)
+                                e.target.value = ""
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => onDeletePhoto(p.slot_id)}
+                            disabled={busy}
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+                            style={{
+                              minHeight: 36,
+                              borderRadius: 8,
+                              padding: "0 12px",
+                              background: busy ? "#F5F5F7" : "#fff",
+                              color: busy ? "#AEAEB2" : "#B71C1C",
+                              border: `1px solid ${busy ? "#E8E8ED" : "#B71C1C"}`,
+                              opacity: busy ? 0.6 : 1,
+                            }}
+                          >
+                            <i className="fa-solid fa-trash" style={{ fontSize: 11 }} />
+                            Usuń
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
 
       {/* Sticky save bar */}

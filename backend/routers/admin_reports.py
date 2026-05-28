@@ -25,11 +25,12 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from deps import require_admin
-from models.inspector import InspectionEdit, InspectionRecord
+from models.inspector import InspectionEdit, InspectionPhoto, InspectionRecord
 from services.equipment_parser import parse_equipment_from_pdf
 from routers.report import (
     OVERALL_CONDITION_LABELS,
     PAINT_ENUM_LABELS,
+    PHOTO_LABELS,
     VEHICLE_FIELDS,
 )
 
@@ -979,7 +980,68 @@ async def update_report(
     }
 
 
-# ─── Endpoint 4: parse standard equipment from a Wycena PDF ────────────────────
+# ─── Endpoint 4: list photos / videos stored for a deal ──────────────────────
+
+@router.get("/admin/reports/{deal_id}/photos")
+async def list_report_photos(
+    deal_id: int,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_admin),
+):
+    """List every photo/video stored in inspection_photos for this deal.
+    Powers the admin photo-management panel — returns slot_id, friendly
+    label, gallery URL, byte size, and a video flag. Ordered by slot_id
+    so the panel layout is stable across requests."""
+    rows = db.query(InspectionPhoto).filter(
+        InspectionPhoto.deal_id == deal_id
+    ).order_by(InspectionPhoto.slot_id).all()
+    return {
+        "deal_id": deal_id,
+        "photos": [
+            {
+                "slot_id":    r.slot_id,
+                "label":      PHOTO_LABELS.get(r.slot_id, r.slot_id),
+                "url":        f"/api/gallery/{deal_id}/media/{r.slot_id}",
+                "size_bytes": len(r.photo_bytes) if r.photo_bytes else 0,
+                "is_video":   r.slot_id.startswith("video_"),
+            }
+            for r in rows
+        ],
+    }
+
+
+# ─── Endpoint 5: delete a single photo / video (admin only, audited) ─────────
+
+@router.delete("/admin/reports/{deal_id}/photo/{slot_id}")
+async def delete_report_photo(
+    deal_id: int,
+    slot_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_admin),
+):
+    """Permanently delete a photo/video row for (deal_id, slot_id).
+    Returns 404 if the row doesn't exist. Logs the deletion (size + admin
+    name) at WARNING level so accidental deletions are recoverable from
+    log + the Bitrix copy. Bitrix-side cleanup is NOT performed — the
+    Bitrix file remains but /api/gallery serves the DB first, so the
+    report renders as deleted."""
+    row = db.query(InspectionPhoto).filter(
+        InspectionPhoto.deal_id == deal_id,
+        InspectionPhoto.slot_id == slot_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    size = len(row.photo_bytes) if row.photo_bytes else 0
+    db.delete(row)
+    db.commit()
+    logger.warning(
+        f"[admin_reports] PHOTO DELETED deal={deal_id} slot={slot_id} "
+        f"size={size}B by admin={current_user.get('name','?')}"
+    )
+    return {"success": True, "deal_id": deal_id, "slot_id": slot_id}
+
+
+# ─── Endpoint 6: parse standard equipment from a Wycena PDF ────────────────────
 
 @router.post("/admin/reports/{deal_id}/parse-equipment")
 async def parse_equipment(
