@@ -413,6 +413,123 @@ def _value_to_bitrix(path: str, value: Any) -> Any:
     return value
 
 
+# ─── Schema constants for structured-JSON sections (Phase 2) ─────────────────
+# These are referenced by _build_schema (static sections cached at module
+# load) and by _damage_schema(rec) (per-record damage slots, sized to the
+# length of existing exterior/interior damage arrays).
+
+_TAK_NIE_ND = ["", "TAK", "NIE", "ND"]
+
+MECHANICAL_FIELDS = [
+    ("engineCondition",      "Stan silnika"),
+    ("engineOilLevel",       "Poziom oleju"),
+    ("coolantLevel",         "Poziom płynu chłodniczego"),
+    ("engineNoises",         "Odgłosy silnika"),
+    ("engineSmoke",          "Dymienie silnika"),
+    ("transmission",         "Skrzynia biegów"),
+    ("clutch",               "Sprzęgło"),
+    ("driveShaft",           "Wał napędowy"),
+    ("frontSuspension",      "Zawieszenie przednie"),
+    ("rearSuspension",       "Zawieszenie tylne"),
+    ("shockAbsorbers",       "Amortyzatory"),
+    ("frontBrakes",          "Hamulce przednie"),
+    ("rearBrakes",           "Hamulce tylne"),
+    ("handbrake",            "Hamulec ręczny"),
+    ("steeringPlay",         "Luz układu kier."),
+    ("steeringPump",         "Wspomaganie kier."),
+    ("exhaustSystem",        "Układ wydechowy"),
+    ("airConditioning",      "Klimatyzacja"),
+    ("heatingSystem",        "Ogrzewanie"),
+    ("electricalSystem",     "Instalacja elektryczna"),
+    ("batteryCondition",     "Akumulator"),
+    ("lightsAll",            "Oświetlenie"),
+    ("wipers",               "Wycieraczki"),
+    ("horn",                 "Klakson"),
+    ("testDriveConducted",   "Jazda próbna przeprowadzona"),
+]
+
+TIRE_POSITIONS = [
+    ("frontLeft",  "Przód lewy"),
+    ("frontRight", "Przód prawy"),
+    ("rearLeft",   "Tył lewy"),
+    ("rearRight",  "Tył prawy"),
+]
+# 'type' enum reflects values actually stored in tires_json
+# (verified from DB: 'summer' / 'winter' / 'all-season').
+# 'treadDepth' is text — wizard stores it with a Polish comma decimal
+# ('6,3'), which an HTML number input would reject.
+# 'condition' is text — DB has no values populated; not actively used.
+TIRE_TYPE_OPTIONS = ["", "summer", "winter", "all-season"]
+
+# Exterior + interior damage locations — kept in lockstep with
+# DamageMap.tsx EXTERIOR_COORDS / INTERIOR_COORDS so the marker plots.
+DAMAGE_LOC_EXT = [
+    "",
+    "Maska / Pokrywa silnika", "Zderzak przedni", "Zderzak tylny",
+    "Błotnik przedni lewy", "Błotnik przedni prawy",
+    "Błotnik tylny lewy", "Błotnik tylny prawy",
+    "Drzwi przednie lewe", "Drzwi przednie prawe",
+    "Drzwi tylne lewe", "Drzwi tylne prawe",
+    "Dach", "Klapa / Pokrywa bagażnika",
+    "Próg lewy", "Próg prawy",
+    "Lusterko lewe", "Lusterko prawe",
+    "Szyba przednia", "Szyba tylna",
+    "Szyba boczna lewa", "Szyba boczna prawa",
+    "Reflektor przedni lewy", "Reflektor przedni prawy",
+    "Lampa tylna lewa", "Lampa tylna prawa",
+    "Felga przednia lewa", "Felga przednia prawa",
+    "Felga tylna lewa", "Felga tylna prawa",
+    "Inne",
+]
+DAMAGE_LOC_INT = [
+    "",
+    "Fotel kierowcy", "Fotel pasażera", "Kanapa tylna", "Zagłówki",
+    "Deska rozdzielcza", "Konsola środkowa", "Kierownica",
+    "Dźwignia zmiany biegów", "Podsufitka", "Wykładzina podłogowa",
+    "Panel drzwi przednich lewych", "Panel drzwi przednich prawych",
+    "Panel drzwi tylnych lewych", "Panel drzwi tylnych prawych",
+    "Podłokietnik", "Schowek", "Lusterko wsteczne",
+    "Osłony przeciwsłoneczne",
+    "Pas bezpieczeństwa przód", "Pas bezpieczeństwa tył",
+    "Bagażnik — wykładzina", "Bagażnik — ścianki",
+    "Pedały", "Dywaniki", "Inne",
+]
+DAMAGE_TYPE_OPTIONS = [
+    "",
+    "Zarysowanie", "Wgniecenie", "Pęknięcie", "Odprysk",
+    "Korozja / Rdza", "Uszkodzenie mechaniczne", "Zabrudzenie",
+    "Brak elementu", "Odbarwienie", "Inne",
+]
+DAMAGE_ACTION_OPTIONS = [
+    "",
+    "Naprawa", "Wymiana", "Bez działania",
+    "Polerowanie", "Lakierowanie", "Czyszczenie",
+]
+
+# Document-presence flags live inside notes_json. report.py reads them
+# (registrationDocPresented, vehicleCardPresented, purchaseInvoicePresented,
+# serviceBookPresented) to compute documents_check.
+DOC_FIELDS = [
+    ("registrationDocPresented", "Dowód rejestracyjny"),
+    ("vehicleCardPresented",     "Karta pojazdu"),
+    ("purchaseInvoicePresented", "Faktura zakupu"),
+    ("serviceBookPresented",     "Książka serwisowa"),
+]
+
+EQUIP_FIELDS = [
+    ("spareWheel",         "Koło zapasowe"),
+    ("jackAndTools",       "Podnośnik i narzędzia"),
+    ("triangular",         "Trójkąt ostrzegawczy"),
+    ("firstAidKit",        "Apteczka"),
+    ("fireExtinguisher",   "Gaśnica"),
+    ("repairKit",          "Zestaw naprawczy"),
+    ("ownerManual",        "Instrukcja obsługi"),
+    ("registrationPlates", "Tablice rejestracyjne"),
+    ("keys",               "Kluczyki"),
+    ("wheelWrench",        "Klucz do kół"),
+]
+
+
 # ─── Schema builder ───────────────────────────────────────────────────────────
 
 def _build_schema() -> Dict[str, Dict[str, Any]]:
@@ -466,16 +583,115 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
         "options": [""] + list(OVERALL_CONDITION_LABELS.values()),
     }
 
-    # Equipment / damages / mechanical / notes / tires are left without a
-    # per-field schema entry — _validate_change() falls through to its
-    # length-only check and the structured-JSON paths get the type sniff in
-    # _apply_change_to_json. This keeps Phase 1 surgical; richer per-row
-    # schemas can be added in a later commit without breaking the wire format.
+    # Mechanical (mechanical_json) — TAK/NIE/ND enums + 2 free-text fields.
+    for key, label in MECHANICAL_FIELDS:
+        schema[f"mechanical.{key}"] = {"type": "enum", "label": label, "options": _TAK_NIE_ND}
+    schema["mechanical.testDriveComment"]        = {"type": "text", "label": "Komentarz - jazda próbna"}
+    schema["mechanical.testDriveImpossibleText"] = {"type": "text", "label": "Powód braku jazdy próbnej"}
+
+    # Tires (tires_json — dict keyed by position: frontLeft/frontRight/
+    # rearLeft/rearRight). 4 positions × 9 fields = 36 entries.
+    for pos_key, pos_label in TIRE_POSITIONS:
+        schema[f"tires.{pos_key}.brand"]       = {"type": "text", "label": f"{pos_label} — Marka"}
+        schema[f"tires.{pos_key}.model"]       = {"type": "text", "label": f"{pos_label} — Model"}
+        schema[f"tires.{pos_key}.size"]        = {"type": "text", "label": f"{pos_label} — Rozmiar"}
+        schema[f"tires.{pos_key}.type"]        = {"type": "enum", "label": f"{pos_label} — Sezon", "options": TIRE_TYPE_OPTIONS}
+        schema[f"tires.{pos_key}.treadDepth"]  = {"type": "text", "label": f"{pos_label} — Głębokość bieżnika (mm)"}
+        schema[f"tires.{pos_key}.dot"]         = {"type": "text", "label": f"{pos_label} — DOT"}
+        schema[f"tires.{pos_key}.loadIndex"]   = {"type": "text", "label": f"{pos_label} — Indeks nośności"}
+        schema[f"tires.{pos_key}.speedIndex"]  = {"type": "text", "label": f"{pos_label} — Indeks prędkości"}
+        schema[f"tires.{pos_key}.condition"]   = {"type": "text", "label": f"{pos_label} — Stan"}
+
+    # Documents — flags stored in notes_json; consumed by report.py
+    # documents_check (line 1072+). Edit via notes.{key}.
+    for key, label in DOC_FIELDS:
+        schema[f"notes.{key}"] = {"type": "enum", "label": f"Dokument — {label}", "options": _TAK_NIE_ND}
+
+    # Equipment completeness (equipment_json).
+    for key, label in EQUIP_FIELDS:
+        schema[f"equipment.{key}"] = {"type": "enum", "label": f"Wyposażenie - {label}", "options": _TAK_NIE_ND}
+    schema["equipment.keysCount"] = {"type": "number", "label": "Liczba kluczyków", "min": 1}
+
+    # Notes free-text (notes_json).
+    schema["notes.generalComments"] = {"type": "text", "label": "Uwagi ogólne"}
+    schema["notes.valuationNotes"]  = {"type": "text", "label": "Uwagi do wyceny"}
+
+    # Damage slots (exterior_damages / interior_damages arrays) are added
+    # per-record by _damage_schema(rec) — slot count tracks len of the
+    # existing damage arrays so the editor only renders rows that exist.
+    # full_equipment_json (122 keys, photos) is deferred to a later phase.
 
     return schema
 
 
 SCHEMA_CACHE = _build_schema()
+
+
+def _strip_photos_recursive(obj: Any) -> Any:
+    """Drop dict keys named exactly 'photos'/'photo' and string values
+    longer than 1000 chars (inline base64 image payloads). Used to scrub
+    the admin GET response so editable text/enum/number values come
+    through while photo bytes stay out of the response."""
+    if isinstance(obj, dict):
+        return {
+            k: _strip_photos_recursive(v)
+            for k, v in obj.items()
+            if k not in ("photos", "photo")
+            and not (isinstance(v, str) and len(v) > 1000)
+        }
+    if isinstance(obj, list):
+        return [_strip_photos_recursive(item) for item in obj]
+    return obj
+
+
+def _normalize_damage_entry(entry: Any) -> Any:
+    """Strip photos, then surface legacy 'part' as 'location' if the entry
+    doesn't already have a location set. READ-ONLY normalization for the
+    GET response so the admin form's location dropdown pre-fills for older
+    deals (where the wizard wrote 'part'). The DB blob is not modified;
+    when the admin saves, _apply_change_to_json writes the 'location' key
+    and report.py reads location first, so the new value wins everywhere."""
+    entry = _strip_photos_recursive(entry)
+    if isinstance(entry, dict):
+        if not entry.get("location") and entry.get("part"):
+            entry["location"] = entry["part"]
+    return entry
+
+
+def _damage_schema(rec: InspectionRecord) -> Dict[str, Dict[str, Any]]:
+    """Per-record damage-slot schema entries; sized to len of existing
+    exterior_damage_json / interior_damage_json arrays so the editor only
+    surfaces rows that actually exist on the record."""
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        _ext = json.loads(rec.exterior_damage_json) if rec.exterior_damage_json else []
+    except Exception:
+        _ext = []
+    try:
+        _int = json.loads(rec.interior_damage_json) if rec.interior_damage_json else []
+    except Exception:
+        _int = []
+
+    if isinstance(_ext, list):
+        for i in range(len(_ext)):
+            out[f"exterior_damages.{i}.location"]    = {"type": "enum", "label": f"E{i+1} — Lokalizacja", "options": DAMAGE_LOC_EXT}
+            out[f"exterior_damages.{i}.type"]        = {"type": "enum", "label": f"E{i+1} — Typ",         "options": DAMAGE_TYPE_OPTIONS}
+            out[f"exterior_damages.{i}.size"]        = {"type": "text", "label": f"E{i+1} — Rozmiar"}
+            out[f"exterior_damages.{i}.description"] = {"type": "text", "label": f"E{i+1} — Opis"}
+            out[f"exterior_damages.{i}.action"]      = {"type": "enum", "label": f"E{i+1} — Działanie",   "options": DAMAGE_ACTION_OPTIONS}
+    if isinstance(_int, list):
+        for i in range(len(_int)):
+            out[f"interior_damages.{i}.location"]    = {"type": "enum", "label": f"I{i+1} — Lokalizacja", "options": DAMAGE_LOC_INT}
+            out[f"interior_damages.{i}.type"]        = {"type": "enum", "label": f"I{i+1} — Typ",         "options": DAMAGE_TYPE_OPTIONS}
+            out[f"interior_damages.{i}.size"]        = {"type": "text", "label": f"I{i+1} — Rozmiar"}
+            out[f"interior_damages.{i}.description"] = {"type": "text", "label": f"I{i+1} — Opis"}
+            out[f"interior_damages.{i}.action"]      = {"type": "enum", "label": f"I{i+1} — Działanie",   "options": DAMAGE_ACTION_OPTIONS}
+    return out
+
+
+def _schema_for_rec(rec: InspectionRecord) -> Dict[str, Dict[str, Any]]:
+    """Static SCHEMA_CACHE merged with per-record damage slots."""
+    return {**SCHEMA_CACHE, **_damage_schema(rec)}
 
 
 # ─── Pydantic request models ──────────────────────────────────────────────────
@@ -612,21 +828,32 @@ async def get_report_edit(
         except Exception as e:
             logger.warning(f"[admin_reports] Bitrix fetch failed for deal {deal_id}: {e}")
 
-    # Only return what the v1 editor actually renders. The other JSON columns
-    # (equipment / full_equipment / tires / mechanical / notes / exterior &
-    # interior damages) carry base64 photo payloads that explode the response
-    # to multi-MB sizes — the form never reads them, so omit them entirely.
-    # PUT still accepts changes against those roots when ever they're added
-    # back to the schema.
+    # Return vehicle / paint / bitrix_extras plus the structured-JSON
+    # columns (mechanical / tires / damages / notes / equipment) for
+    # pre-fill. Each blob is passed through _strip_photos_recursive to
+    # drop 'photos' / 'photo' keys and any string value >1000 chars
+    # (inline base64), so the response stays compact even for records
+    # with full inspection photo payloads. Damage arrays additionally
+    # go through _normalize_damage_entry so legacy rows that stored the
+    # location as 'part' surface a 'location' key for form pre-fill.
+    # full_equipment_json (122 keys plus photos) is deferred.
+    _ext_raw = _load_json(rec.exterior_damage_json, [])
+    _int_raw = _load_json(rec.interior_damage_json, [])
     return {
         "deal_id": deal_id,
         "title": title,
         # vehicle_json is stored with camelCase keys; expose them under the
         # snake_case schema paths so the form pre-fills correctly.
-        "vehicle":       _vehicle_db_to_view(_load_json(rec.vehicle_json, {})),
-        "paint":         _load_json(rec.paint_json, {}),
-        "bitrix_extras": bitrix_extras,
-        "schema":        SCHEMA_CACHE,
+        "vehicle":          _vehicle_db_to_view(_load_json(rec.vehicle_json, {})),
+        "paint":            _load_json(rec.paint_json, {}),
+        "bitrix_extras":    bitrix_extras,
+        "mechanical":       _strip_photos_recursive(_load_json(rec.mechanical_json, {})),
+        "tires":            _strip_photos_recursive(_load_json(rec.tires_json, {})),
+        "exterior_damages": [_normalize_damage_entry(x) for x in _ext_raw] if isinstance(_ext_raw, list) else [],
+        "interior_damages": [_normalize_damage_entry(x) for x in _int_raw] if isinstance(_int_raw, list) else [],
+        "notes":            _strip_photos_recursive(_load_json(rec.notes_json, {})),
+        "equipment":        _strip_photos_recursive(_load_json(rec.equipment_json, {})),
+        "schema":           _schema_for_rec(rec),
     }
 
 
@@ -650,11 +877,13 @@ async def update_report(
     # 1) Validate every change first — reject the batch atomically on failure.
     # api_parts keeps the snake_case schema path (used for audit + Bitrix
     # mapping lookups); storage_parts is the camelCase-translated path used
-    # for the JSON-column read/write.
+    # for the JSON-column read/write. Schema is per-record (damage slots
+    # size to the existing array length on this record).
+    schema_for_rec = _schema_for_rec(rec)
     parsed: List[Tuple[str, List[str], List[str], Any]] = []
     for ch in body.changes:
         root, parts = _validate_path(ch.path)
-        _validate_change(ch.path, ch.value, SCHEMA_CACHE.get(ch.path))
+        _validate_change(ch.path, ch.value, schema_for_rec.get(ch.path))
         parsed.append((root, parts, _to_storage_parts(parts), ch.value))
 
     # 2) Build per-column working copies of the affected JSON blobs.
