@@ -637,7 +637,14 @@ async def get_report(deal_id: int, request: Request):
             _kw_str = _safe_str(iv.get("enginePower"))
             if _kw_str and _kw_str.replace(".", "", 1).isdigit():
                 vehicle["engine_power_kw"] = _kw_str
-                vehicle["engine_power_hp"] = str(round(float(_kw_str) * 1.341))
+                # Use an explicitly-stored HP if the record has one (manufacturer
+                # figures don't always equal the exact kW×1.341 conversion);
+                # otherwise derive it.
+                _explicit_hp = _safe_str(iv.get("enginePowerHp"))
+                if _explicit_hp and _explicit_hp.replace(".", "", 1).isdigit():
+                    vehicle["engine_power_hp"] = _explicit_hp
+                else:
+                    vehicle["engine_power_hp"] = str(round(float(_kw_str) * 1.341))
                 vehicle["engine_power_unit"] = "kW"
 
     # ── Enum ID → label resolution (fuel/body/transmission/drive) ───────────
