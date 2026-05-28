@@ -750,11 +750,21 @@ async def get_report(deal_id: int, request: Request):
                     photos_standard.append(photo)          # uncategorized → standard
             except Exception:
                 pass
-        # Pick hero by preference order; underbody shots are excluded above
-        for _slot in HERO_PREFERENCE:
-            if _slot in hero_candidates:
-                hero_photo_url = hero_candidates[_slot]
-                break
+        # Admin-chosen hero overrides auto-preference. The override lives at
+        # vehicle_json.heroPhotoSlot — written by the admin photo-manager's
+        # "Ustaw jako główne" button. Validated against the actual rows so a
+        # stale override (slot that was deleted) falls through to auto-pick.
+        _hero_override = _safe_str(insp_rec_vehicle.get("heroPhotoSlot")) if isinstance(insp_rec_vehicle, dict) else ""
+        if _hero_override and any(r.slot_id == _hero_override for r in db_rows):
+            hero_photo_url = f"/api/gallery/{deal_id}/media/{_hero_override}"
+
+        # Pick hero by preference order (only if admin hasn't chosen one above);
+        # underbody shots are excluded above.
+        if hero_photo_url is None:
+            for _slot in HERO_PREFERENCE:
+                if _slot in hero_candidates:
+                    hero_photo_url = hero_candidates[_slot]
+                    break
         # If still none and we have any other non-excluded body shot, take it
         if hero_photo_url is None and hero_candidates:
             hero_photo_url = next(iter(hero_candidates.values()))

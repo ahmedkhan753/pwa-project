@@ -731,6 +731,11 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     schema["vehicle.doors"]               = {"type": "number", "label": "Liczba drzwi", "min": 0, "max": 10}
     schema["vehicle.seats"]               = {"type": "number", "label": "Liczba miejsc", "min": 0, "max": 50}
     schema["vehicle.weight_kg"]           = {"type": "number", "label": "Masa własna (kg)", "min": 0}
+    # Admin-chosen hero photo slot. Written by the photo-manager's
+    # "Ustaw jako główne" button (not the schema-form field), but the entry
+    # must exist so the path validates on PUT. Stored in vehicle_json.heroPhotoSlot
+    # (no DB-key translation — heroPhotoSlot is not in VEHICLE_SCHEMA_TO_DB_KEY).
+    schema["vehicle.heroPhotoSlot"]       = {"type": "text",   "label": "Zdjęcie główne (slot)"}
     # Removed (no DB-side equivalent — writes were silently dropped):
     # vehicle.engine_power_kw, vehicle.owners_count, vehicle.paint_type,
     # vehicle.version, vehicle.overall_condition. The overall_condition value

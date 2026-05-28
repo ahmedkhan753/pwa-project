@@ -264,10 +264,53 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setPhotos(prev => prev.filter(p => p.slot_id !== slot))
+      // If admin deleted the slot that was set as hero, drop the override
+      // locally so the badge disappears immediately.
+      setHeroSlot(prev => (prev === slot ? null : prev))
       setToast({ kind: "ok", msg: `Usunięto zdjęcie: ${slot}` })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setToast({ kind: "err", msg: `Nie udało się usunąć: ${msg}` })
+    } finally {
+      setSlotBusy(slot, false)
+    }
+  }
+
+  // Hero photo override — admin picks one photo as the report banner.
+  // Reads current value from data.vehicle.heroPhotoSlot on each fetchEdit
+  // and writes via a standalone PUT to the existing edit endpoint.
+  const [heroSlot, setHeroSlot] = useState<string | null>(null)
+
+  useEffect(() => {
+    const v = (data?.vehicle as Record<string, unknown> | undefined)?.heroPhotoSlot
+    setHeroSlot(typeof v === "string" && v ? v : null)
+  }, [data])
+
+  const onSetHero = async (slot: string) => {
+    if (!token) return
+    setSlotBusy(slot, true)
+    try {
+      const res = await fetch(`${API_BASE}/admin/reports/${dealId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          changes: [{ path: "vehicle.heroPhotoSlot", value: slot }],
+        }),
+      })
+      if (res.status === 401) {
+        sessionStorage.removeItem("admin_token")
+        router.push("/admin")
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setHeroSlot(slot)
+      setToast({ kind: "ok", msg: `Ustawiono jako główne: ${slot}` })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się ustawić: ${msg}` })
     } finally {
       setSlotBusy(slot, false)
     }
@@ -289,8 +332,13 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
     "leftSill","rightSill","frontBumper","rearBumper",
   ]
 
+  // Schema entries that are written through a dedicated UI (not the generic
+  // form), so they must NOT render as text inputs. The schema entry still
+  // exists for PUT validation; the GET response still surfaces the value.
+  const HIDDEN_SCHEMA_PATHS = new Set(["vehicle.heroPhotoSlot"])
+
   const schemaPaths = useMemo(() => {
-    const keys = Object.keys(data?.schema || {})
+    const keys = Object.keys(data?.schema || {}).filter(p => !HIDDEN_SCHEMA_PATHS.has(p))
     const paintIdx = (p: string) => {
       const panel = p.split(".")[1] || ""
       const i = PAINT_ORDER.indexOf(panel)
@@ -854,6 +902,27 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                             <i className="fa-solid fa-spinner fa-spin" />
                           </div>
                         )}
+                        {heroSlot === p.slot_id && (
+                          <div
+                            aria-label="Główne zdjęcie raportu"
+                            style={{
+                              position: "absolute",
+                              top: 6, left: 6,
+                              background: "#B71C1C",
+                              color: "#fff",
+                              fontSize: 10,
+                              fontWeight: 800,
+                              letterSpacing: 1,
+                              padding: "3px 8px",
+                              borderRadius: 6,
+                              textTransform: "uppercase",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                            }}
+                          >
+                            <i className="fa-solid fa-star" style={{ fontSize: 9, marginRight: 4 }} />
+                            Główne
+                          </div>
+                        )}
                       </div>
                       <div className="px-3 py-2.5 flex flex-col gap-2">
                         <div
@@ -915,6 +984,26 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                             Usuń
                           </button>
                         </div>
+                        {!p.is_video && heroSlot !== p.slot_id && (
+                          <button
+                            type="button"
+                            onClick={() => onSetHero(p.slot_id)}
+                            disabled={busy}
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed"
+                            style={{
+                              minHeight: 32,
+                              borderRadius: 8,
+                              padding: "0 12px",
+                              background: busy ? "#F5F5F7" : "#FEF2F2",
+                              color: busy ? "#AEAEB2" : "#B71C1C",
+                              border: `1px solid ${busy ? "#E8E8ED" : "rgba(183,28,28,0.3)"}`,
+                              opacity: busy ? 0.6 : 1,
+                            }}
+                          >
+                            <i className="fa-solid fa-star" style={{ fontSize: 10 }} />
+                            Ustaw jako główne
+                          </button>
+                        )}
                       </div>
                     </div>
                   )
