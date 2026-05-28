@@ -170,6 +170,22 @@ BODY_SLOTS = {
     "photo_left_rear", "photo_left_front", "photo_door_left_front_open",
     "photo_left_side_door",
 }
+
+# Hero photo preference — ordered: prefer a clean front exterior shot,
+# then diagonals, then sides/rear. Underbody shots are NEVER hero
+# (they are mechanical-inspection frames, not vehicle portraits).
+# Fixes deal 1916 where photo_front_under was being chosen because it
+# happened to be inserted first in inspection_photos.
+HERO_PREFERENCE = (
+    "photo_front",
+    "photo_diag_front_left", "photo_diag_front_right",
+    "photo_left_front", "photo_right_front",
+    "photo_rear",
+    "photo_diag_rear_left", "photo_diag_rear_right",
+    "photo_left_rear", "photo_right_rear",
+    "photo_left_side_door",
+)
+HERO_EXCLUDE = {"photo_front_under", "photo_rear_under"}
 INTERIOR_SLOTS = {
     "photo_dashboard_rear", "photo_cockpit_center", "photo_center_tunnel",
     "photo_rear_vent", "photo_steering_wheel", "photo_multimedia",
@@ -679,6 +695,7 @@ async def get_report(deal_id: int, request: Request):
     photos_damages:   List[dict] = []
     videos:           List[dict] = []
     hero_photo_url: Optional[str] = None
+    hero_candidates: Dict[str, str] = {}
 
     try:
         _db = SessionLocal()
@@ -705,8 +722,8 @@ async def get_report(deal_id: int, request: Request):
                 continue
             try:
                 uri = f"/api/gallery/{deal_id}/media/{row.slot_id}"
-                if hero_photo_url is None and row.slot_id in BODY_SLOTS:
-                    hero_photo_url = uri
+                if row.slot_id in BODY_SLOTS and row.slot_id not in HERO_EXCLUDE:
+                    hero_candidates.setdefault(row.slot_id, uri)
                 label = PHOTO_LABELS.get(row.slot_id, row.slot_id.replace("_", " ").title())
                 photo = {"label": label, "url": uri, "position": pos}
                 pos += 1
@@ -726,7 +743,15 @@ async def get_report(deal_id: int, request: Request):
                     photos_standard.append(photo)          # uncategorized → standard
             except Exception:
                 pass
-        # If no exterior shots, pick any photo for hero
+        # Pick hero by preference order; underbody shots are excluded above
+        for _slot in HERO_PREFERENCE:
+            if _slot in hero_candidates:
+                hero_photo_url = hero_candidates[_slot]
+                break
+        # If still none and we have any other non-excluded body shot, take it
+        if hero_photo_url is None and hero_candidates:
+            hero_photo_url = next(iter(hero_candidates.values()))
+        # If no exterior shots at all, fall back to standard / interior
         if hero_photo_url is None and photos_standard:
             hero_photo_url = photos_standard[0]["url"]
         if hero_photo_url is None and photos_interior:
