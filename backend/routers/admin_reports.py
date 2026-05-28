@@ -107,6 +107,9 @@ PAINT_PANEL_TO_UF: Dict[str, str] = {
 }
 
 # UF_CRM ids for the bitrix_extras.* paths (source: mapping_overrides.json).
+# owners_count / paint_type / version live on Bitrix (not vehicle_json), so
+# they are wired here — same pattern as overall_condition. The wizard never
+# writes them; admins are the only mutation path.
 BITRIX_EXTRAS_FIELDS: Dict[str, str] = {
     "wyposazenie_standardowe":     "UF_CRM_1778277584327",
     "wyposazenie_dodatkowe":       "UF_CRM_1778277602592",
@@ -119,6 +122,9 @@ BITRIX_EXTRAS_FIELDS: Dict[str, str] = {
     "komentarz_uszkodzenia":       "UF_CRM_1778444342847",
     "komentarz_silnik":            "UF_CRM_1778444358921",
     "overall_condition":           "UF_CRM_1766057661321",
+    "owners_count":                "UF_CRM_1772534418926",
+    "paint_type":                  "UF_CRM_1772534426802",
+    "version":                     "UF_CRM_1766057961822",
 }
 
 # Roots that map to InspectionRecord JSON columns.
@@ -518,17 +524,187 @@ DOC_FIELDS = [
 ]
 
 EQUIP_FIELDS = [
-    ("spareWheel",         "Koło zapasowe"),
-    ("jackAndTools",       "Podnośnik i narzędzia"),
-    ("triangular",         "Trójkąt ostrzegawczy"),
-    ("firstAidKit",        "Apteczka"),
-    ("fireExtinguisher",   "Gaśnica"),
-    ("repairKit",          "Zestaw naprawczy"),
-    ("ownerManual",        "Instrukcja obsługi"),
-    ("registrationPlates", "Tablice rejestracyjne"),
-    ("keys",               "Kluczyki"),
-    ("wheelWrench",        "Klucz do kół"),
+    ("spareWheel",                     "Koło zapasowe"),
+    ("jackAndTools",                   "Podnośnik i narzędzia"),
+    ("triangular",                     "Trójkąt ostrzegawczy"),
+    ("firstAidKit",                    "Apteczka"),
+    ("fireExtinguisher",               "Gaśnica"),
+    ("repairKit",                      "Zestaw naprawczy"),
+    ("ownerManual",                    "Instrukcja obsługi"),
+    ("registrationPlates",             "Tablice rejestracyjne"),
+    ("keys",                           "Kluczyki"),
+    ("wheelWrench",                    "Klucz do kół"),
+    # Additions to match the wizard's EquipmentCompleteness interface (26 keys
+    # total). Document-presence flags stay in notes.* — report.py reads them
+    # from notes_json. additionalEquipment is free-text, added separately.
+    ("antiTheftSystem",                "System antykradzieżowy"),
+    ("immobilizerWorking",             "Immobilizer (działa)"),
+    ("compressor",                     "Sprężarka / Kompresor"),
+    ("airConditioningWorking",         "Klimatyzacja sprawna"),
+    ("navigationCardWorking",          "Karta nawigacji sprawna"),
+    ("tractionBatteryChargingCable",   "Kabel ładowania baterii trakcyjnej"),
+    ("tractionBatteryChargingStation", "Stacja ładowania baterii trakcyjnej"),
+    ("tractionBatteryChargeIndicator", "Wskaźnik naładowania baterii trakcyjnej"),
+    ("chargingCables",                 "Kable ładowania"),
+    ("vinMatchesDocs",                 "VIN zgodny z dokumentami"),
 ]
+
+# full_equipment values are TAK / ND only (no NIE in the wizard — items are
+# either present or "nie dotyczy"). Per-record schema entries are built in
+# _full_equipment_schema(rec).
+_TAK_ND = ["", "TAK", "ND"]
+
+# Polish labels for full_equipment keys. Sourced from FullEquipmentStep.tsx
+# (the 108-item wizard catalogue) plus 14 legacy keys retained on the
+# FullEquipment interface for backward-compat. Unknown keys (older records
+# carrying retired fields, or new keys added before this map is updated)
+# fall back to a humanized form of the camelCase key via _humanize_key().
+FULL_EQUIPMENT_LABELS: Dict[str, str] = {
+    # Bezpieczeństwo / Asystenci
+    "abs": "ABS", "esp": "ESP", "asr": "ASR", "alarm": "Alarm",
+    "airbagPassenger": "Airbag pasażera",
+    "airbagSideFront": "Airbag boczny przód",
+    "airbagSideRear": "Airbag boczny tył",
+    "airbagKnee": "Airbag nóg",
+    "airbagCurtain": "Kurtyny powietrzne",
+    "activeParkingSystem": "Aktywny system parkowania",
+    "nightVisionAssist": "Asystent jazdy nocnej",
+    "blindSpotAssist": "Asystent martwego punktu",
+    "vehicleAssist": "Asystent pojazdu",
+    "laneChangeAssist": "Asystent zmiany pasa ruchu",
+    "tirePressureSensor": "Czujnik ciśnienia w oponach",
+    "rainSensors": "Czujnik deszczu",
+    "lightSensors": "Czujnik zmierzchu",
+    "trafficSignRecognition": "System rozpoznawania znaków",
+    # Komfort — fotele / kierownica
+    "manualAC": "Klimatyzacja manualna",
+    "automaticAC": "Klimatyzacja automatyczna",
+    "electricFrontSeats": "Fotele przednie ust. elektrycznie",
+    "massageFrontSeats": "Fotele przednie z masażem",
+    "adjustableRearSeats": "Fotele tylne regulowane",
+    "massageRearSeats": "Siedzenia tylne z masażem",
+    "sportSeats": "Siedzenia sportowe",
+    "thirdRowSeats": "Trzeci rząd siedzeń",
+    "heatedSeats": "Ogrzewanie przednich foteli",
+    "heatedRearSeats": "Ogrzewanie tylnych siedzeń",
+    "ventilatedFrontSeats": "Wentylacja foteli przód",
+    "ventilatedRearSeats": "Wentylacja foteli tył",
+    "driverSeatMemory": "Pamięć ust. fotela kierowcy",
+    "passengerSeatMemory": "Pamięć ust. fotela pasażera",
+    "armrestFront": "Podłokietnik przód",
+    "armrestRear": "Podłokietnik tył",
+    "leatherSteeringWheel": "Kierownica skórzana",
+    "multifunctionSteeringWheel": "Kierownica wielofunkcyjna",
+    "heatedSteeringWheel": "Podgrzewana kierownica",
+    "paddleShifters": "Kierownica z funkcją zmiany biegów",
+    "electricSteeringColumn": "Kolumna kierownicy regul. elek.",
+    "powerSteering": "Wspomaganie kierownicy",
+    "cruiseControl": "Tempomat",
+    "activeCruiseControl": "Tempomat aktywny",
+    "comfortAccess": "Dostęp komfortowy",
+    "keylessEntry": "Zestaw bezkluczykowy",
+    "centralLocking": "Zamek centralny",
+    "headUpDisplay": "Head Up Display",
+    "virtualCockpit": "Wirtualny kokpit",
+    "onboardComputer": "Komputer pokładowy",
+    # Parkowanie i kamery
+    "parkingSensorsFrontRear": "Czujnik parkowania przód + tył",
+    "parkingSensorsRear": "Czujnik parkowania tył",
+    "parkingCamera": "Kamera parkowania",
+    "camera360": "Kamera 360",
+    # Multimedia / Elektronika
+    "radio": "Radioodbiornik",
+    "radioUsb": "Radioodbiornik USB",
+    "radioSd": "Radioodbiornik SD",
+    "navigation": "Nawigacja",
+    "dvdPlayerWithMonitor": "Odtwarzacz DVD z monitorem",
+    "headrestMonitors": "Zestaw monitorów w zagłówkach",
+    "tvTuner": "TV Tuner",
+    # Oświetlenie
+    "daytimeRunningLights": "Światła do jazdy dziennej",
+    "daytimeRunningLightsLed": "Światła do jazdy dziennej LED",
+    "ledLights": "Reflektory LED",
+    "fullLedLights": "Reflektory Full LED",
+    "xenonLights": "Reflektory ksenonowe",
+    "laserLights": "Reflektory laserowe",
+    "fogLights": "Światła przeciwmgielne",
+    "corneringLights": "Reflektory skrętne",
+    "bendLighting": "Reflektory z doświetlaniem zakrętów",
+    "headlightWashers": "Spryskiwacze reflektorów",
+    # Nadwozie / Dach / Szyby / Lusterka
+    "electricOpeningRoof": "Dach otwierany el.",
+    "solarOpeningRoof": "Dach otwierany z baterią słoneczną",
+    "panoramicRoof": "Dach panoramiczny",
+    "roofRails": "Relingi dachowe",
+    "metallicPaint": "Lakier metalik",
+    "heatedFrontWindshield": "Szyba przednia ogrzewana",
+    "electricWindowsFront": "Szyby pod. el. przód",
+    "electricWindowsRear": "Szyby pod. el. tył",
+    "sunBlindRear": "Roleta p. słoneczna tylna",
+    "sunBlindSide": "Roleta p. słoneczna boczne",
+    "heatedMirrors": "Lusterka ogrzewane",
+    "autoDimmingExtMirrors": "Lusterka zew. przyciemniające się",
+    "electricMirrors": "Lusterka reg. elektrycznie",
+    "foldingElectricMirrors": "Lusterka składane elektr.",
+    "autoDimmingIntMirror": "Lusterko wst. przyciemniające się",
+    "electricClosingDoors": "Drzwi domykane elektryczne",
+    "electricTailgate": "Pokrywa tylna otw./zam. elekt.",
+    "towBar": "Hak",
+    "alloyWheels": "Felgi aluminiowe",
+    "structuralWheels": "Felgi strukturalne",
+    "alloySpareWheel": "Koło zapasowe alu.",
+    "compactSpareWheel": "Koło dojazdowe",
+    # Tapicerka / Wnętrze
+    "leatherUpholstery": "Tapicerka skórzana",
+    "alcantaraUpholstery": "Tapicerka alkantara",
+    "fabricLeatherUpholstery": "Tapicerka materiał-skórzana",
+    "velourUpholstery": "Tapicerka welurowa",
+    "blackHeadliner": "Podsufitka czarna",
+    "interiorTrimAluminum": "Wykończenie wnętrza aluminium",
+    "interiorTrimWood": "Wykończenie wnętrza drewno",
+    "interiorTrimCarbon": "Wykończenie wnętrza karbon",
+    # Pozostałe / Dodatkowe
+    "fridge": "Lodówka",
+    "foldingTables": "Składane stoliki",
+    "powerSocket230vTrunk": "Gniazdo 230V w bagażniku",
+    "airSuspension": "Zawieszenie pneumatyczne",
+    "ceramicBrakes": "Hamulce ceramiczne",
+    "lpgSystem": "Instalacja gazowa",
+    "webasto": "Webasto",
+    "tachograph": "Tachograf",
+    "winch": "Wyciągarka",
+    # Legacy keys retained on the FullEquipment interface — older records
+    # may still carry them; labels are reasonable Polish equivalents.
+    "airbagDriver": "Poduszka kierowcy (legacy)",
+    "airbagSide": "Airbag boczny (legacy)",
+    "tractionControl": "Kontrola trakcji (legacy)",
+    "airConditioning": "Klimatyzacja (legacy)",
+    "parkingSensors": "Czujniki parkowania (legacy)",
+    "bluetooth": "Bluetooth (legacy)",
+    "usb": "USB (legacy)",
+    "multimediaScreen": "Ekran multimedialny (legacy)",
+    "soundSystem": "System nagłośnienia (legacy)",
+    "sunroof": "Szyberdach (legacy)",
+    "electricWindows": "Szyby elektryczne (legacy)",
+    "tintedWindows": "Szyby przyciemniane (legacy)",
+    "startStop": "Start/Stop (legacy)",
+    "rearCamera": "Kamera cofania (legacy)",
+}
+
+
+def _humanize_key(key: str) -> str:
+    """Convert camelCase like 'newFancyFeature' to 'New fancy feature' as a
+    last-resort label for unknown full_equipment keys. Pure presentational —
+    the storage key is unchanged."""
+    out: List[str] = []
+    for i, ch in enumerate(key):
+        if i > 0 and ch.isupper():
+            out.append(" ")
+            out.append(ch.lower())
+        else:
+            out.append(ch)
+    s = "".join(out).strip()
+    return s[:1].upper() + s[1:] if s else key
 
 
 # ─── Schema builder ───────────────────────────────────────────────────────────
@@ -583,10 +759,16 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
         "label": "Stan ogólny (Bitrix)",
         "options": [""] + list(OVERALL_CONDITION_LABELS.values()),
     }
+    # Vehicle fields that live on Bitrix (not vehicle_json) and so are wired
+    # through bitrix_extras to use the existing Bitrix-write plumbing.
+    schema["bitrix_extras.owners_count"] = {"type": "number", "label": "Liczba właścicieli", "min": 0}
+    schema["bitrix_extras.paint_type"]   = {"type": "text",   "label": "Rodzaj lakieru"}
+    schema["bitrix_extras.version"]      = {"type": "text",   "label": "Wersja"}
 
-    # Mechanical (mechanical_json) — TAK/NIE/ND enums + 2 free-text fields.
+    # Mechanical (mechanical_json) — TAK/NIE/ND enums + 1 toggle + 2 free-text.
     for key, label in MECHANICAL_FIELDS:
         schema[f"mechanical.{key}"] = {"type": "enum", "label": label, "options": _TAK_NIE_ND}
+    schema["mechanical.testDriveImpossible"]     = {"type": "enum", "label": "Jazda próbna niemożliwa", "options": _TAK_NIE_ND}
     schema["mechanical.testDriveComment"]        = {"type": "text", "label": "Komentarz - jazda próbna"}
     schema["mechanical.testDriveImpossibleText"] = {"type": "text", "label": "Powód braku jazdy próbnej"}
 
@@ -604,14 +786,22 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
         schema[f"tires.{pos_key}.condition"]   = {"type": "text", "label": f"{pos_label} — Stan"}
 
     # Documents — flags stored in notes_json; consumed by report.py
-    # documents_check (line 1072+). Edit via notes.{key}.
+    # documents_check (line 1072+). Edit via notes.{key}. serviceBookPresented
+    # additionally accepts "ELEKTRONICZNA" (per wizard NotesValuation interface),
+    # so its enum is widened beyond the default TAK/NIE/ND.
     for key, label in DOC_FIELDS:
         schema[f"notes.{key}"] = {"type": "enum", "label": f"Dokument — {label}", "options": _TAK_NIE_ND}
+    schema["notes.serviceBookPresented"] = {
+        "type": "enum",
+        "label": "Dokument — Książka serwisowa",
+        "options": ["", "TAK", "NIE", "ND", "ELEKTRONICZNA"],
+    }
 
     # Equipment completeness (equipment_json).
     for key, label in EQUIP_FIELDS:
         schema[f"equipment.{key}"] = {"type": "enum", "label": f"Wyposażenie - {label}", "options": _TAK_NIE_ND}
-    schema["equipment.keysCount"] = {"type": "number", "label": "Liczba kluczyków", "min": 1}
+    schema["equipment.keysCount"]           = {"type": "number", "label": "Liczba kluczyków", "min": 1}
+    schema["equipment.additionalEquipment"] = {"type": "text",   "label": "Dodatkowe wyposażenie"}
 
     # Notes free-text (notes_json).
     schema["notes.generalComments"] = {"type": "text", "label": "Uwagi ogólne"}
@@ -690,9 +880,31 @@ def _damage_schema(rec: InspectionRecord) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def _full_equipment_schema(rec: InspectionRecord) -> Dict[str, Dict[str, Any]]:
+    """Per-record full_equipment schema entries; one TAK/ND enum per key
+    present on the record. Keys are read dynamically from the JSON blob so
+    records with retired or newly-added fields work without a code change.
+    Labels come from FULL_EQUIPMENT_LABELS where known, otherwise from
+    _humanize_key as a last-resort presentational fallback."""
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        blob = json.loads(rec.full_equipment_json) if rec.full_equipment_json else {}
+    except Exception:
+        blob = {}
+    if not isinstance(blob, dict):
+        return out
+    for key in blob.keys():
+        out[f"full_equipment.{key}"] = {
+            "type": "enum",
+            "label": FULL_EQUIPMENT_LABELS.get(key, _humanize_key(key)),
+            "options": _TAK_ND,
+        }
+    return out
+
+
 def _schema_for_rec(rec: InspectionRecord) -> Dict[str, Dict[str, Any]]:
-    """Static SCHEMA_CACHE merged with per-record damage slots."""
-    return {**SCHEMA_CACHE, **_damage_schema(rec)}
+    """Static SCHEMA_CACHE merged with per-record damage + full_equipment slots."""
+    return {**SCHEMA_CACHE, **_damage_schema(rec), **_full_equipment_schema(rec)}
 
 
 # ─── Pydantic request models ──────────────────────────────────────────────────
@@ -854,6 +1066,7 @@ async def get_report_edit(
         "interior_damages": [_normalize_damage_entry(x) for x in _int_raw] if isinstance(_int_raw, list) else [],
         "notes":            _strip_photos_recursive(_load_json(rec.notes_json, {})),
         "equipment":        _strip_photos_recursive(_load_json(rec.equipment_json, {})),
+        "full_equipment":   _strip_photos_recursive(_load_json(rec.full_equipment_json, {})),
         "schema":           _schema_for_rec(rec),
     }
 
