@@ -1490,7 +1490,7 @@ async def download_document(deal_id: int, doc_type: str, download: int = 0):
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'{disposition}; filename="{filename}"',
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": "no-cache, must-revalidate",
         },
     )
 
