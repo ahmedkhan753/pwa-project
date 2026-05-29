@@ -32,14 +32,24 @@ interface SaveResponse {
 interface AdminPhoto {
   slot_id: string
   label: string
-  url: string
+  url: string | null
   size_bytes: number
   is_video: boolean
+  present: boolean
+}
+
+interface DamagePhoto {
+  source: "ext" | "int"
+  damage_index: number
+  label: string
+  photo_index: number
+  url: string
 }
 
 interface AdminPhotosResponse {
   deal_id: number
   photos: AdminPhoto[]
+  damage_photos: DamagePhoto[]
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -184,6 +194,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
 
   // ── Photo management (list / replace / delete) ─────────────────────────
   const [photos, setPhotos] = useState<AdminPhoto[]>([])
+  const [damagePhotos, setDamagePhotos] = useState<DamagePhoto[]>([])
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photoBusy, setPhotoBusy] = useState<Set<string>>(new Set())
   const [photoCacheBust, setPhotoCacheBust] = useState<Record<string, number>>({})
@@ -216,6 +227,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json: AdminPhotosResponse = await res.json()
       setPhotos(json.photos || [])
+      setDamagePhotos(json.damage_photos || [])
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setToast({ kind: "err", msg: `Nie udało się pobrać zdjęć: ${msg}` })
@@ -295,6 +307,32 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setToast({ kind: "err", msg: `Nie udało się zamienić: ${msg}` })
+    } finally {
+      setSlotBusy(slot, false)
+    }
+  }
+
+  // Upload into an empty canonical slot. Same upload-binary endpoint as
+  // replace, but afterwards we refetch /photos so the slot flips
+  // present=false → present=true with its new URL + size.
+  const onUploadEmpty = async (slot: string, file: File) => {
+    if (!token) return
+    setSlotBusy(slot, true)
+    try {
+      const fd = new FormData()
+      fd.append("deal_id", String(dealId))
+      fd.append("field_key", slot)
+      fd.append("file", file)
+      const res = await fetch(`${API_BASE}/api/files/upload-binary`, {
+        method: "POST",
+        body: fd,
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await fetchPhotos()
+      setToast({ kind: "ok", msg: `Dodano zdjęcie: ${slot}` })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się dodać: ${msg}` })
     } finally {
       setSlotBusy(slot, false)
     }
@@ -912,11 +950,6 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                 Ładowanie zdjęć…
               </div>
             )}
-            {!photosLoading && photos.length === 0 && (
-              <div className="text-sm" style={{ color: "#86868B" }}>
-                Brak zdjęć dla tego zlecenia.
-              </div>
-            )}
             {!photosLoading && photos.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {photos.map(p => {
@@ -925,8 +958,91 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                   // p.url is already a root-relative path that starts with /api/
                   // (e.g. /api/gallery/1864/media/photo_front). Do NOT prefix
                   // API_BASE — it ends in /api and would double-prefix → 404.
-                  const src = `${p.url}${bust ? `?t=${bust}` : ""}`
+                  const src = p.url ? `${p.url}${bust ? `?t=${bust}` : ""}` : ""
                   const sizeKb = Math.round(p.size_bytes / 1024)
+
+                  if (!p.present) {
+                    // Empty canonical slot — show "Dodaj zdjęcie".
+                    return (
+                      <div
+                        key={p.slot_id}
+                        style={{
+                          border: "1px dashed #D1D1D6",
+                          borderRadius: 10,
+                          background: "#fff",
+                          overflow: "hidden",
+                          display: "flex",
+                          flexDirection: "column",
+                        }}
+                      >
+                        <div
+                          style={{
+                            aspectRatio: "4 / 3",
+                            background: "#F5F5F7",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                            color: "#86868B",
+                          }}
+                        >
+                          <i
+                            className={`fa-solid ${p.is_video ? "fa-film" : "fa-image"}`}
+                            style={{ fontSize: 26, opacity: 0.45 }}
+                          />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">
+                            Pusty slot
+                          </span>
+                        </div>
+                        <div className="px-3 py-2.5 flex flex-col gap-2">
+                          <div
+                            className="font-semibold truncate"
+                            style={{ fontSize: 12, color: "#1D1D1F" }}
+                            title={p.label}
+                          >
+                            {p.label}
+                          </div>
+                          <div
+                            className="font-mono truncate"
+                            style={{ fontSize: 10, color: "#AEAEB2" }}
+                            title={p.slot_id}
+                          >
+                            {p.slot_id}
+                          </div>
+                          <label
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer transition-colors"
+                            style={{
+                              minHeight: 36,
+                              borderRadius: 8,
+                              background: busy ? "#F5F5F7" : "#FEF2F2",
+                              color: busy ? "#AEAEB2" : "#B71C1C",
+                              border: `1px solid ${busy ? "#E8E8ED" : "rgba(183,28,28,0.3)"}`,
+                              opacity: busy ? 0.6 : 1,
+                              pointerEvents: busy ? "none" : "auto",
+                            }}
+                          >
+                            <i
+                              className={`fa-solid ${busy ? "fa-spinner fa-spin" : "fa-plus"}`}
+                              style={{ fontSize: 11 }}
+                            />
+                            Dodaj zdjęcie
+                            <input
+                              type="file"
+                              accept={p.is_video ? "video/*" : "image/*"}
+                              style={{ display: "none" }}
+                              onChange={e => {
+                                const f = e.target.files?.[0]
+                                if (f) onUploadEmpty(p.slot_id, f)
+                                e.target.value = ""
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   return (
                     <div
                       key={p.slot_id}
@@ -1103,6 +1219,60 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                     </div>
                   )
                 })}
+              </div>
+            )}
+
+            {!photosLoading && damagePhotos.length > 0 && (
+              <div className="mt-6">
+                <div
+                  className="font-bold uppercase mb-3"
+                  style={{ fontSize: 11, color: "#B71C1C", letterSpacing: 2 }}
+                >
+                  Zdjęcia uszkodzeń
+                </div>
+                {(() => {
+                  const groups = new Map<string, DamagePhoto[]>()
+                  for (const dp of damagePhotos) {
+                    const arr = groups.get(dp.label) ?? []
+                    arr.push(dp)
+                    groups.set(dp.label, arr)
+                  }
+                  return Array.from(groups.entries()).map(([label, list]) => (
+                    <div key={label} className="mb-4">
+                      <div
+                        className="font-semibold mb-2"
+                        style={{ fontSize: 12, color: "#1D1D1F" }}
+                      >
+                        {label}{" "}
+                        <span style={{ color: "#86868B", fontWeight: 400 }}>
+                          · {list.length} {list.length === 1 ? "zdjęcie" : "zdjęć"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                        {list.map(dp => (
+                          <div
+                            key={`${dp.source}-${dp.damage_index}-${dp.photo_index}`}
+                            style={{
+                              aspectRatio: "4 / 3",
+                              overflow: "hidden",
+                              borderRadius: 8,
+                              border: "1px solid #E8E8ED",
+                              background: "#F5F5F7",
+                            }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={dp.url}
+                              alt={`${label}-${dp.photo_index}`}
+                              loading="lazy"
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                })()}
               </div>
             )}
           </div>

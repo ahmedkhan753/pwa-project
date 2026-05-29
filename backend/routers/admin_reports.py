@@ -1206,25 +1206,66 @@ async def list_report_photos(
     db: Session = Depends(get_db),
     _user: dict = Depends(require_admin),
 ):
-    """List every photo/video stored in inspection_photos for this deal.
-    Powers the admin photo-management panel — returns slot_id, friendly
-    label, gallery URL, byte size, and a video flag. Ordered by slot_id
-    so the panel layout is stable across requests."""
-    rows = db.query(InspectionPhoto).filter(
-        InspectionPhoto.deal_id == deal_id
-    ).order_by(InspectionPhoto.slot_id).all()
+    """List every canonical photo/video slot for this deal, plus damage
+    photos. Each slot in PHOTO_LABELS is returned with a `present` flag
+    so the admin panel can render empty slots with an upload button.
+    Damage photos come from exterior_damage_json / interior_damage_json
+    and are emitted as URLs only (no base64) so the payload stays small.
+    Order follows PHOTO_LABELS (canonical), then exterior damages, then
+    interior damages."""
+    present = {
+        r.slot_id: r
+        for r in db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == deal_id
+        ).all()
+    }
+
+    photos_out: list[dict] = []
+    for slot, label in PHOTO_LABELS.items():
+        r = present.get(slot)
+        photos_out.append({
+            "slot_id":    slot,
+            "label":      label,
+            "url":        f"/api/gallery/{deal_id}/media/{slot}" if r is not None else None,
+            "size_bytes": (len(r.photo_bytes) if r.photo_bytes else 0) if r is not None else 0,
+            "is_video":   slot.startswith("video_"),
+            "present":    r is not None,
+        })
+
+    damage_photos: list[dict] = []
+    rec = db.query(InspectionRecord).filter(
+        InspectionRecord.deal_id == deal_id
+    ).first()
+    if rec is not None:
+        for src_label, raw in (
+            ("ext", rec.exterior_damage_json),
+            ("int", rec.interior_damage_json),
+        ):
+            items = _load_json(raw, [])
+            if not isinstance(items, list):
+                continue
+            prefix = "E" if src_label == "ext" else "I"
+            for i, d in enumerate(items):
+                if not isinstance(d, dict):
+                    continue
+                photos = d.get("photos") or []
+                if not isinstance(photos, list):
+                    continue
+                for pi, p in enumerate(photos):
+                    if not p:
+                        continue
+                    damage_photos.append({
+                        "source":       src_label,
+                        "damage_index": i,
+                        "label":        f"{prefix}{i + 1}",
+                        "photo_index":  pi,
+                        "url":          f"/api/gallery/{deal_id}/damage/{src_label}/{i}/{pi}",
+                    })
+
     return {
-        "deal_id": deal_id,
-        "photos": [
-            {
-                "slot_id":    r.slot_id,
-                "label":      PHOTO_LABELS.get(r.slot_id, r.slot_id),
-                "url":        f"/api/gallery/{deal_id}/media/{r.slot_id}",
-                "size_bytes": len(r.photo_bytes) if r.photo_bytes else 0,
-                "is_video":   r.slot_id.startswith("video_"),
-            }
-            for r in rows
-        ],
+        "deal_id":       deal_id,
+        "photos":        photos_out,
+        "damage_photos": damage_photos,
     }
 
 
