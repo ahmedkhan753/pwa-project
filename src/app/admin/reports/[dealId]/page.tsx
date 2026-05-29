@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 
 interface SchemaEntry {
-  type: "number" | "enum" | "text" | "structured"
+  type: "number" | "enum" | "text" | "structured" | "date"
   label: string
   options?: string[]
   min?: number
@@ -582,6 +582,22 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
           value={inputStr}
           min={schema.min}
           max={schema.max}
+          onChange={e => onFieldChange(path, schema, e.target.value)}
+          onFocus={inputFocus}
+          onBlur={inputBlur}
+          className={inputBase}
+          style={inputStyle}
+        />
+      )
+    }
+
+    if (schema.type === "date") {
+      // slice(0,10) trims ISO datetime values ("2021-05-12T00:00:00") to the
+      // YYYY-MM-DD shape <input type="date"> requires.
+      return (
+        <input
+          type="date"
+          value={inputStr ? inputStr.slice(0, 10) : ""}
           onChange={e => onFieldChange(path, schema, e.target.value)}
           onFocus={inputFocus}
           onBlur={inputBlur}

@@ -720,13 +720,13 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     schema["vehicle.year"]                = {"type": "number", "label": "Rok produkcji", "min": 1900, "max": 2100}
     schema["vehicle.color"]               = {"type": "text",   "label": "Kolor"}
     schema["vehicle.engine_capacity_cc"]  = {"type": "number", "label": "Pojemność (cm³)", "min": 0}
-    schema["vehicle.engine_power_hp"]     = {"type": "number", "label": "Moc (kW)", "min": 0}
+    schema["vehicle.engine_power_hp"]     = {"type": "number", "label": "Moc (KM)", "min": 0}
     schema["vehicle.fuel_type"]           = {"type": "enum",   "label": "Rodzaj paliwa", "options": FUEL_TYPES}
     schema["vehicle.body_type"]           = {"type": "enum",   "label": "Rodzaj nadwozia", "options": BODY_TYPES}
     schema["vehicle.transmission"]        = {"type": "enum",   "label": "Skrzynia biegów", "options": GEARBOX_TYPES}
     schema["vehicle.drive_type"]          = {"type": "enum",   "label": "Napęd", "options": DRIVE_TYPES}
     schema["vehicle.registration_plate"]  = {"type": "text",   "label": "Numer rejestracyjny"}
-    schema["vehicle.first_registration_date"] = {"type": "text", "label": "Data pierwszej rejestracji"}
+    schema["vehicle.first_registration_date"] = {"type": "date", "label": "Data pierwszej rejestracji"}
     schema["vehicle.mileage"]             = {"type": "number", "label": "Przebieg", "min": 0}
     schema["vehicle.doors"]               = {"type": "number", "label": "Liczba drzwi", "min": 0, "max": 10}
     schema["vehicle.seats"]               = {"type": "number", "label": "Liczba miejsc", "min": 0, "max": 50}
