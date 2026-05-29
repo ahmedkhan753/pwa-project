@@ -1499,20 +1499,15 @@ async def download_document(deal_id: int, doc_type: str, download: int = 0):
 async def document_status(deal_id: int, request: Request):
     """
     Check which CEPIK / damage-history PDFs are available for a deal.
-    If a file is missing on disk, attempt one reactive fetch from Bitrix
-    before reporting status — this auto-heals deals where the Bitrix
-    outgoing webhook didn't fire (Issue 6 from QA report 2026-04-29).
-    Reactive fetch is best-effort: errors are swallowed and we just
+    Always runs a reactive sync from Bitrix — sync_deal_documents now
+    compares the Bitrix fileId against a .fileid sidecar and skips
+    cheaply when unchanged, so this is safe even when both files are
+    already on disk. Detects client-replaced PDFs (BUG-203) via this
+    reactive path in addition to the webhook path.
+    Reactive sync is best-effort: errors are swallowed and we just
     report the on-disk truth.
     """
-    has_cepik = _doc_path(deal_id, "cepik").exists()
-    has_damage = _doc_path(deal_id, "damage_history").exists()
-
-    # If both are present, no work needed
-    if has_cepik and has_damage:
-        return {"has_cepik": True, "has_damage_history": True}
-
-    # Otherwise try a reactive sync from Bitrix
+    # Always run a reactive sync — it self-skips when fileIds are unchanged
     try:
         gateway = request.app.state.gateway
         bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
