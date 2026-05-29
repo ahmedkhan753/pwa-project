@@ -611,7 +611,7 @@ async def get_report(deal_id: int, request: Request):
         _prefer_db = {
             "fuel_type", "body_type", "transmission", "drive_type",
             "engine_capacity_cc", "engine_power_hp", "first_registration_date",
-            "doors", "seats", "weight_kg",
+            "doors", "seats", "weight_kg", "mileage",
         }
         for k, v in _fallbacks.items():
             if k in _prefer_db:
