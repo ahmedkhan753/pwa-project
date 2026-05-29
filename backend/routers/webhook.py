@@ -51,6 +51,10 @@ def _doc_path(deal_id: int, doc_type: str) -> Path:
     return DOCS_DIR / f"{deal_id}_{doc_type}.pdf"
 
 
+def _doc_fileid_path(deal_id: int, doc_type: str) -> Path:
+    return DOCS_DIR / f"{deal_id}_{doc_type}.fileid"
+
+
 async def _try_download_file(url: str, label: str) -> Optional[bytes]:
     """Try downloading a file. Returns bytes if PDF, None if HTML/error."""
     try:
@@ -95,15 +99,10 @@ async def sync_deal_documents(deal_id: int, deal: dict):
         if not field_value:
             continue
 
-        # Skip if already downloaded
-        path = _doc_path(deal_id, doc_type)
-        if path.exists():
-            logger.info(f"[DocSync] {doc_type} for deal {deal_id} already exists locally, skipping")
-            continue
-
         logger.info(f"[DocSync] Processing {doc_type} for deal {deal_id}, raw field value: {field_value}")
 
-        # Extract file info from field value
+        # Extract file info from field value (BEFORE skip check so we can
+        # compare Bitrix fileId against the stored sidecar — BUG-203 fix).
         file_id = None
         download_url = None
 
@@ -142,6 +141,27 @@ async def sync_deal_documents(deal_id: int, deal: dict):
                     file_id = int(file_id)
 
         logger.info(f"[DocSync] file_id={file_id}, download_url={download_url}")
+
+        # Re-download if the Bitrix fileId changed (client replaced the file).
+        # Files saved before this fix have no sidecar → triggers a one-time
+        # re-download that self-heals + creates the sidecar.
+        path = _doc_path(deal_id, doc_type)
+        fileid_path = _doc_fileid_path(deal_id, doc_type)
+        if path.exists() and file_id is not None:
+            stored_fileid = None
+            try:
+                stored_fileid = fileid_path.read_text().strip()
+            except Exception:
+                stored_fileid = None
+            if stored_fileid == str(file_id):
+                logger.info(f"[DocSync] {doc_type} deal {deal_id} unchanged (fileId={file_id}), skipping")
+                continue
+            else:
+                logger.info(f"[DocSync] {doc_type} deal {deal_id} fileId changed ({stored_fileid} → {file_id}), re-downloading")
+        elif path.exists() and file_id is None:
+            # Can't determine fileId — keep existing file (don't lose it), skip.
+            logger.info(f"[DocSync] {doc_type} deal {deal_id} exists, no fileId to compare, skipping")
+            continue
 
         if not file_id and not download_url:
             logger.warning(f"[DocSync] Cannot extract file info for {doc_type} in deal {deal_id}")
@@ -201,6 +221,11 @@ async def sync_deal_documents(deal_id: int, deal: dict):
 
         if content:
             path.write_bytes(content)
+            try:
+                if file_id is not None:
+                    fileid_path.write_text(str(file_id))
+            except Exception as e:
+                logger.warning(f"[DocSync] could not write fileid sidecar: {e}")
             logger.info(f"[DocSync] ✅ Saved {doc_type} for deal {deal_id} ({len(content)} bytes) → {path}")
         else:
             logger.error(f"[DocSync] ❌ All download methods failed for {doc_type} in deal {deal_id}")
