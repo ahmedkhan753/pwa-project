@@ -33,7 +33,7 @@ DAMAGE_HISTORY_FIELD = "UF_CRM_1775497290806"
 
 # Eurotax kosztorys: input PDF field + output public-URL field.
 EUROTAX_PDF_FIELD = os.getenv("BITRIX_EUROTAX_FIELD", "UF_CRM_1775497355115")
-KOSZTORYS_URL_FIELD = "UF_CRM_1777661533952"
+KOSZTORYS_URL_FIELD = os.getenv("BITRIX_KOSZTORYS_URL_FIELD", "UF_CRM_1780059814919")
 PUBLIC_APP_BASE = os.getenv("PUBLIC_APP_BASE", "https://app.zaufajrzeczoznawcy.pl")
 
 # Equipment auto-parse: input Wycena PDF field + output standard-equipment field.
@@ -236,7 +236,7 @@ async def sync_deal_documents(deal_id: int, deal: dict):
 async def sync_deal_kosztorys_url(gateway, deal_id: int, deal: dict) -> None:
     """
     When a deal has a Eurotax PDF in UF_CRM_1775497355115, ensure the
-    public kosztorys URL field UF_CRM_1777661533952 holds:
+    public kosztorys URL field UF_CRM_1780059814919 holds:
         https://app.zaufajrzeczoznawcy.pl/kosztorys/{deal_id}
 
     Idempotent — only writes when the existing value differs from
