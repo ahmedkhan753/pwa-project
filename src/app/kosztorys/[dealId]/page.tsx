@@ -166,10 +166,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
         position: 'sticky', top: 0, zIndex: 100, background: '#fff',
         borderBottom: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}>
-        <div className="nav-outer" style={{
-          maxWidth: 1100, margin: '0 auto', padding: '0 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-        }}>
+        <div className="nav-outer">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -197,16 +194,13 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
         </div>
       </nav>
 
-      <div className="page-container" style={{
-        maxWidth: 1100, margin: '0 auto', background: '#fff',
-        minHeight: '100vh', boxShadow: '0 0 40px rgba(0,0,0,0.06)',
-      }}>
+      <div className="page-container">
 
         {/* Banner: Eurotax loading or not available */}
         {!hasEurotax && (
           loadingK ? (
             <div style={{
-              margin: '20px 40px 0', padding: '14px 18px', borderRadius: 10,
+              margin: '0 0 20px', padding: '14px 18px', borderRadius: 10,
               background: '#EFF6FF', border: '1px solid #BFDBFE',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
@@ -217,7 +211,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             </div>
           ) : (
             <div style={{
-              margin: '20px 40px 0', padding: '14px 18px', borderRadius: 10,
+              margin: '0 0 20px', padding: '14px 18px', borderRadius: 10,
               background: '#FEF3C7', border: '1px solid #FBBF24',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
@@ -231,7 +225,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
         )}
 
         {/* ═══ EXPERTISE — vehicle header ═══════════════════════════════ */}
-        <section id="expertise" className="kosz-section" style={{ padding: '32px 40px' }}>
+        <section id="expertise" className="kosz-card">
           <div style={{
             display: 'inline-block', background: COLORS.primary, color: '#fff',
             padding: '6px 16px', borderRadius: 6, fontSize: 12, fontWeight: 700,
@@ -240,7 +234,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             Ekspertyza{hasEurotax ? ' — Eurotax' : ''}
           </div>
 
-          <div className="expertise-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+          <div className="expertise-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 0.85fr)', gap: 40 }}>
             {/* Hero photo */}
             <div>
               {heroPhotos.length > 0 ? (
@@ -337,8 +331,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
         {/* ═══ EUROTAX KOSZTORYS — 3 sections ════════════════════════════ */}
         {hasEurotax && (
           <>
-            <hr className="kosz-hr" />
-            <section id="eurotax" className="kosz-section" style={{ padding: '32px 40px' }}>
+            <section id="eurotax" className="kosz-card">
               <div className="section-title">EUROTAX — KOSZTORYS NAPRAW</div>
 
               <BlachSectionTable title="Blacharz"      section={kosztorys.sections.blacharz} />
@@ -347,8 +340,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             </section>
 
             {/* ═══ SUMMARY ════════════════════════════════════════════════ */}
-            <hr className="kosz-hr" />
-            <section id="summary" className="kosz-section" style={{ padding: '32px 40px' }}>
+            <section id="summary" className="kosz-card">
               <div className="section-title">PODSUMOWANIE</div>
 
               {/* Per-section breakdown */}
@@ -406,47 +398,21 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                 </table>
               </div>
 
-              {/* VAT breakdown */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: 12, marginTop: 24,
-              }}>
-                <div style={{
-                  padding: '14px 16px', borderRadius: 10, background: COLORS.mutedLt,
-                  border: `1px solid ${COLORS.borderLt}`,
-                }}>
-                  <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600, marginBottom: 4 }}>
-                    KOSZT BEZ VAT
-                  </div>
-                  <div style={{ fontSize: 18, fontWeight: 800 }}>
-                    {fmtPLN(kosztorys.summary?.subtotal_no_vat)}
-                  </div>
+              {/* VAT breakdown — equal-height cards, grand-total emphasized */}
+              <div className="summary-cards">
+                <div className="summary-card">
+                  <div className="label">KOSZT BEZ VAT</div>
+                  <div className="value">{fmtPLN(kosztorys.summary?.subtotal_no_vat)}</div>
                 </div>
-                <div style={{
-                  padding: '14px 16px', borderRadius: 10, background: COLORS.mutedLt,
-                  border: `1px solid ${COLORS.borderLt}`,
-                }}>
-                  <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600, marginBottom: 4 }}>
-                    VAT ({fmtPct(kosztorys.summary?.vat_pct)})
-                  </div>
-                  <div style={{ fontSize: 18, fontWeight: 800 }}>
-                    {fmtPLN(kosztorys.summary?.vat_amount)}
-                  </div>
+                <div className="summary-card">
+                  <div className="label">VAT ({fmtPct(kosztorys.summary?.vat_pct)})</div>
+                  <div className="value">{fmtPLN(kosztorys.summary?.vat_amount)}</div>
                 </div>
-                <div className="grand-total" style={{
-                  padding: '14px 16px', borderRadius: 10, background: COLORS.greenLt,
-                  border: '2px solid #86EFAC',
-                }}>
-                  <div style={{ fontSize: 11, color: COLORS.green, fontWeight: 700, marginBottom: 4 }}>
-                    KOSZT Z VAT
-                  </div>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.green }}>
-                    {fmtPLN(kosztorys.summary?.total_with_vat_pln)}
-                  </div>
+                <div className="summary-card grand-total">
+                  <div className="label">KOSZT Z VAT</div>
+                  <div className="value">{fmtPLN(kosztorys.summary?.total_with_vat_pln)}</div>
                   {kosztorys.summary?.total_eur !== null && (
-                    <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
-                      ≈ {fmtEUR(kosztorys.summary?.total_eur)}
-                    </div>
+                    <div className="sub">≈ {fmtEUR(kosztorys.summary?.total_eur)}</div>
                   )}
                 </div>
               </div>
@@ -474,8 +440,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             {/* ═══ PARTS LIST ════════════════════════════════════════════ */}
             {kosztorys.parts && kosztorys.parts.length > 0 && (kosztorys.parts_total_pln || 0) > 0 && (
               <>
-                <hr className="kosz-hr" />
-                <section id="parts" className="kosz-section" style={{ padding: '32px 40px' }}>
+                <section id="parts" className="kosz-card">
                   <div className="section-title">CZĘŚCI ZAMIENNE</div>
                   <div className="table-scroll">
                     <table className="data-table">
@@ -523,8 +488,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             {/* ═══ EQUIPMENT — Eurotax flat list ═══════════════════════════ */}
             {kosztorys.equipment_options && kosztorys.equipment_options.length > 0 && (
               <>
-                <hr className="kosz-hr" />
-                <section id="equipment" className="kosz-section" style={{ padding: '32px 40px' }}>
+                <section id="equipment" className="kosz-card">
                   <div className="section-title">WYPOSAŻENIE Z EUROTAX</div>
                   <div className="equip-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8,
@@ -552,8 +516,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             {/* Equipment from inspection */}
             {(report?.equipment && report.equipment.length > 0) && (
               <>
-                <hr className="kosz-hr" />
-                <section className="kosz-section" style={{ padding: '32px 40px' }}>
+                <section className="kosz-card">
                   <div className="section-title">WYPOSAŻENIE — INSPEKCJA</div>
                   <div className="equip-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10,
@@ -581,10 +544,9 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             {/* Tires */}
             {(report?.tires && report.tires.length > 0) && (
               <>
-                <hr className="kosz-hr" />
-                <section className="kosz-section" style={{ padding: '32px 40px' }}>
+                <section className="kosz-card">
                   <div className="section-title">OPONY</div>
-                  <div className="table-scroll">
+                  <div className="table-scroll tires-card-stack">
                     <table className="data-table">
                       <thead>
                         <tr>
@@ -598,18 +560,18 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                       <tbody>
                         {report.tires.map((t, i) => (
                           <tr key={i}>
-                            <td>{String((t as Record<string, unknown>).position ?? (t as Record<string, unknown>).location ?? `${i + 1}`)}</td>
-                            <td style={{ color: COLORS.green, fontWeight: 600 }}>
+                            <td data-label="Pozycja">{String((t as Record<string, unknown>).position ?? (t as Record<string, unknown>).location ?? `${i + 1}`)}</td>
+                            <td data-label="Bieżnik" style={{ color: COLORS.green, fontWeight: 600 }}>
                               {String((t as Record<string, unknown>).tread ?? '')}
                             </td>
-                            <td>
+                            <td data-label="Producent / Model">
                               {String((t as Record<string, unknown>).producer ?? '')}
                               {(t as Record<string, unknown>).model ? ` / ${String((t as Record<string, unknown>).model)}` : ''}
                             </td>
-                            <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                            <td data-label="Wymiary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
                               {String((t as Record<string, unknown>).dimensions ?? '')}
                             </td>
-                            <td>{String((t as Record<string, unknown>).season ?? '')}</td>
+                            <td data-label="Sezon">{String((t as Record<string, unknown>).season ?? '')}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -622,8 +584,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             {/* Documents */}
             {(report?.documents_check && report.documents_check.length > 0) && (
               <>
-                <hr className="kosz-hr" />
-                <section className="kosz-section" style={{ padding: '32px 40px' }}>
+                <section className="kosz-card">
                   <div className="section-title">WYKAZ DOKUMENTÓW</div>
                   <div className="docs-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12,
@@ -646,8 +607,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             {/* Inspection photos grid */}
             {allInspPhotos.length > 0 && (
               <>
-                <hr className="kosz-hr" />
-                <section id="inspection-photos" className="kosz-section" style={{ padding: '32px 40px' }}>
+                <section id="inspection-photos" className="kosz-card">
                   <div className="section-title">ZDJĘCIA Z INSPEKCJI</div>
                   <div className="photos-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10,
@@ -670,8 +630,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
         {/* ═══ ABBREVIATIONS LEGEND ════════════════════════════════════ */}
         {hasEurotax && (kosztorys.abbreviations.length > 0 || kosztorys.paint_method_legend.length > 0) && (
           <>
-            <hr className="kosz-hr" />
-            <section className="kosz-section" style={{ padding: '32px 40px' }}>
+            <section className="kosz-card">
               <div className="section-title">LEGENDA</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
                 {kosztorys.abbreviations.length > 0 && (
@@ -715,8 +674,9 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
 
         {/* ─── Footer ─────────────────────────────────────────────────── */}
         <footer className="footer-bar" style={{
-          padding: '24px 40px', background: COLORS.navy, color: '#9CA3AF', fontSize: 12,
+          padding: '28px 48px', background: COLORS.navy, color: '#9CA3AF', fontSize: 12,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          borderRadius: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -738,7 +698,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
 
 function SkeletonPage() {
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 32 }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: 32 }}>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
       <div style={{ height: 40, background: '#F3F4F6', borderRadius: 8, marginBottom: 24, animation: 'pulse 1.6s ease-in-out infinite' }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 32 }}>
@@ -795,41 +755,52 @@ const SHARED_CSS = `
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; font-family:'Inter',system-ui,sans-serif;
     background:#FAFAFA; color:#1D1D1F; overflow-x:hidden; width:100%; max-width:100vw; }
-  @media print {
-    .no-print { display:none !important; }
-    body { background:#fff; }
-    .page-container { box-shadow:none !important; max-width:100% !important; }
-    section { page-break-inside: avoid; }
-    .kosz-section { padding:16px 24px !important; }
-    .section-title { page-break-after: avoid; }
-    table { page-break-inside: auto; }
-    tr { page-break-inside: avoid; page-break-after: auto; }
-    .photo-tile, .hero-thumb { break-inside: avoid; }
-    /* Preserve colour for badges and total-rows */
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  }
-  .page-container { overflow:hidden; width:100%; color:#1D1D1F; }
+
+  /* Page container — wide premium feel; cards float on canvas */
+  .page-container { max-width:1400px; margin:0 auto; padding:24px 24px 48px;
+    background:transparent; min-height:100vh; color:#1D1D1F; overflow:hidden; width:100%; }
+
+  /* Sticky nav inner width matches page */
+  .nav-outer { max-width:1400px; margin:0 auto; padding:0 24px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px; }
   .nav-link { color:#6B7280; text-decoration:none; font-size:13px; font-weight:600;
     padding:8px 0; border-bottom:2px solid transparent; transition:all 0.2s; white-space:nowrap; cursor:pointer; }
   .nav-link:hover { color:#1D1D1F; border-bottom-color:#B71C1C; }
-  .section-title { font-size:22px; font-weight:800; color:#1D1D1F; margin:0 0 20px;
+
+  /* Card pattern — matches /report/[dealId] design language */
+  .kosz-card { background:#fff; border:1px solid #E8E8ED; border-radius:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04); padding:40px 56px; margin-bottom:24px; }
+
+  /* Section title */
+  .section-title { font-size:24px; font-weight:800; color:#1D1D1F; margin:0 0 24px;
     text-transform:uppercase; letter-spacing:0.5px; padding-bottom:12px;
     border-bottom:3px solid #B71C1C; display:inline-block; }
+
+  /* Data tables */
   table.data-table { width:100%; border-collapse:collapse; font-size:13px; }
-  table.data-table th { text-align:left; padding:10px 12px; background:#F9FAFB; color:#6B7280;
+  table.data-table th { text-align:left; padding:11px 14px; background:#F9FAFB; color:#6B7280;
     font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
     border-bottom:2px solid #E5E7EB; }
-  table.data-table td { padding:10px 12px; border-bottom:1px solid #F3F4F6; vertical-align:top; color:#374151; }
+  table.data-table td { padding:11px 14px; border-bottom:1px solid #F3F4F6; vertical-align:top; color:#374151; }
   table.data-table tr:hover td { background:#FAFAFA; }
   table.data-table .total-row td { font-weight:700; border-top:2px solid #E5E7EB; background:#F9FAFB; }
   .amt { text-align:right; font-variant-numeric:tabular-nums; color:#1D1D1F; }
-  .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  .table-scroll table { min-width:580px; }
+
+  /* Horizontal scroll with visible affordance */
+  .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+  .table-scroll::-webkit-scrollbar { height:6px; }
+  .table-scroll::-webkit-scrollbar-thumb { background:#D1D5DB; border-radius:3px; }
+  .table-scroll::-webkit-scrollbar-track { background:#F3F4F6; border-radius:3px; }
+  .table-scroll table { min-width:520px; }
+
+  /* Vehicle row */
   .veh-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px;
-    padding:10px 0; border-bottom:1px solid #F3F4F6; }
+    padding:11px 0; border-bottom:1px solid #F3F4F6; }
   .veh-label { color:#4B5563; font-weight:600; font-size:14px; flex-shrink:0; }
-  .veh-value { font-weight:700; font-size:14px; text-align:right; overflow-wrap:anywhere;
+  .veh-value { font-weight:700; font-size:15px; text-align:right; overflow-wrap:anywhere;
     word-break:break-word; min-width:0; color:#1D1D1F; }
+
+  /* Hero thumbs + photo tile */
   .hero-thumb { cursor:pointer; border-radius:8px; overflow:hidden; aspect-ratio:4/3;
     border:2px solid transparent; transition:all 0.2s; }
   .hero-thumb:hover { border-color:#B71C1C; }
@@ -842,11 +813,38 @@ const SHARED_CSS = `
   .photo-tile .tile-label { position:absolute; bottom:0; left:0; right:0;
     background:linear-gradient(transparent,rgba(0,0,0,0.55)); color:#fff;
     font-size:10px; font-weight:600; padding:18px 6px 5px; }
-  .kosz-hr { margin:0 40px; border:none; border-top:1px solid #E5E7EB; }
+
+  /* Summary cards — equal-height 3-col with emphasized grand total */
+  .summary-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:20px; align-items:stretch; margin-top:24px; }
+  .summary-card { background:#F9FAFB; border:1px solid #F3F4F6; border-radius:14px;
+    padding:22px 24px; display:flex; flex-direction:column; justify-content:space-between; gap:8px; }
+  .summary-card .label { font-size:11px; color:#6B7280; font-weight:700;
+    letter-spacing:0.4px; text-transform:uppercase; }
+  .summary-card .value { font-size:22px; font-weight:800; color:#1D1D1F; }
+  .summary-card.grand-total { background:linear-gradient(135deg,#F0FDF4 0%,#fff 100%);
+    border:2px solid #BBF7D0; border-radius:16px;
+    box-shadow:0 4px 20px rgba(22,163,74,0.10); }
+  .summary-card.grand-total .label { color:#16A34A; }
+  .summary-card.grand-total .value { font-size:26px; font-weight:900; color:#16A34A; }
+  .summary-card.grand-total .sub { font-size:12px; color:#6B7280; }
+
+  /* Inspection photos: 5 cols on wide */
+  @media (min-width:1280px) {
+    .photos-grid { grid-template-columns:repeat(5,1fr) !important; }
+  }
+
+  /* Very wide screens */
+  @media (min-width:1600px) {
+    .page-container { max-width:1500px; padding:28px 28px 56px; }
+    .nav-outer { max-width:1500px; }
+  }
+
+  /* Tablet / mobile */
   @media (max-width:768px) {
-    .section-title { font-size:18px; margin-bottom:16px; }
-    .kosz-section { padding:20px 16px !important; }
-    .kosz-hr { margin:0 16px !important; }
+    .page-container { padding:12px 12px 24px; }
+    .kosz-card { padding:28px 20px; margin-bottom:16px; border-radius:10px; }
+    .section-title { font-size:19px; margin-bottom:18px; }
     .expertise-grid { grid-template-columns:1fr !important; gap:20px !important; }
     .expertise-grid h1 { font-size:22px !important; }
     .nav-scroll { gap:10px !important; justify-content:flex-start !important; padding:0 4px;
@@ -859,18 +857,58 @@ const SHARED_CSS = `
     .equip-grid { grid-template-columns:1fr !important; }
     .docs-grid { grid-template-columns:1fr !important; }
     .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
-    .footer-bar { flex-direction:column !important; gap:8px !important; text-align:center !important; }
+    .summary-cards { grid-template-columns:1fr !important; gap:14px !important; }
+    .summary-card { padding:18px 20px; border-radius:12px; }
+    .summary-card .value { font-size:20px; }
+    .summary-card.grand-total .value { font-size:23px; }
+    .footer-bar { flex-direction:column !important; gap:8px !important;
+      text-align:center !important; padding:24px 20px !important; }
     .table-scroll table { min-width:500px; }
     .thumb-grid { grid-template-columns:repeat(3,1fr) !important; }
     .veh-row { padding:8px 0; }
     .veh-label { font-size:13px; }
-    .veh-value { font-size:12px; }
+    .veh-value { font-size:13px; }
     .hero-main { border-radius:10px !important; }
   }
+
+  /* Tires table → card-stack at ≤640px (data-label driven) */
+  @media (max-width:640px) {
+    .tires-card-stack { overflow:visible !important; }
+    .tires-card-stack table { min-width:0 !important; }
+    .tires-card-stack table thead { display:none; }
+    .tires-card-stack table, .tires-card-stack tbody,
+    .tires-card-stack tr, .tires-card-stack td { display:block; width:100%; }
+    .tires-card-stack tr { border:1px solid #E5E7EB; border-radius:10px;
+      padding:12px 14px; margin-bottom:12px; background:#FCFCFD; }
+    .tires-card-stack tr:hover td { background:transparent; }
+    .tires-card-stack td { border:none !important; padding:6px 0 !important;
+      display:flex !important; justify-content:space-between; align-items:center;
+      gap:12px; text-align:left !important; }
+    .tires-card-stack td::before { content:attr(data-label);
+      font-weight:700; color:#6B7280; text-transform:uppercase;
+      font-size:10px; letter-spacing:0.5px; flex-shrink:0; }
+  }
+
   @media (max-width:480px) {
     .nav-link { font-size:10px !important; }
     .photos-grid { grid-template-columns:repeat(2,1fr) !important; }
     .table-scroll table { min-width:420px; }
-    .veh-value { font-size:11px; }
+    .veh-value { font-size:12px; }
+  }
+
+  /* Print */
+  @media print {
+    .no-print { display:none !important; }
+    body { background:#fff; }
+    .page-container { box-shadow:none !important; max-width:100% !important; padding:0 !important; }
+    section { page-break-inside:avoid; }
+    .kosz-card { box-shadow:none !important; border:1px solid #E5E7EB !important;
+      padding:20px 24px !important; margin-bottom:12px !important; border-radius:0 !important; }
+    .section-title { page-break-after:avoid; }
+    table { page-break-inside:auto; }
+    tr { page-break-inside:avoid; page-break-after:auto; }
+    .photo-tile, .hero-thumb { break-inside:avoid; }
+    .summary-card.grand-total { box-shadow:none !important; }
+    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   }
 `;
