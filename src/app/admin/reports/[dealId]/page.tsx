@@ -188,6 +188,10 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
   const [photoBusy, setPhotoBusy] = useState<Set<string>>(new Set())
   const [photoCacheBust, setPhotoCacheBust] = useState<Record<string, number>>({})
 
+  // CEPIK / Historia Szkodowości — view + replace PDFs.
+  const [docStatus, setDocStatus] = useState<{ has_cepik: boolean; has_damage_history: boolean }>({ has_cepik: false, has_damage_history: false })
+  const [docBusy, setDocBusy] = useState<Set<string>>(new Set())
+
   const setSlotBusy = (slot: string, busy: boolean) => {
     setPhotoBusy(prev => {
       const next = new Set(prev)
@@ -221,6 +225,57 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
   }, [token, dealId, router])
 
   useEffect(() => { fetchPhotos() }, [fetchPhotos])
+
+  // Documents: status + replace. Uses relative /api/report/... — same pattern
+  // as the public report page; do NOT prefix API_BASE (would double /api).
+  const fetchDocStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/report/${dealId}/documents/status`)
+      if (!res.ok) return
+      const json = await res.json()
+      setDocStatus({
+        has_cepik: !!json.has_cepik,
+        has_damage_history: !!json.has_damage_history,
+      })
+    } catch { /* non-fatal — section just shows "Brak" */ }
+  }, [dealId])
+
+  useEffect(() => { fetchDocStatus() }, [fetchDocStatus])
+
+  const setDocBusyFn = (k: string, busy: boolean) => {
+    setDocBusy(prev => {
+      const next = new Set(prev)
+      if (busy) next.add(k); else next.delete(k)
+      return next
+    })
+  }
+
+  const onReplaceDocument = async (docType: "cepik" | "damage_history", file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setToast({ kind: "err", msg: "Dozwolone są tylko pliki PDF" })
+      return
+    }
+    setDocBusyFn(docType, true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch(`/api/report/${dealId}/document/${docType}`, {
+        method: "POST",
+        body: fd,
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await fetchDocStatus()
+      setToast({
+        kind: "ok",
+        msg: `Wgrano dokument: ${docType === "cepik" ? "CEPIK" : "Historia szkodowości"}`,
+      })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się wgrać: ${msg}` })
+    } finally {
+      setDocBusyFn(docType, false)
+    }
+  }
 
   const onReplacePhoto = async (slot: string, file: File) => {
     if (!token) return
@@ -851,7 +906,10 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                 {photos.map(p => {
                   const busy = photoBusy.has(p.slot_id)
                   const bust = photoCacheBust[p.slot_id]
-                  const src = `${API_BASE}${p.url}${bust ? `?t=${bust}` : ""}`
+                  // p.url is already a root-relative path that starts with /api/
+                  // (e.g. /api/gallery/1864/media/photo_front). Do NOT prefix
+                  // API_BASE — it ends in /api and would double-prefix → 404.
+                  const src = `${p.url}${bust ? `?t=${bust}` : ""}`
                   const sizeKb = Math.round(p.size_bytes / 1024)
                   return (
                     <div
@@ -877,10 +935,31 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                         }}
                       >
                         {p.is_video ? (
-                          <div className="flex flex-col items-center gap-1" style={{ color: "#86868B" }}>
-                            <i className="fa-solid fa-film" style={{ fontSize: 28 }} />
-                            <span className="text-xs font-bold">FILM</span>
-                          </div>
+                          <>
+                            <video
+                              controls
+                              src={src}
+                              style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000" }}
+                            />
+                            <div
+                              aria-hidden
+                              style={{
+                                position: "absolute",
+                                bottom: 6, left: 6,
+                                background: "rgba(0,0,0,0.65)",
+                                color: "#fff",
+                                fontSize: 9,
+                                fontWeight: 800,
+                                letterSpacing: 1,
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              <i className="fa-solid fa-film" style={{ fontSize: 9, marginRight: 4 }} />
+                              Film
+                            </div>
+                          </>
                         ) : (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -1010,6 +1089,137 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                 })}
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Dokumenty — CEPIK / Historia szkodowości (view + replace) */}
+        <section
+          className="bg-white relative overflow-hidden"
+          style={{
+            borderRadius: 12,
+            border: "1px solid #E8E8ED",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          }}
+        >
+          <span
+            aria-hidden
+            className="absolute left-0 top-0 bottom-0"
+            style={{ width: 3, background: "#B71C1C", borderRadius: "0 3px 3px 0" }}
+          />
+          <div className="px-5 sm:px-7 py-4 sm:py-5 flex items-start gap-3">
+            <div
+              className="flex items-center justify-center flex-shrink-0"
+              style={{
+                width: 42, height: 42, borderRadius: 8,
+                background: "#FEF2F2", color: "#B71C1C", fontSize: 17,
+              }}
+            >
+              <i className="fa-solid fa-file-pdf" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div
+                className="font-bold uppercase"
+                style={{ fontSize: 11, color: "#B71C1C", letterSpacing: 2, marginBottom: 2 }}
+              >
+                05 / Dokumenty
+              </div>
+              <div className="font-bold" style={{ fontSize: 19, color: "#1D1D1F", lineHeight: 1.3 }}>
+                CEPIK i Historia szkodowości
+              </div>
+              <div className="text-xs sm:text-sm mt-1" style={{ color: "#86868B" }}>
+                Podejrzyj lub wgraj nowy plik PDF (max 20 MB).
+              </div>
+            </div>
+          </div>
+          <div
+            className="px-5 sm:px-7 pb-5 sm:pb-6 pt-4"
+            style={{ borderTop: "1px solid #E8E8ED" }}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {([
+                { key: "cepik" as const, label: "CEPIK", has: docStatus.has_cepik },
+                { key: "damage_history" as const, label: "Historia szkodowości", has: docStatus.has_damage_history },
+              ]).map(d => {
+                const busy = docBusy.has(d.key)
+                return (
+                  <div
+                    key={d.key}
+                    style={{
+                      border: "1px solid #E8E8ED",
+                      borderRadius: 10,
+                      background: "#fff",
+                      padding: 14,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <i className="fa-solid fa-file-pdf" style={{ color: "#B71C1C", fontSize: 16 }} />
+                      <div className="font-semibold" style={{ fontSize: 13, color: "#1D1D1F" }}>{d.label}</div>
+                      <span
+                        className="ml-auto text-[10px] font-bold uppercase"
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: d.has ? "#ECFDF5" : "#F5F5F7",
+                          color: d.has ? "#047857" : "#86868B",
+                          letterSpacing: 1,
+                        }}
+                      >
+                        {d.has ? "Dostępny" : "Brak"}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mt-auto">
+                      <a
+                        href={d.has ? `/api/report/${dealId}/document/${d.key}` : undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-disabled={!d.has}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors"
+                        style={{
+                          minHeight: 36,
+                          borderRadius: 8,
+                          background: d.has ? "#fff" : "#F5F5F7",
+                          color: d.has ? "#1D1D1F" : "#AEAEB2",
+                          border: "1px solid #E8E8ED",
+                          pointerEvents: d.has ? "auto" : "none",
+                          opacity: d.has ? 1 : 0.6,
+                        }}
+                      >
+                        <i className="fa-solid fa-eye" style={{ fontSize: 11 }} />
+                        Podgląd
+                      </a>
+                      <label
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer transition-colors"
+                        style={{
+                          minHeight: 36,
+                          borderRadius: 8,
+                          background: busy ? "#F5F5F7" : "#FEF2F2",
+                          color: busy ? "#AEAEB2" : "#B71C1C",
+                          border: `1px solid ${busy ? "#E8E8ED" : "rgba(183,28,28,0.3)"}`,
+                          opacity: busy ? 0.6 : 1,
+                          pointerEvents: busy ? "none" : "auto",
+                        }}
+                      >
+                        <i className={`fa-solid ${busy ? "fa-spinner fa-spin" : "fa-upload"}`} style={{ fontSize: 11 }} />
+                        {d.has ? "Zamień" : "Wgraj"}
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          style={{ display: "none" }}
+                          onChange={e => {
+                            const f = e.target.files?.[0]
+                            if (f) onReplaceDocument(d.key, f)
+                            e.target.value = ""
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </section>
       </div>
