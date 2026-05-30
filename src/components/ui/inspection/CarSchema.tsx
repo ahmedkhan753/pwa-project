@@ -291,15 +291,20 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                                         inputMode="decimal"
                                         step="any"
                                         min="0"
-                                        max="9999"
+                                        max="2000"
                                         placeholder="np. 187"
                                         value={customInput}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             setCustomInput(val);
                                             if (val && !isNaN(parseFloat(val))) {
-                                                setModalValue(val); // plain number, no µm suffix
-                                                setModalStatus(autoStatusFromNumber(parseFloat(val)));
+                                                let num = parseFloat(val);
+                                                if (num > 2000) num = 2000;
+                                                if (num < 0) num = 0;
+                                                const clamped = String(num);
+                                                if (clamped !== val) setCustomInput(clamped);
+                                                setModalValue(clamped); // plain number, no µm suffix
+                                                setModalStatus(autoStatusFromNumber(num));
                                             } else if (!val) {
                                                 // If cleared, reset to no selection
                                                 setModalValue('');

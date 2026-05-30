@@ -185,6 +185,13 @@ def _vehicle_db_to_view(raw: Any) -> Dict[str, Any]:
 # Hard-block paths that touch any media/signature surface.
 FORBIDDEN_PATH_TOKENS = ("photo", "video", "signature", "image")
 
+# Paths that LOOK media-like (contain a forbidden token) but are actually
+# settings/metadata, not media bytes. These are allowed through the guard.
+ALLOWED_MEDIA_LIKE_PATHS = {
+    # Stores the slot_id (a string) the admin chose as the report hero.
+    "vehicle.heroPhotoSlot",
+}
+
 # Permissive component pattern (letters, digits, underscore). Array indices
 # (digits-only) are valid components — needed for exterior_damages.0.type.
 PATH_COMPONENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$|^[0-9]+$")
@@ -204,7 +211,9 @@ def _validate_path(path: str) -> Tuple[str, List[str]]:
     if "/" in path or "\\" in path:
         raise HTTPException(status_code=400, detail=f"Illegal path: {path!r}")
     lower = path.lower()
-    if any(tok in lower for tok in FORBIDDEN_PATH_TOKENS):
+    if path not in ALLOWED_MEDIA_LIKE_PATHS and any(
+        tok in lower for tok in FORBIDDEN_PATH_TOKENS
+    ):
         raise HTTPException(
             status_code=400,
             detail=f"Path '{path}' touches a media/signature surface and is out of scope",

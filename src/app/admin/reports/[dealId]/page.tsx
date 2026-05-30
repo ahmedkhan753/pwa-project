@@ -356,7 +356,10 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
         return
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setPhotos(prev => prev.filter(p => p.slot_id !== slot))
+      // Refetch so the deleted slot reappears as an empty placeholder in its
+      // canonical position — preserves grid order (no shift) and lets the
+      // admin re-upload to the same slot via the "Dodaj zdjęcie" button.
+      await fetchPhotos()
       // If admin deleted the slot that was set as hero, drop the override
       // locally so the badge disappears immediately.
       setHeroSlot(prev => (prev === slot ? null : prev))
