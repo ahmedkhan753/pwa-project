@@ -21,11 +21,24 @@ from typing import Any, Dict, Tuple
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from services.eurotax_parser import parse_eurotax_pdf
+from services.eurotax_nr34_parser import parse_eurotax_nr34
+from services.eurotax_format import detect_format
 from services.bitrix_disk import get_deal_file_id, download_file_by_id
 from services.bitrix_oauth import get_oauth
 
 router = APIRouter(prefix="/kosztorys", tags=["Kosztorys"])
 logger = logging.getLogger("routers.kosztorys")
+
+
+def _parse_kosztorys_pdf(pdf_path: str) -> Dict[str, Any]:
+    """Dispatch to the right parser based on the PDF's format markers.
+    Falls through to the original parser whenever the nr34 markers
+    aren't both present (see services.eurotax_format)."""
+    fmt = detect_format(pdf_path)
+    if fmt == "nr34":
+        logger.info("[Kosztorys] dispatching to nr34 (netto) parser")
+        return parse_eurotax_nr34(pdf_path)
+    return parse_eurotax_pdf(pdf_path)
 
 EUROTAX_PDF_FIELD = os.getenv("BITRIX_EUROTAX_FIELD", "UF_CRM_1775497355115")
 
@@ -109,7 +122,7 @@ async def get_kosztorys(deal_id: int, request: Request):
         tmp.flush()
         tmp.close()
         try:
-            data = parse_eurotax_pdf(tmp.name)
+            data = _parse_kosztorys_pdf(tmp.name)
         except Exception as e:
             logger.error(
                 f"[Kosztorys] deal={deal_id}: parser raised: {e}", exc_info=True
@@ -156,7 +169,7 @@ async def parse_test(file: UploadFile = File(...)):
         tmp.write(content)
         tmp.flush()
         tmp.close()
-        data = parse_eurotax_pdf(tmp.name)
+        data = _parse_kosztorys_pdf(tmp.name)
         return {"deal_id": None, "filename": file.filename, **data}
     finally:
         try:
