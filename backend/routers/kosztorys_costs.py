@@ -1,22 +1,25 @@
 """
-Macadam Kosztorys Router
-========================
-Semi-automatic above-norm damage report stored in DB, edited by admin,
-rendered by /kosztorys/macadam/{deal_id}.
+Kosztorys Costs Router
+======================
+Above-norm damage cost layer stored in DB, edited by admin, rendered
+inline within the public report at /kosztorys/{deal_id}.
 
-GET  /api/macadam/{deal_id}  — public:
-    returns the saved MacadamData if present, else an empty skeleton
+GET  /api/kosztorys-costs/{deal_id}  — public:
+    returns the saved cost data if present, else an empty skeleton
     pre-filled from /api/report (vehicle header + hero photo). Always
     includes `available_damages` (full exterior + interior damages
     from inspection, URLs only) so the editor can offer them for
     selection.
 
-PUT  /api/macadam/{deal_id}  — admin:
-    UPSERT a MacadamData payload. Each part must have a non-empty
-    `czesc`. Cost fields may be null (admin can save partial work).
+PUT  /api/kosztorys-costs/{deal_id}  — admin:
+    UPSERT a costs payload. Each part must have a non-empty `czesc`.
+    Cost fields may be null (admin can save partial work).
 
 Costs are never auto-filled. The endpoint never fabricates numbers —
 parts start with cost fields = null until an admin enters them.
+
+The wire shape stays MacadamData-compatible (types/kosztorysMacadam.ts)
+so the existing types + editor logic carry over unchanged.
 """
 
 import json
@@ -29,10 +32,10 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from deps import require_admin
-from models.inspector import MacadamReport
+from models.inspector import KosztorysCost
 
-router = APIRouter(prefix="/macadam", tags=["Macadam"])
-logger = logging.getLogger("routers.macadam")
+router = APIRouter(prefix="/kosztorys-costs", tags=["Kosztorys Costs"])
+logger = logging.getLogger("routers.kosztorys_costs")
 
 
 # ─── Pydantic models — wire shape for PUT ─────────────────────────────────────
@@ -169,27 +172,27 @@ async def _fetch_report(deal_id: int, request: Request) -> Optional[Dict[str, An
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"[macadam] /api/report fetch for deal {deal_id} failed: {e}")
+        logger.warning(f"[kosztorys-costs] /api/report fetch for deal {deal_id} failed: {e}")
     return None
 
 
 # ─── GET — public renderer + admin editor ─────────────────────────────────────
 
 @router.get("/{deal_id}")
-async def get_macadam(
+async def get_costs(
     deal_id: int,
     request: Request,
     db: Session = Depends(get_db),
 ):
     saved: Optional[Dict[str, Any]] = None
-    row = db.query(MacadamReport).filter(MacadamReport.deal_id == deal_id).first()
+    row = db.query(KosztorysCost).filter(KosztorysCost.deal_id == deal_id).first()
     if row and row.data_json:
         try:
             parsed = json.loads(row.data_json)
             if isinstance(parsed, dict):
                 saved = parsed
         except (TypeError, ValueError) as e:
-            logger.warning(f"[macadam] deal {deal_id}: stored JSON unparseable ({e})")
+            logger.warning(f"[kosztorys-costs] deal {deal_id}: stored JSON unparseable ({e})")
 
     report = await _fetch_report(deal_id, request)
     available_damages = _available_damages_from_report(report) if report else []
@@ -214,7 +217,7 @@ async def get_macadam(
 # ─── PUT — admin only ─────────────────────────────────────────────────────────
 
 @router.put("/{deal_id}")
-async def put_macadam(
+async def put_costs(
     deal_id: int,
     payload: MacadamDataIn,
     db: Session = Depends(get_db),
@@ -236,9 +239,9 @@ async def put_macadam(
     data = payload.model_dump(mode="json")
     serialised = json.dumps(data, ensure_ascii=False)
 
-    row = db.query(MacadamReport).filter(MacadamReport.deal_id == deal_id).first()
+    row = db.query(KosztorysCost).filter(KosztorysCost.deal_id == deal_id).first()
     if row is None:
-        row = MacadamReport(deal_id=deal_id, data_json=serialised)
+        row = KosztorysCost(deal_id=deal_id, data_json=serialised)
         db.add(row)
     else:
         row.data_json = serialised
@@ -246,7 +249,7 @@ async def put_macadam(
     db.refresh(row)
 
     logger.info(
-        f"[macadam] deal {deal_id}: saved by admin ({len(payload.parts)} parts, "
+        f"[kosztorys-costs] deal {deal_id}: saved by admin ({len(payload.parts)} parts, "
         f"{len(serialised)} bytes)"
     )
     return data

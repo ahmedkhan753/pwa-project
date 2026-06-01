@@ -19,6 +19,7 @@ import { BlachSectionTable } from '../_components/BlachSectionTable';
 import { LakierSectionTable } from '../_components/LakierSectionTable';
 import { COLORS, fmtPLN, fmtNum, fmtEUR, fmtPct, splitMakeModel } from '../_components/styles';
 import type { KosztorysData } from '@/types/kosztorys';
+import type { MacadamData } from '@/types/kosztorysMacadam';
 
 // ─── Types for the inspection report (subset we use) ──────────────────────────
 
@@ -49,6 +50,7 @@ interface ReportData {
 const NAV_ITEMS = [
   { id: 'expertise', label: 'Pojazd' },
   { id: 'eurotax',   label: 'Eurotax' },
+  { id: 'uszkodzenia', label: 'Uszkodzenia' },
   { id: 'summary',   label: 'Podsumowanie' },
   { id: 'parts',     label: 'Części' },
   { id: 'equipment', label: 'Wyposażenie' },
@@ -85,6 +87,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
   const { dealId } = params;
   const [kosztorys, setKosztorys] = useState<KosztorysData | null>(null);
   const [report, setReport]       = useState<ReportData | null>(null);
+  const [costs, setCosts]         = useState<MacadamData | null>(null);
   const [kosztorysErr, setKErr]   = useState<{ status: number; msg: string } | null>(null);
   const [reportErr, setRErr]      = useState<{ status: number; msg: string } | null>(null);
   const [loadingK, setLoadingK]   = useState(true);
@@ -108,6 +111,17 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
       })
       .catch(e => { setRErr({ status: 0, msg: String(e) }); return null; })
       .then(r => { setReport(r); setLoadingR(false); });
+
+    // Above-norm damage costs — saved DB layer. Failure is non-fatal:
+    // section just doesn't render if no costs were saved for this deal.
+    fetch(`/api/kosztorys-costs/${dealId}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(c => {
+        if (c && typeof c === 'object' && Array.isArray(c.parts)) {
+          setCosts(c as MacadamData);
+        }
+      })
+      .catch(() => { /* non-fatal */ });
   }, [dealId]);
 
   // Hero gallery from report photos (fall back to single hero_photo_url)
@@ -338,6 +352,105 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
               <BlachSectionTable title="Pr.dodatkowe"  section={kosztorys.sections.pr_dodatkowe} />
               <LakierSectionTable title="Lakiernik"    section={kosztorys.sections.lakiernik} />
             </section>
+
+            {/* ═══ USZKODZENIA — saved above-norm cost cards ══════════════ */}
+            {costs?.parts && costs.parts.length > 0 && (
+              <section id="uszkodzenia" className="kosz-card">
+                <div className="section-title">USZKODZENIA</div>
+                {costs.parts.map((p, i) => {
+                  const isLast = i === costs.parts.length - 1;
+                  const monoNum: React.CSSProperties = {
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                    fontVariantNumeric: 'tabular-nums',
+                  };
+                  return (
+                    <div
+                      key={p.id}
+                      className="kosz-damage-card"
+                      style={{
+                        display: 'flex',
+                        gap: 24,
+                        padding: '20px 0',
+                        borderBottom: isLast ? 'none' : `1px solid ${COLORS.borderLt}`,
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      {p.photos.length > 0 && (
+                        <div style={{ flex: '1 1 0', maxWidth: '45%', minWidth: 0 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+                            {p.photos.map((src, pi) => (
+                              <div
+                                key={`${p.id}-${pi}`}
+                                onClick={() => setLightbox({ photos: p.photos, start: pi })}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setLightbox({ photos: p.photos, start: pi });
+                                  }
+                                }}
+                                style={{
+                                  aspectRatio: '4 / 3',
+                                  cursor: 'pointer',
+                                  borderRadius: 6,
+                                  overflow: 'hidden',
+                                  background: COLORS.mutedLt,
+                                  border: `1px solid ${COLORS.borderLt}`,
+                                }}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={src}
+                                  alt=""
+                                  loading="lazy"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>
+                          {p.index} | {p.czesc}
+                        </div>
+                        <DamageRow label="Typ uszkodzenia" value={p.typ || '—'} />
+                        <DamageRow label="Tryb naprawy" value={p.tryb_naprawy || '—'} />
+                        <DamageRow
+                          label="Koszty naprawy"
+                          value={<span style={monoNum}>{fmtPLN(p.koszty_naprawy_pln)}</span>}
+                        />
+                        <DamageRow
+                          label="Koszt amortyzacji"
+                          value={<span style={monoNum}>{fmtPLN(p.koszt_amortyzacji_pln)}</span>}
+                        />
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'baseline',
+                            padding: '14px 0 0',
+                            gap: 16,
+                          }}
+                        >
+                          <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>
+                            KOSZT NETTO{' '}
+                            <span style={{ fontSize: 11, fontWeight: 400, color: COLORS.muted }}>
+                              (bez VAT)
+                            </span>
+                          </span>
+                          <span style={{ ...monoNum, fontSize: 17, fontWeight: 700, color: COLORS.green }}>
+                            {fmtPLN(p.koszt_netto_pln)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </section>
+            )}
 
             {/* ═══ SUMMARY ════════════════════════════════════════════════ */}
             <section id="summary" className="kosz-card">
@@ -690,6 +803,28 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
           <div>© 2026 Zaufaj Rzeczoznawcy · Eurotax{date ? ` · ${date}` : ''} · Zlecenie #{dealId}</div>
         </footer>
       </div>
+    </div>
+  );
+}
+
+// ─── Damage card label/value row helper ──────────────────────────────────────
+
+function DamageRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        padding: '10px 0',
+        borderBottom: `1px solid ${COLORS.borderLt}`,
+        gap: 16,
+      }}
+    >
+      <span style={{ fontSize: 13, color: COLORS.muted }}>{label}</span>
+      <span style={{ fontSize: 14, color: COLORS.text, textAlign: 'right', overflowWrap: 'anywhere' }}>
+        {value}
+      </span>
     </div>
   );
 }

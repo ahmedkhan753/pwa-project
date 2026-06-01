@@ -118,12 +118,19 @@ class InspectionEdit(Base):
     )
 
 
-class MacadamReport(Base):
-    """Stores the saved Macadam-style kosztorys (above-norm damages + manual
-    cost entries) for a deal. data_json is a serialised MacadamData payload.
-    One row per deal — admin edits in-place via PUT /api/macadam/{deal_id}.
+class KosztorysCost(Base):
+    """Stores the saved above-norm damage cost entries for a deal.
+    data_json is a serialised payload matching the MacadamData wire shape
+    in types/kosztorysMacadam.ts (parts[] with czesc / typ / tryb_naprawy
+    / koszty_naprawy_pln / koszt_amortyzacji_pln / koszt_netto_pln /
+    photos). One row per deal — admin edits in-place via
+    PUT /api/kosztorys-costs/{deal_id}.
+
+    Renamed from MacadamReport / macadam_reports — the previous table
+    was empty so create_all builds the new one cleanly on startup; the
+    old empty table is left in place (no destructive migration).
     """
-    __tablename__ = "macadam_reports"
+    __tablename__ = "kosztorys_costs"
 
     id = Column(Integer, primary_key=True, index=True)
     deal_id = Column(Integer, unique=True, nullable=False, index=True)
