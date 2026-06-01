@@ -79,8 +79,15 @@ const SECTION_ROOTS: Array<{
     icon: "fa-solid fa-paint-roller",
   },
   {
+    root: "tires",
+    eyebrow: "03 / Opony",
+    title: "Opony",
+    subtitle: "Marka, model, rozmiar, DOT, głębokość bieżnika dla każdego koła",
+    icon: "fa-solid fa-circle-notch",
+  },
+  {
     root: "bitrix_extras",
-    eyebrow: "03 / Wyposażenie i komentarze",
+    eyebrow: "04 / Wyposażenie i komentarze",
     title: "Wyposażenie i komentarze",
     subtitle: "Pola zapisywane bezpośrednio w Bitrix24",
     icon: "fa-solid fa-clipboard-list",
