@@ -116,3 +116,16 @@ class InspectionEdit(Base):
     __table_args__ = (
         Index("ix_inspection_edits_deal_edited", "deal_id", "edited_at"),
     )
+
+
+class MacadamReport(Base):
+    """Stores the saved Macadam-style kosztorys (above-norm damages + manual
+    cost entries) for a deal. data_json is a serialised MacadamData payload.
+    One row per deal — admin edits in-place via PUT /api/macadam/{deal_id}.
+    """
+    __tablename__ = "macadam_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, unique=True, nullable=False, index=True)
+    data_json = Column(Text, nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

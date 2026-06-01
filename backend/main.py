@@ -289,6 +289,7 @@ from routers import admin_reports as admin_reports_router
 from routers import webhook as webhook_router
 from routers import report as report_router
 from routers import kosztorys as kosztorys_router
+from routers import macadam as macadam_router
 
 app.include_router(health.router)
 app.include_router(deals.router)
@@ -303,6 +304,7 @@ app.include_router(webhook_router.router)
 # Public report endpoint — no auth required
 app.include_router(report_router.router)
 app.include_router(kosztorys_router.router)
+app.include_router(macadam_router.router)
 
 
 # ─── QR Debug Endpoint ────────────────────────────────────────

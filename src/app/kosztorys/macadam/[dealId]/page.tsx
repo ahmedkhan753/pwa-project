@@ -1,30 +1,79 @@
 'use client';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Lightbox } from '@/app/kosztorys/_components/Lightbox';
 import { COLORS, fmtNum } from '@/app/kosztorys/_components/styles';
 import { PrzegladKosztow } from './_components/PrzegladKosztow';
 import { PartCard } from './_components/PartCard';
-import { DEMO_MACADAM } from './_demo';
-import type { MacadamTotals } from '@/types/kosztorysMacadam';
+import type {
+  MacadamData,
+  MacadamTotals,
+  MacadamVehicleHeader,
+} from '@/types/kosztorysMacadam';
 
 /**
- * Macadam-style Kosztorys report — Phase 1 MVP renders DEMO_MACADAM.
- * Backend wiring (XML / manual entry / PDF parser) is TBD. The data
- * contract lives in @/types/kosztorysMacadam so a switch to live data
- * is a one-spot swap (DEMO_MACADAM → fetched MacadamData).
+ * Macadam-style Kosztorys report. Fetches the saved MacadamData from
+ * GET /api/macadam/{dealId} (proxied to the backend). Backend returns
+ * a skeleton with vehicle prefilled + parts=[] until an admin saves
+ * via /admin/macadam/{dealId}. Costs are NEVER fabricated — null
+ * values render as "—" (fmtPLN already handles that).
  *
- * Does NOT touch the existing /kosztorys/[dealId] Eurotax page.
+ * The /kosztorys/[dealId] Eurotax flow is untouched.
  */
+const emptyVehicle = (): MacadamVehicleHeader => ({
+  make_model: '',
+  variant: '',
+  vin: '',
+  registration_plate: '',
+  grupa: '',
+  mileage_km: null,
+  first_registration: '',
+  body_colour: '',
+  klient: '',
+  inspection_date: '',
+  inspection_address: '',
+  main_photo_url: null,
+});
+
+const emptyData = (): MacadamData => ({
+  vehicle: emptyVehicle(),
+  parts: [],
+});
+
 export default function MacadamKosztorysPage({
   params,
 }: {
   params: { dealId: string };
 }) {
   const { dealId } = params;
-  const data = DEMO_MACADAM;
+  const [data, setData] = useState<MacadamData>(emptyData);
+  const [loading, setLoading] = useState(true);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/macadam/${dealId}`, { cache: 'no-store' })
+      .then(async r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const json = await r.json();
+        if (cancelled) return;
+        setData({
+          vehicle: json.vehicle ?? emptyVehicle(),
+          parts: Array.isArray(json.parts) ? json.parts : [],
+          totals: json.totals ?? undefined,
+        });
+        setErrMsg(null);
+      })
+      .catch(e => {
+        if (!cancelled) setErrMsg(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [dealId]);
 
   const [lb, setLb] = useState<{ photos: string[]; start: number } | null>(null);
-  const [bannerOpen, setBannerOpen] = useState(true);
 
   const totals: MacadamTotals = useMemo(() => {
     if (data.totals) return data.totals;
@@ -71,13 +120,13 @@ export default function MacadamKosztorysPage({
       />
       <style dangerouslySetInnerHTML={{ __html: MAC_CSS }} />
 
-      {/* Demo banner */}
-      {bannerOpen && (
+      {/* Status banner — loading / error only */}
+      {(loading || errMsg) && (
         <div
           className="no-print"
           style={{
-            background: '#FEF3C7',
-            color: '#92400E',
+            background: errMsg ? '#FEF2F2' : '#EFF6FF',
+            color: errMsg ? '#991B1B' : '#1E40AF',
             padding: '10px 16px',
             fontSize: 13,
             display: 'flex',
@@ -86,26 +135,15 @@ export default function MacadamKosztorysPage({
             justifyContent: 'center',
           }}
         >
-          <span>
-            <strong>Demo data</strong> — backend wiring TBD (dealId: {dealId})
-          </span>
-          <button
-            type="button"
-            onClick={() => setBannerOpen(false)}
-            aria-label="Zamknij banner"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: '#92400E',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: 16,
-              padding: '0 6px',
-              lineHeight: 1,
-            }}
-          >
-            ×
-          </button>
+          {errMsg ? (
+            <span>
+              <strong>Nie udało się wczytać raportu</strong> — {errMsg}
+            </span>
+          ) : (
+            <span>
+              <strong>Ładowanie…</strong> Zlecenie #{dealId}
+            </span>
+          )}
         </div>
       )}
 
@@ -275,12 +313,38 @@ export default function MacadamKosztorysPage({
           </div>
         </section>
 
+        {/* Empty-state placeholder when nothing has been entered yet */}
+        {!loading && data.parts.length === 0 && (
+          <section style={{ marginTop: 48 }}>
+            <div
+              style={{
+                background: '#fff',
+                border: `1px dashed ${COLORS.border}`,
+                borderRadius: 12,
+                padding: '40px 24px',
+                textAlign: 'center',
+                color: COLORS.muted,
+              }}
+            >
+              <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
+                Brak danych
+              </div>
+              <div style={{ fontSize: 14 }}>
+                Kosztorys do uzupełnienia w panelu administratora.
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Przegląd kosztów */}
-        <section id="przeglad" style={{ marginTop: 64 }}>
-          <PrzegladKosztow parts={data.parts} totals={totals} />
-        </section>
+        {data.parts.length > 0 && (
+          <section id="przeglad" style={{ marginTop: 64 }}>
+            <PrzegladKosztow parts={data.parts} totals={totals} />
+          </section>
+        )}
 
         {/* Uszkodzenia */}
+        {data.parts.length > 0 && (
         <section id="uszkodzenia" style={{ marginTop: 64 }}>
           <h2
             style={{
@@ -331,6 +395,7 @@ export default function MacadamKosztorysPage({
             </>
           )}
         </section>
+        )}
       </main>
 
       {lb && (
