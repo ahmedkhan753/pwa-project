@@ -31,7 +31,7 @@ from database import get_db
 from deps import require_admin
 from models.inspector import MacadamReport
 
-router = APIRouter(prefix="/api/macadam", tags=["Macadam"])
+router = APIRouter(prefix="/macadam", tags=["Macadam"])
 logger = logging.getLogger("routers.macadam")
 
 

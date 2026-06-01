@@ -97,7 +97,7 @@ export default function AdminMacadamEditPage({
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/macadam/${dealId}`, {
+      const res = await fetch(`${API_BASE}/macadam/${dealId}`, {
         cache: "no-store",
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -211,7 +211,7 @@ export default function AdminMacadamEditPage({
     }
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/macadam/${dealId}`, {
+      const res = await fetch(`${API_BASE}/macadam/${dealId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

@@ -21,7 +21,13 @@ export async function GET(
   const { dealId } = params;
 
   try {
-    const res = await fetch(`${BACKEND}/api/macadam/${dealId}`, {
+    // Backend router uses prefix /macadam (no /api), mirroring the
+    // working Eurotax pattern (kosztorys.py prefix /kosztorys). In
+    // production, nginx routes /api/* directly to the backend after
+    // stripping /api — so the browser's relative /api/macadam/{id}
+    // lands on /macadam/{id} at FastAPI. This Next.js proxy mirrors
+    // that final shape for dev / non-nginx setups.
+    const res = await fetch(`${BACKEND}/macadam/${dealId}`, {
       cache: 'no-store',
     });
 
