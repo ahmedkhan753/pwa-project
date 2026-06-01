@@ -377,24 +377,44 @@ export default function AdminReportsListPage() {
                 </div>
               </div>
 
-              <button
-                onClick={e => {
-                  e.stopPropagation()
-                  router.push(`/admin/reports/${row.deal_id}`)
-                }}
-                className="inline-flex items-center justify-center gap-2 font-bold text-sm transition-transform active:scale-[0.98]"
-                style={{
-                  minHeight: 44,
-                  borderRadius: 10,
-                  padding: "10px 16px",
-                  background: "#B71C1C",
-                  color: "#fff",
-                  boxShadow: "0 2px 6px rgba(183,28,28,0.18)",
-                }}
-              >
-                Edytuj
-                <i className="fa-solid fa-pen-to-square" style={{ fontSize: 12 }} />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    router.push(`/admin/kosztorys/${row.deal_id}`)
+                  }}
+                  className="inline-flex items-center justify-center gap-2 font-bold text-sm transition-transform active:scale-[0.98]"
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    background: "#fff",
+                    color: "#B71C1C",
+                    border: "1.5px solid #B71C1C",
+                  }}
+                >
+                  Kosztorys
+                  <i className="fa-solid fa-coins" style={{ fontSize: 12 }} />
+                </button>
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    router.push(`/admin/reports/${row.deal_id}`)
+                  }}
+                  className="inline-flex items-center justify-center gap-2 font-bold text-sm transition-transform active:scale-[0.98]"
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    background: "#B71C1C",
+                    color: "#fff",
+                    boxShadow: "0 2px 6px rgba(183,28,28,0.18)",
+                  }}
+                >
+                  Edytuj
+                  <i className="fa-solid fa-pen-to-square" style={{ fontSize: 12 }} />
+                </button>
+              </div>
             </li>
           ))}
         </ul>

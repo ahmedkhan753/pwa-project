@@ -97,7 +97,7 @@ export default function AdminMacadamEditPage({
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/macadam/${dealId}`, {
+      const res = await fetch(`${API_BASE}/kosztorys-costs/${dealId}`, {
         cache: "no-store",
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -211,7 +211,7 @@ export default function AdminMacadamEditPage({
     }
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/macadam/${dealId}`, {
+      const res = await fetch(`${API_BASE}/kosztorys-costs/${dealId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -300,7 +300,7 @@ export default function AdminMacadamEditPage({
                 textTransform: "uppercase",
               }}
             >
-              Macadam · Zlecenie #{dealId}
+              Kosztorys · Zlecenie #{dealId}
             </div>
             <h1
               style={{
@@ -313,7 +313,7 @@ export default function AdminMacadamEditPage({
             </h1>
           </div>
           <a
-            href={`/kosztorys/macadam/${dealId}`}
+            href={`/kosztorys/${dealId}`}
             target="_blank"
             rel="noopener noreferrer"
             style={{
