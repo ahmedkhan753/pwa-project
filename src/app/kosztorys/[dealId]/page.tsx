@@ -24,6 +24,16 @@ import type { MacadamData } from '@/types/kosztorysMacadam';
 // ─── Types for the inspection report (subset we use) ──────────────────────────
 
 interface ReportPhoto { label?: string; url?: string }
+interface ReportEquipmentItem { name: string; present: boolean }
+interface ReportDocumentItem { name: string; status: string; status_type: string }
+interface ReportTire {
+  position?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  treadDepth?: string | number | null;
+  size?: string | null;
+  season?: string | null;
+}
 interface ReportData {
   deal_id?: number;
   vehicle?: {
@@ -39,9 +49,9 @@ interface ReportData {
     standard?: ReportPhoto[]; body?: ReportPhoto[]; interior?: ReportPhoto[];
     engine?: ReportPhoto[]; documents?: ReportPhoto[]; damages?: ReportPhoto[];
   };
-  equipment?: Array<[string, string] | { label: string; value: string }>;
-  documents_check?: Array<[string, string] | { label: string; value: string }>;
-  tires?: Array<Record<string, unknown>>;
+  equipment?: ReportEquipmentItem[];
+  documents_check?: ReportDocumentItem[];
+  tires?: ReportTire[];
   generated_at?: string;
 }
 
@@ -71,14 +81,6 @@ function extractAllPhotos(report: ReportData | null): { url: string; label: stri
     }
   }
   return out;
-}
-
-function pairFromKV(kv: ReportData['equipment']): [string, string][] {
-  if (!kv) return [];
-  return kv.map((row): [string, string] => {
-    if (Array.isArray(row)) return [String(row[0] ?? ''), String(row[1] ?? '')];
-    return [String(row.label ?? ''), String(row.value ?? '')];
-  });
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -634,18 +636,17 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                   <div className="equip-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10,
                   }}>
-                    {pairFromKV(report.equipment).map(([k, v], i) => {
-                      const clr = v === 'Tak' || v === 'OK' ? COLORS.green
-                                : v === 'Nie' || v === 'NIE' ? COLORS.red
-                                : COLORS.text;
+                    {report.equipment.map((item, i) => {
+                      const label = item.present ? 'Tak' : 'Nie';
+                      const clr = item.present ? COLORS.green : COLORS.muted;
                       return (
                         <div key={i} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           padding: '10px 14px', borderRadius: 8, background: COLORS.mutedLt,
                           border: `1px solid ${COLORS.borderLt}`,
                         }}>
-                          <span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 500 }}>{k}</span>
-                          <span style={{ fontWeight: 700, fontSize: 13, color: clr }}>{v}</span>
+                          <span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 500 }}>{item.name}</span>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: clr }}>{label}</span>
                         </div>
                       );
                     })}
@@ -671,22 +672,30 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                         </tr>
                       </thead>
                       <tbody>
-                        {report.tires.map((t, i) => (
-                          <tr key={i}>
-                            <td data-label="Pozycja">{String((t as Record<string, unknown>).position ?? (t as Record<string, unknown>).location ?? `${i + 1}`)}</td>
-                            <td data-label="Bieżnik" style={{ color: COLORS.green, fontWeight: 600 }}>
-                              {String((t as Record<string, unknown>).tread ?? '')}
-                            </td>
-                            <td data-label="Producent / Model">
-                              {String((t as Record<string, unknown>).producer ?? '')}
-                              {(t as Record<string, unknown>).model ? ` / ${String((t as Record<string, unknown>).model)}` : ''}
-                            </td>
-                            <td data-label="Wymiary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
-                              {String((t as Record<string, unknown>).dimensions ?? '')}
-                            </td>
-                            <td data-label="Sezon">{String((t as Record<string, unknown>).season ?? '')}</td>
-                          </tr>
-                        ))}
+                        {report.tires.map((t, i) => {
+                          const treadStr =
+                            t.treadDepth === null || t.treadDepth === undefined || t.treadDepth === ''
+                              ? '—'
+                              : `${t.treadDepth} mm`;
+                          const brand = (t.brand ?? '').toString().trim();
+                          const model = (t.model ?? '').toString().trim();
+                          const producerModel = brand && model
+                            ? `${brand} / ${model}`
+                            : (brand || model || '—');
+                          return (
+                            <tr key={i}>
+                              <td data-label="Pozycja">{t.position ?? `${i + 1}`}</td>
+                              <td data-label="Bieżnik" style={{ color: COLORS.green, fontWeight: 600 }}>
+                                {treadStr}
+                              </td>
+                              <td data-label="Producent / Model">{producerModel}</td>
+                              <td data-label="Wymiary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {t.size ?? ''}
+                              </td>
+                              <td data-label="Sezon">{t.season ?? '—'}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -702,16 +711,21 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                   <div className="docs-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12,
                   }}>
-                    {pairFromKV(report.documents_check).map(([k, v], i) => (
-                      <div key={i} style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '12px 16px', borderRadius: 10, background: COLORS.mutedLt,
-                        border: `1px solid ${COLORS.borderLt}`,
-                      }}>
-                        <span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 500 }}>{k}</span>
-                        <span style={{ fontWeight: 700, fontSize: 13 }}>{v}</span>
-                      </div>
-                    ))}
+                    {report.documents_check.map((doc, i) => {
+                      const clr = doc.status_type === 'green' ? COLORS.green
+                                : doc.status_type === 'red'   ? COLORS.red
+                                : COLORS.text;
+                      return (
+                        <div key={i} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '12px 16px', borderRadius: 10, background: COLORS.mutedLt,
+                          border: `1px solid ${COLORS.borderLt}`,
+                        }}>
+                          <span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 500 }}>{doc.name}</span>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: clr }}>{doc.status}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               </>
