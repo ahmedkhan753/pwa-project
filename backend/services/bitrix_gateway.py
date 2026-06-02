@@ -81,15 +81,18 @@ class BitrixGateway:
         self.discovery = discovery
         self._client: Optional[httpx.AsyncClient] = None
 
-        # Retry config
-        self._max_retries = 3
+        # Retry config — tuned to fail fast so the DB fallback in
+        # report.py / kosztorys.py is reached within seconds when
+        # Bitrix is flaky. Worst case per call ≈ 8s + 1s wait + 8s ≈ 17s
+        # (was ~93s with 3× 30s timeouts).
+        self._max_retries = 2
         self._backoff_base = 1  # seconds
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Lazy-init the httpx async client."""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0, connect=10.0),
+                timeout=httpx.Timeout(8.0, connect=4.0),
                 limits=httpx.Limits(
                     max_connections=20,
                     max_keepalive_connections=10,
@@ -152,7 +155,7 @@ class BitrixGateway:
             raise BitrixAuthError("Bitrix24 webhook URL not configured")
 
         url = f"{self.webhook_url.rstrip('/')}/{method}"
-        client = httpx.AsyncClient(timeout=30.0) # Requirement: 30s timeout
+        client = httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=4.0))  # fail-fast — see _max_retries comment
 
         last_error = None
         for attempt in range(1, self._max_retries + 1):
