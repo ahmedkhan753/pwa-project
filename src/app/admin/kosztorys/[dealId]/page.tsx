@@ -5,7 +5,19 @@ import type {
   MacadamData,
   MacadamPart,
   MacadamVehicleHeader,
+  Qualification,
 } from "@/types/kosztorysMacadam"
+
+const QUAL_OPTIONS: { value: Qualification; label: string }[] = [
+  { value: "",             label: "— wybierz —" },
+  { value: "lakierowanie", label: "Lakierowanie" },
+  { value: "naprawa",      label: "Naprawa" },
+  { value: "wymiana",      label: "Wymiana" },
+  { value: "akceptowalne", label: "Akceptowalne (bez kosztu)" },
+]
+
+const VAT_RATE = 1.23
+const r2 = (n: number) => Math.round(n * 100) / 100
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -47,15 +59,81 @@ function reindex(parts: MacadamPart[]): MacadamPart[] {
   return parts.map((p, i) => ({ ...p, index: i + 1 }))
 }
 
-function computeTotals(parts: MacadamPart[]) {
-  return parts.reduce(
-    (acc, p) => ({
-      koszty_naprawy_pln: acc.koszty_naprawy_pln + (p.koszty_naprawy_pln ?? 0),
-      amortyzacja_pln:    acc.amortyzacja_pln    + (p.koszt_amortyzacji_pln ?? 0),
-      netto_pln:          acc.netto_pln          + (p.koszt_netto_pln ?? 0),
-    }),
-    { koszty_naprawy_pln: 0, amortyzacja_pln: 0, netto_pln: 0 }
-  )
+// Older saved data may not have the cost-engine fields yet.
+function normalisePart(p: Partial<MacadamPart> & { id?: string; index?: number }): MacadamPart {
+  return {
+    id:                    p.id ?? newPartId(),
+    index:                 p.index ?? 0,
+    location:              p.location === "interior" ? "interior" : "exterior",
+    czesc:                 p.czesc ?? "",
+    typ:                   p.typ ?? "",
+    tryb_naprawy:          p.tryb_naprawy ?? "",
+    qualification:         (p.qualification ?? "") as Qualification,
+    repair_time_h:         p.repair_time_h ?? null,
+    parts_cost_pln:        p.parts_cost_pln ?? null,
+    is_manual:             p.is_manual ?? false,
+    koszty_naprawy_pln:    p.koszty_naprawy_pln ?? null,
+    koszt_amortyzacji_pln: p.koszt_amortyzacji_pln ?? null,
+    koszt_netto_pln:       p.koszt_netto_pln ?? null,
+    photos:                p.photos ?? [],
+  }
+}
+
+// ─── Cost engine — must match backend (routers/kosztorys_costs.py) ──────────
+// Backend recomputes on PUT (source of truth); this version drives the live
+// preview while the appraiser types.
+function computePartCosts(
+  part: Pick<MacadamPart, "qualification" | "repair_time_h" | "parts_cost_pln" | "is_manual">,
+  rate: number | null,
+  deprPct: number | null,
+): { koszty_naprawy_pln: number; koszt_amortyzacji_pln: number; koszt_netto_pln: number } {
+  const r = rate ?? 0
+  const d = (deprPct ?? 0) / 100
+  const time = part.repair_time_h ?? 0
+  const parts = part.parts_cost_pln ?? 0
+
+  if (part.is_manual) {
+    return {
+      koszty_naprawy_pln:    r2(parts),
+      koszt_amortyzacji_pln: r2(parts * d),
+      koszt_netto_pln:       r2(parts * (1 - d)),
+    }
+  }
+  if (part.qualification === "akceptowalne") {
+    return { koszty_naprawy_pln: 0, koszt_amortyzacji_pln: 0, koszt_netto_pln: 0 }
+  }
+  const labour = time * r
+  if (part.qualification === "wymiana") {
+    return {
+      koszty_naprawy_pln:    r2(labour + parts),
+      koszt_amortyzacji_pln: r2(labour * d),
+      koszt_netto_pln:       r2(labour * (1 - d) + parts),
+    }
+  }
+  if (part.qualification === "naprawa" || part.qualification === "lakierowanie") {
+    return {
+      koszty_naprawy_pln:    r2(labour),
+      koszt_amortyzacji_pln: r2(labour * d),
+      koszt_netto_pln:       r2(labour * (1 - d)),
+    }
+  }
+  return { koszty_naprawy_pln: 0, koszt_amortyzacji_pln: 0, koszt_netto_pln: 0 }
+}
+
+function computeTotals(parts: MacadamPart[], rate: number | null, deprPct: number | null) {
+  let k = 0, a = 0, n = 0
+  for (const p of parts) {
+    const c = computePartCosts(p, rate, deprPct)
+    k += c.koszty_naprawy_pln
+    a += c.koszt_amortyzacji_pln
+    n += c.koszt_netto_pln
+  }
+  return {
+    koszty_naprawy_pln: r2(k),
+    amortyzacja_pln:    r2(a),
+    netto_pln:          r2(n),
+    gross_pln:          r2(n * VAT_RATE),
+  }
 }
 
 function parseNumberOrNull(raw: string): number | null {
@@ -77,6 +155,8 @@ export default function AdminMacadamEditPage({
   const [vehicle, setVehicle] = useState<MacadamVehicleHeader>(emptyVehicle())
   const [parts, setParts] = useState<MacadamPart[]>([])
   const [available, setAvailable] = useState<AvailableDamage[]>([])
+  const [labourRate, setLabourRate] = useState<number | null>(null)
+  const [deprPct, setDeprPct] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{
@@ -103,8 +183,10 @@ export default function AdminMacadamEditPage({
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json: MacadamGetResponse = await res.json()
       setVehicle(json.vehicle ?? emptyVehicle())
-      setParts(reindex(json.parts ?? []))
+      setParts(reindex((json.parts ?? []).map(normalisePart)))
       setAvailable(json.available_damages ?? [])
+      setLabourRate(json.labour_rate_pln_per_h ?? null)
+      setDeprPct(json.depreciation_pct ?? null)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setToast({ kind: "err", msg: `Nie udało się wczytać: ${msg}` })
@@ -135,6 +217,10 @@ export default function AdminMacadamEditPage({
       czesc: d.location || d.type || "",
       typ: d.type,
       tryb_naprawy: "",
+      qualification: "",
+      repair_time_h: null,
+      parts_cost_pln: null,
+      is_manual: false,
       koszty_naprawy_pln: null,
       koszt_amortyzacji_pln: null,
       koszt_netto_pln: null,
@@ -155,6 +241,10 @@ export default function AdminMacadamEditPage({
       czesc: "",
       typ: "",
       tryb_naprawy: "",
+      qualification: "naprawa",   // manual elements are depreciated like labour
+      repair_time_h: null,
+      parts_cost_pln: null,
+      is_manual: true,
       koszty_naprawy_pln: null,
       koszt_amortyzacji_pln: null,
       koszt_netto_pln: null,
@@ -183,19 +273,29 @@ export default function AdminMacadamEditPage({
 
   const onSave = async () => {
     if (!token) return
-    // Strip the non-enumerable _src_key off the parts before sending.
-    const cleanParts: MacadamPart[] = parts.map(p => ({
-      id: p.id,
-      index: p.index,
-      location: p.location,
-      czesc: p.czesc.trim(),
-      typ: p.typ,
-      tryb_naprawy: p.tryb_naprawy,
-      koszty_naprawy_pln: p.koszty_naprawy_pln,
-      koszt_amortyzacji_pln: p.koszt_amortyzacji_pln,
-      koszt_netto_pln: p.koszt_netto_pln,
-      photos: p.photos,
-    }))
+    // Strip the non-enumerable _src_key off the parts before sending,
+    // and stamp the locally-computed cost fields onto each part. The
+    // backend recomputes authoritatively, but sending the values keeps
+    // the saved JSON readable + the public report rendering instantly.
+    const cleanParts: MacadamPart[] = parts.map(p => {
+      const c = computePartCosts(p, labourRate, deprPct)
+      return {
+        id:                    p.id,
+        index:                 p.index,
+        location:              p.location,
+        czesc:                 p.czesc.trim(),
+        typ:                   p.typ,
+        tryb_naprawy:          p.tryb_naprawy,
+        qualification:         p.qualification,
+        repair_time_h:         p.repair_time_h,
+        parts_cost_pln:        p.parts_cost_pln,
+        is_manual:             p.is_manual,
+        koszty_naprawy_pln:    c.koszty_naprawy_pln,
+        koszt_amortyzacji_pln: c.koszt_amortyzacji_pln,
+        koszt_netto_pln:       c.koszt_netto_pln,
+        photos:                p.photos,
+      }
+    })
     const missing = cleanParts.findIndex(p => !p.czesc)
     if (missing >= 0) {
       setToast({
@@ -207,7 +307,9 @@ export default function AdminMacadamEditPage({
     const payload: MacadamData = {
       vehicle,
       parts: cleanParts,
-      totals: computeTotals(cleanParts),
+      totals: computeTotals(cleanParts, labourRate, deprPct),
+      labour_rate_pln_per_h: labourRate,
+      depreciation_pct:      deprPct,
     }
     setSaving(true)
     try {
@@ -330,6 +432,31 @@ export default function AdminMacadamEditPage({
           </a>
         </div>
 
+        {/* Order-level cost-engine parameters */}
+        <Section
+          title="Parametry zlecenia"
+          subtitle="Stawka roboczogodzinowa i procent amortyzacji — wpływają na wszystkie pozycje"
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+              gap: 12,
+            }}
+          >
+            <NumberField
+              label="Stawka roboczogodzinowa (PLN/h)"
+              value={labourRate}
+              onChange={setLabourRate}
+            />
+            <NumberField
+              label="Amortyzacja (%)"
+              value={deprPct}
+              onChange={setDeprPct}
+            />
+          </div>
+        </Section>
+
         {/* Vehicle (read-only) */}
         <Section title="Pojazd" subtitle="Prefill z inspekcji — tylko podgląd">
           <div
@@ -371,7 +498,7 @@ export default function AdminMacadamEditPage({
           title="Wybrane pozycje"
           subtitle={`${parts.length} ${
             parts.length === 1 ? "pozycja" : "pozycji"
-          } — koszty wprowadzane ręcznie`}
+          } — koszty obliczane automatycznie`}
         >
           {parts.length === 0 ? (
             <div style={{ color: "#86868B", fontSize: 13 }}>
@@ -383,6 +510,8 @@ export default function AdminMacadamEditPage({
                 <PartEditor
                   key={p.id}
                   part={p}
+                  labourRate={labourRate}
+                  deprPct={deprPct}
                   onChange={patch => updatePart(p.id, patch)}
                   onRemove={() => removePart(p.id)}
                   onRemovePhoto={i => removePhotoFromPart(p.id, i)}
@@ -523,15 +652,28 @@ export default function AdminMacadamEditPage({
             justifyContent: "space-between",
           }}
         >
-          <div style={{ fontSize: 13, color: "#6B7280" }}>
-            {parts.length} pozycji · netto{" "}
-            <strong style={{ color: "#16A34A" }}>
-              {computeTotals(parts).netto_pln.toLocaleString("pl-PL", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
-              PLN
-            </strong>
+          <div style={{ fontSize: 13, color: "#6B7280", display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <span>{parts.length} pozycji</span>
+            <span>
+              netto{" "}
+              <strong style={{ color: "#16A34A" }}>
+                {computeTotals(parts, labourRate, deprPct).netto_pln.toLocaleString("pl-PL", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                PLN
+              </strong>
+            </span>
+            <span>
+              brutto{" "}
+              <strong style={{ color: "#1D1D1F" }}>
+                {computeTotals(parts, labourRate, deprPct).gross_pln.toLocaleString("pl-PL", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                PLN
+              </strong>
+            </span>
           </div>
           <button
             type="button"
@@ -689,15 +831,22 @@ function ReadOnlyRow({
 
 function PartEditor({
   part,
+  labourRate,
+  deprPct,
   onChange,
   onRemove,
   onRemovePhoto,
 }: {
   part: MacadamPart
+  labourRate: number | null
+  deprPct: number | null
   onChange: (patch: Partial<MacadamPart>) => void
   onRemove: () => void
   onRemovePhoto: (idx: number) => void
 }) {
+  const computed = computePartCosts(part, labourRate, deprPct)
+  const showPartsCost = part.is_manual || part.qualification === "wymiana"
+  const partsCostLabel = part.is_manual ? "Koszt (PLN)" : "Koszt części (PLN)"
   return (
     <div
       style={{
@@ -748,6 +897,22 @@ function PartEditor({
           <option value="exterior">Zewnątrz</option>
           <option value="interior">Wnętrze</option>
         </select>
+        {part.is_manual && (
+          <span
+            style={{
+              background: "#EEF2FF",
+              color: "#3730A3",
+              borderRadius: 6,
+              padding: "3px 8px",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.4,
+              textTransform: "uppercase",
+            }}
+          >
+            Ręczna
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         <button
           type="button"
@@ -790,21 +955,32 @@ function PartEditor({
           value={part.tryb_naprawy}
           onChange={v => onChange({ tryb_naprawy: v })}
         />
-        <NumberField
-          label="Koszty naprawy (PLN)"
-          value={part.koszty_naprawy_pln}
-          onChange={n => onChange({ koszty_naprawy_pln: n })}
-        />
-        <NumberField
-          label="Koszt amortyzacji (PLN)"
-          value={part.koszt_amortyzacji_pln}
-          onChange={n => onChange({ koszt_amortyzacji_pln: n })}
-        />
-        <NumberField
-          label="Koszt netto (PLN)"
-          value={part.koszt_netto_pln}
-          onChange={n => onChange({ koszt_netto_pln: n })}
-        />
+        {!part.is_manual && (
+          <EnumField
+            label="Kwalifikacja"
+            value={part.qualification}
+            options={QUAL_OPTIONS}
+            onChange={v => onChange({ qualification: v })}
+          />
+        )}
+        {!part.is_manual && (
+          <NumberField
+            label="Czas naprawy (h)"
+            value={part.repair_time_h}
+            onChange={n => onChange({ repair_time_h: n })}
+            disabled={part.qualification === "akceptowalne"}
+          />
+        )}
+        {showPartsCost && (
+          <NumberField
+            label={partsCostLabel}
+            value={part.parts_cost_pln}
+            onChange={n => onChange({ parts_cost_pln: n })}
+          />
+        )}
+        <ComputedField label="Koszty naprawy (PLN)" value={computed.koszty_naprawy_pln} />
+        <ComputedField label="Amortyzacja (PLN)"   value={computed.koszt_amortyzacji_pln} />
+        <ComputedField label="Netto (PLN)"          value={computed.koszt_netto_pln} accent />
       </div>
 
       {part.photos.length > 0 && (
@@ -931,14 +1107,106 @@ function Field({
   )
 }
 
+function EnumField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span
+        style={{
+          fontSize: 10,
+          color: "#86868B",
+          fontWeight: 600,
+          letterSpacing: 0.4,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as T)}
+        style={{
+          background: "#fff",
+          border: "1px solid #E8E8ED",
+          borderRadius: 6,
+          padding: "8px 10px",
+          fontSize: 13,
+          width: "100%",
+        }}
+      >
+        {options.map(opt => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function ComputedField({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: number
+  accent?: boolean
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span
+        style={{
+          fontSize: 10,
+          color: "#86868B",
+          fontWeight: 600,
+          letterSpacing: 0.4,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </span>
+      <div
+        style={{
+          background: accent ? "#ECFDF5" : "#F9FAFB",
+          border: `1px solid ${accent ? "#A7F3D0" : "#F3F4F6"}`,
+          borderRadius: 6,
+          padding: "8px 10px",
+          fontSize: 13,
+          fontWeight: 700,
+          color: accent ? "#047857" : "#1D1D1F",
+          fontFamily:
+            "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        }}
+      >
+        {value.toLocaleString("pl-PL", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}
+      </div>
+    </div>
+  )
+}
+
 function NumberField({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string
   value: number | null
   onChange: (n: number | null) => void
+  disabled?: boolean
 }) {
   const [draft, setDraft] = useState<string>(
     value === null || value === undefined
@@ -974,13 +1242,14 @@ function NumberField({
         inputMode="decimal"
         value={draft}
         placeholder="—"
+        disabled={disabled}
         onChange={e => {
           const v = e.target.value
           setDraft(v)
           onChange(parseNumberOrNull(v))
         }}
         style={{
-          background: "#fff",
+          background: disabled ? "#F5F5F7" : "#fff",
           border: "1px solid #E8E8ED",
           borderRadius: 6,
           padding: "8px 10px",
@@ -988,6 +1257,8 @@ function NumberField({
           fontFamily:
             "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
           width: "100%",
+          color: disabled ? "#AEAEB2" : undefined,
+          cursor: disabled ? "not-allowed" : undefined,
         }}
       />
     </label>

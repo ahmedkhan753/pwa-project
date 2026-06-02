@@ -62,6 +62,14 @@ class MacadamPartIn(BaseModel):
     czesc:                 str
     typ:                   str = ""
     tryb_naprawy:          str = ""
+
+    # Cost-engine inputs.
+    qualification:         str = ""    # '' | lakierowanie | naprawa | wymiana | akceptowalne
+    repair_time_h:         Optional[float] = None
+    parts_cost_pln:        Optional[float] = None
+    is_manual:             bool = False
+
+    # Computed (recomputed server-side on PUT — client values ignored).
     koszty_naprawy_pln:    Optional[float] = None
     koszt_amortyzacji_pln: Optional[float] = None
     koszt_netto_pln:       Optional[float] = None
@@ -72,12 +80,17 @@ class MacadamTotalsIn(BaseModel):
     koszty_naprawy_pln: float = 0
     amortyzacja_pln:    float = 0
     netto_pln:          float = 0
+    gross_pln:          float = 0   # netto × 1.23
 
 
 class MacadamDataIn(BaseModel):
     vehicle: MacadamVehicleHeaderIn
     parts:   List[MacadamPartIn] = Field(default_factory=list)
     totals:  Optional[MacadamTotalsIn] = None
+
+    # Order-level cost-engine parameters.
+    labour_rate_pln_per_h: Optional[float] = None
+    depreciation_pct:      Optional[float] = None   # 0..100
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -101,7 +114,98 @@ def _empty_skeleton(deal_id: int) -> Dict[str, Any]:
         },
         "parts": [],
         "totals": None,
+        "labour_rate_pln_per_h": None,
+        "depreciation_pct":      None,
     }
+
+
+# ─── Cost engine — single source of truth ─────────────────────────────────────
+
+VALID_QUAL = {"", "lakierowanie", "naprawa", "wymiana", "akceptowalne"}
+
+
+def _r2(n: float) -> float:
+    """Round to 2 decimals (groszy)."""
+    return round(n + 0.0, 2)
+
+
+def _compute_part_costs(
+    part: Dict[str, Any],
+    rate_per_h: Optional[float],
+    depr_pct: Optional[float],
+) -> Dict[str, float]:
+    """Apply the calculation rules:
+      labour = repair_time_h × rate
+      akceptowalne → all 0
+      naprawa / lakierowanie → naprawy=labour, amort=labour×d, netto=labour×(1-d)
+      wymiana               → naprawy=labour+parts, amort=labour×d, netto=labour×(1-d)+parts
+      is_manual             → fixed = parts_cost_pln, treated like labour for depreciation:
+                              naprawy=fixed, amort=fixed×d, netto=fixed×(1-d)
+    Missing inputs default to 0 (no fabrication).
+    """
+    rate = float(rate_per_h or 0.0)
+    d    = float(depr_pct or 0.0) / 100.0
+    time = float(part.get("repair_time_h") or 0.0)
+    parts_cost = float(part.get("parts_cost_pln") or 0.0)
+    is_manual  = bool(part.get("is_manual"))
+    qual       = part.get("qualification") or ""
+
+    if is_manual:
+        fixed = parts_cost
+        return {
+            "koszty_naprawy_pln":    _r2(fixed),
+            "koszt_amortyzacji_pln": _r2(fixed * d),
+            "koszt_netto_pln":       _r2(fixed * (1 - d)),
+        }
+
+    if qual == "akceptowalne":
+        return {"koszty_naprawy_pln": 0.0, "koszt_amortyzacji_pln": 0.0, "koszt_netto_pln": 0.0}
+
+    labour = time * rate
+
+    if qual == "wymiana":
+        return {
+            "koszty_naprawy_pln":    _r2(labour + parts_cost),
+            "koszt_amortyzacji_pln": _r2(labour * d),
+            "koszt_netto_pln":       _r2(labour * (1 - d) + parts_cost),
+        }
+
+    if qual in ("naprawa", "lakierowanie"):
+        return {
+            "koszty_naprawy_pln":    _r2(labour),
+            "koszt_amortyzacji_pln": _r2(labour * d),
+            "koszt_netto_pln":       _r2(labour * (1 - d)),
+        }
+
+    # Empty qualification → nothing to compute.
+    return {"koszty_naprawy_pln": 0.0, "koszt_amortyzacji_pln": 0.0, "koszt_netto_pln": 0.0}
+
+
+def _recompute(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Recompute every part's cost fields + totals from the cost-engine
+    inputs. Mutates and returns the dict. Backend is the source of truth
+    — any cost numbers the client sent are overwritten here."""
+    rate = data.get("labour_rate_pln_per_h")
+    depr = data.get("depreciation_pct")
+    parts = data.get("parts") or []
+
+    total_k = total_a = total_n = 0.0
+    for p in parts:
+        c = _compute_part_costs(p, rate, depr)
+        p["koszty_naprawy_pln"]    = c["koszty_naprawy_pln"]
+        p["koszt_amortyzacji_pln"] = c["koszt_amortyzacji_pln"]
+        p["koszt_netto_pln"]       = c["koszt_netto_pln"]
+        total_k += c["koszty_naprawy_pln"]
+        total_a += c["koszt_amortyzacji_pln"]
+        total_n += c["koszt_netto_pln"]
+
+    data["totals"] = {
+        "koszty_naprawy_pln": _r2(total_k),
+        "amortyzacja_pln":    _r2(total_a),
+        "netto_pln":          _r2(total_n),
+        "gross_pln":          _r2(total_n * 1.23),
+    }
+    return data
 
 
 def _to_int_or_none(v: Any) -> Optional[int]:
@@ -204,7 +308,9 @@ async def get_costs(
             "vehicle": saved.get("vehicle") or _empty_skeleton(deal_id)["vehicle"],
             "parts":   saved.get("parts") or [],
             "totals":  saved.get("totals"),
-            "available_damages": available_damages,
+            "labour_rate_pln_per_h": saved.get("labour_rate_pln_per_h"),
+            "depreciation_pct":     saved.get("depreciation_pct"),
+            "available_damages":    available_damages,
         }
 
     skeleton = _empty_skeleton(deal_id)
@@ -235,8 +341,20 @@ async def put_costs(
                 status_code=422,
                 detail=f"Part {i} ({part.id}): 'location' must be 'interior' or 'exterior'",
             )
+        if part.qualification not in VALID_QUAL:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Part {i} ({part.id}): 'qualification' must be one of "
+                    f"{sorted(VALID_QUAL)} (got {part.qualification!r})"
+                ),
+            )
 
     data = payload.model_dump(mode="json")
+    # Backend is source of truth for computed values — recompute every
+    # part's cost fields + totals from rate/depr%/qualification/time/parts
+    # before persisting. Client-sent cost numbers are overwritten.
+    data = _recompute(data)
     serialised = json.dumps(data, ensure_ascii=False)
 
     row = db.query(KosztorysCost).filter(KosztorysCost.deal_id == deal_id).first()
