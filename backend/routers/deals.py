@@ -7,6 +7,7 @@ Filters deals by the logged-in inspector's phone number
 using dynamic Bitrix24 list field mapping.
 """
 
+import asyncio
 import re
 import time
 import logging
@@ -21,6 +22,44 @@ from services.bitrix_discovery import discovery
 
 router = APIRouter(prefix="/deals", tags=["Deals"])
 logger = logging.getLogger("routers.deals")
+
+
+# Self-heal: if startup's discovery.initialize failed (DNS/network flake),
+# app.state.bitrix_ready stays False forever and /deals returns empty until
+# someone restarts the backend. Trying initialize again here whenever
+# bitrix_ready is False recovers automatically as soon as Bitrix is reachable.
+# _reinit_lock serialises concurrent attempts so a burst of /deals requests
+# during recovery only fires one initialize.
+_reinit_lock = asyncio.Lock()
+
+
+async def _ensure_bitrix_ready(request: Request) -> bool:
+    """Return True iff the Bitrix integration is usable. If startup left
+    bitrix_ready=False, attempt a single lazy discovery.initialize under
+    a module-level lock (other concurrent callers wait for the result).
+    Returns False only when the lazy reinit also fails — the caller then
+    falls back to the existing degraded-mode response."""
+    if getattr(request.app.state, "bitrix_ready", False):
+        return True
+    gateway = getattr(request.app.state, "gateway", None)
+    if gateway is None:
+        return False
+    async with _reinit_lock:
+        # Re-check inside the lock — another request may have just initialised.
+        if getattr(request.app.state, "bitrix_ready", False):
+            return True
+        try:
+            logger.info("[deals] bitrix_ready=False — attempting lazy discovery re-init")
+            await discovery.initialize(gateway.call)
+            request.app.state.bitrix_ready = True
+            logger.info(
+                f"[deals] ✓ Lazy discovery re-init succeeded "
+                f"({discovery.get_mapped_count()} fields mapped)"
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"[deals] Lazy discovery re-init failed: {e}")
+            return False
 
 
 def _enum_label(field_id: str, value) -> str:
@@ -147,9 +186,8 @@ async def get_deals(
     Also sends email notification for newly assigned (unnotified) deals.
     """
     gateway = request.app.state.gateway
-    bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
 
-    if not bitrix_ready:
+    if not await _ensure_bitrix_ready(request):
         logger.warning("Bitrix not ready — returning empty deal list")
         return {"scheduled": [], "unscheduled": [], "total_in_bitrix": 0, "total_returned": 0}
 
@@ -289,9 +327,8 @@ async def get_deal(request: Request, deal_id: int):
     Returns single deal with all fields translated back to PWA keys.
     """
     gateway = request.app.state.gateway
-    bitrix_ready = getattr(request.app.state, "bitrix_ready", False)
 
-    if not bitrix_ready:
+    if not await _ensure_bitrix_ready(request):
         raise HTTPException(
             status_code=503,
             detail="Bitrix24 integration not ready",
