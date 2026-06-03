@@ -19,7 +19,7 @@ import { BlachSectionTable } from '../_components/BlachSectionTable';
 import { LakierSectionTable } from '../_components/LakierSectionTable';
 import { COLORS, fmtPLN, fmtNum, fmtEUR, fmtPct, splitMakeModel } from '../_components/styles';
 import type { KosztorysData } from '@/types/kosztorys';
-import type { MacadamData } from '@/types/kosztorysMacadam';
+import type { MacadamData, MacadamPart } from '@/types/kosztorysMacadam';
 
 // ─── Types for the inspection report (subset we use) ──────────────────────────
 
@@ -344,7 +344,118 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
           </div>
         </section>
 
-        {/* ═══ EUROTAX KOSZTORYS — 3 sections ════════════════════════════ */}
+        {/* ═══ USZKODZENIA — clean view (above-norm + acceptable) ════════════
+            Sits BEFORE the Eurotax raw-detail block so readers see the
+            actionable cost view first; the Eurotax tables with times +
+            operations follow at the end of the report. */}
+        {costs?.parts && costs.parts.length > 0 && (() => {
+          const aboveNorm = costs.parts.filter(p => p.qualification !== 'akceptowalne');
+          const accept    = costs.parts.filter(p => p.qualification === 'akceptowalne');
+          const monoNum: React.CSSProperties = {
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+            fontVariantNumeric: 'tabular-nums',
+          };
+          const sumNetto  = costs.totals?.netto_pln
+            ?? aboveNorm.reduce((s, p) => s + (p.koszt_netto_pln ?? 0), 0);
+          const sumGross  = costs.totals?.gross_pln ?? sumNetto * 1.23;
+          const sumVat    = sumGross - sumNetto;
+          const onPhoto   = (photos: string[], start: number) => setLightbox({ photos, start });
+
+          return (
+            <section id="uszkodzenia" className="kosz-card">
+              <div className="section-title">USZKODZENIA</div>
+
+              {aboveNorm.length > 0 && (
+                <>
+                  <h3 style={{
+                    fontSize: 14, fontWeight: 700, color: COLORS.text,
+                    textTransform: 'uppercase', letterSpacing: 0.6,
+                    margin: '0 0 16px',
+                  }}>
+                    Uszkodzenia ponadnormatywne
+                  </h3>
+                  {aboveNorm.map((p, i) => (
+                    <DamageCard
+                      key={p.id}
+                      part={p}
+                      isLast={i === aboveNorm.length - 1}
+                      onPhotoClick={onPhoto}
+                    />
+                  ))}
+
+                  {/* Cost summary — netto + VAT 23% + brutto */}
+                  <div style={{
+                    marginTop: 28,
+                    padding: '20px 24px',
+                    borderRadius: 12,
+                    background: COLORS.mutedLt,
+                    border: `1px solid ${COLORS.borderLt}`,
+                  }}>
+                    <div style={{
+                      fontSize: 11, color: COLORS.muted, fontWeight: 700,
+                      letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12,
+                    }}>
+                      Podsumowanie kosztów napraw
+                    </div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      padding: '8px 0', borderBottom: `1px solid ${COLORS.borderLt}`,
+                    }}>
+                      <span style={{ color: COLORS.muted, fontSize: 14 }}>Suma netto</span>
+                      <span style={{ fontWeight: 700, fontSize: 15, ...monoNum }}>{fmtPLN(sumNetto)}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      padding: '8px 0', borderBottom: `1px solid ${COLORS.borderLt}`,
+                    }}>
+                      <span style={{ color: COLORS.muted, fontSize: 14 }}>VAT 23%</span>
+                      <span style={{ fontWeight: 700, fontSize: 15, ...monoNum }}>{fmtPLN(sumVat)}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'baseline', padding: '12px 0 0',
+                    }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>
+                        Suma brutto
+                      </span>
+                      <span style={{ fontSize: 19, fontWeight: 800, color: COLORS.green, ...monoNum }}>
+                        {fmtPLN(sumGross)}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {accept.length > 0 && (
+                <>
+                  <h3 style={{
+                    fontSize: 14, fontWeight: 700, color: COLORS.text,
+                    textTransform: 'uppercase', letterSpacing: 0.6,
+                    margin: aboveNorm.length > 0 ? '40px 0 16px' : '0 0 16px',
+                  }}>
+                    Uszkodzenia akceptowalne{' '}
+                    <span style={{
+                      fontSize: 11, color: COLORS.muted, fontWeight: 500,
+                      textTransform: 'none', letterSpacing: 0,
+                    }}>
+                      (bez kosztu)
+                    </span>
+                  </h3>
+                  {accept.map((p, i) => (
+                    <AcceptableRow
+                      key={p.id}
+                      part={p}
+                      isLast={i === accept.length - 1}
+                      onPhotoClick={onPhoto}
+                    />
+                  ))}
+                </>
+              )}
+            </section>
+          );
+        })()}
+
+        {/* ═══ EUROTAX KOSZTORYS — raw operations, times, materials (detail) ═ */}
         {hasEurotax && (
           <>
             <section id="eurotax" className="kosz-card">
@@ -354,105 +465,6 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
               <BlachSectionTable title="Pr.dodatkowe"  section={kosztorys.sections.pr_dodatkowe} />
               <LakierSectionTable title="Lakiernik"    section={kosztorys.sections.lakiernik} />
             </section>
-
-            {/* ═══ USZKODZENIA — saved above-norm cost cards ══════════════ */}
-            {costs?.parts && costs.parts.length > 0 && (
-              <section id="uszkodzenia" className="kosz-card">
-                <div className="section-title">USZKODZENIA</div>
-                {costs.parts.map((p, i) => {
-                  const isLast = i === costs.parts.length - 1;
-                  const monoNum: React.CSSProperties = {
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                    fontVariantNumeric: 'tabular-nums',
-                  };
-                  return (
-                    <div
-                      key={p.id}
-                      className="kosz-damage-card"
-                      style={{
-                        display: 'flex',
-                        gap: 24,
-                        padding: '20px 0',
-                        borderBottom: isLast ? 'none' : `1px solid ${COLORS.borderLt}`,
-                        alignItems: 'flex-start',
-                      }}
-                    >
-                      {p.photos.length > 0 && (
-                        <div style={{ flex: '1 1 0', maxWidth: '45%', minWidth: 0 }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
-                            {p.photos.map((src, pi) => (
-                              <div
-                                key={`${p.id}-${pi}`}
-                                onClick={() => setLightbox({ photos: p.photos, start: pi })}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    setLightbox({ photos: p.photos, start: pi });
-                                  }
-                                }}
-                                style={{
-                                  aspectRatio: '4 / 3',
-                                  cursor: 'pointer',
-                                  borderRadius: 6,
-                                  overflow: 'hidden',
-                                  background: COLORS.mutedLt,
-                                  border: `1px solid ${COLORS.borderLt}`,
-                                }}
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={src}
-                                  alt=""
-                                  loading="lazy"
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div style={{ flex: '1 1 0', minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>
-                          {p.index} | {p.czesc}
-                        </div>
-                        <DamageRow label="Typ uszkodzenia" value={p.typ || '—'} />
-                        <DamageRow label="Tryb naprawy" value={p.tryb_naprawy || '—'} />
-                        <DamageRow
-                          label="Koszty naprawy"
-                          value={<span style={monoNum}>{fmtPLN(p.koszty_naprawy_pln)}</span>}
-                        />
-                        <DamageRow
-                          label="Koszt amortyzacji"
-                          value={<span style={monoNum}>{fmtPLN(p.koszt_amortyzacji_pln)}</span>}
-                        />
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'baseline',
-                            padding: '14px 0 0',
-                            gap: 16,
-                          }}
-                        >
-                          <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>
-                            KOSZT NETTO{' '}
-                            <span style={{ fontSize: 11, fontWeight: 400, color: COLORS.muted }}>
-                              (bez VAT)
-                            </span>
-                          </span>
-                          <span style={{ ...monoNum, fontSize: 17, fontWeight: 700, color: COLORS.green }}>
-                            {fmtPLN(p.koszt_netto_pln)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </section>
-            )}
 
             {/* ═══ SUMMARY ════════════════════════════════════════════════ */}
             <section id="summary" className="kosz-card">
@@ -838,6 +850,199 @@ function DamageRow({ label, value }: { label: string; value: React.ReactNode }) 
       <span style={{ fontSize: 13, color: COLORS.muted }}>{label}</span>
       <span style={{ fontSize: 14, color: COLORS.text, textAlign: 'right', overflowWrap: 'anywhere' }}>
         {value}
+      </span>
+    </div>
+  );
+}
+
+// ─── Damage cards — above-norm (full) and acceptable (simple) ────────────────
+
+function DamageCard({
+  part,
+  isLast,
+  onPhotoClick,
+}: {
+  part: MacadamPart;
+  isLast: boolean;
+  onPhotoClick: (photos: string[], start: number) => void;
+}) {
+  const monoNum: React.CSSProperties = {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontVariantNumeric: 'tabular-nums',
+  };
+  return (
+    <div
+      className="kosz-damage-card"
+      style={{
+        display: 'flex',
+        gap: 24,
+        padding: '20px 0',
+        borderBottom: isLast ? 'none' : `1px solid ${COLORS.borderLt}`,
+        alignItems: 'flex-start',
+      }}
+    >
+      {part.photos.length > 0 && (
+        <div style={{ flex: '1 1 0', maxWidth: '45%', minWidth: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+            {part.photos.map((src, pi) => (
+              <div
+                key={`${part.id}-${pi}`}
+                onClick={() => onPhotoClick(part.photos, pi)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onPhotoClick(part.photos, pi);
+                  }
+                }}
+                style={{
+                  aspectRatio: '4 / 3',
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  background: COLORS.mutedLt,
+                  border: `1px solid ${COLORS.borderLt}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt=""
+                  loading="lazy"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: '1 1 0', minWidth: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>
+          {part.index} | {part.czesc}
+        </div>
+        <DamageRow label="Typ uszkodzenia" value={part.typ || '—'} />
+        <DamageRow label="Tryb naprawy" value={part.tryb_naprawy || '—'} />
+        <DamageRow
+          label="Koszty naprawy"
+          value={<span style={monoNum}>{fmtPLN(part.koszty_naprawy_pln)}</span>}
+        />
+        <DamageRow
+          label="Koszt amortyzacji"
+          value={<span style={monoNum}>{fmtPLN(part.koszt_amortyzacji_pln)}</span>}
+        />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            padding: '14px 0 0',
+            gap: 16,
+          }}
+        >
+          <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>
+            KOSZT NETTO{' '}
+            <span style={{ fontSize: 11, fontWeight: 400, color: COLORS.muted }}>
+              (bez VAT)
+            </span>
+          </span>
+          <span style={{ ...monoNum, fontSize: 17, fontWeight: 700, color: COLORS.green }}>
+            {fmtPLN(part.koszt_netto_pln)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AcceptableRow({
+  part,
+  isLast,
+  onPhotoClick,
+}: {
+  part: MacadamPart;
+  isLast: boolean;
+  onPhotoClick: (photos: string[], start: number) => void;
+}) {
+  return (
+    <div
+      className="kosz-acceptable-row"
+      style={{
+        display: 'flex',
+        gap: 16,
+        padding: '14px 0',
+        borderBottom: isLast ? 'none' : `1px solid ${COLORS.borderLt}`,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      {part.photos.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          {part.photos.slice(0, 4).map((src, pi) => (
+            <div
+              key={`${part.id}-${pi}`}
+              onClick={() => onPhotoClick(part.photos, pi)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onPhotoClick(part.photos, pi);
+                }
+              }}
+              style={{
+                width: 64,
+                height: 48,
+                cursor: 'pointer',
+                borderRadius: 5,
+                overflow: 'hidden',
+                background: COLORS.mutedLt,
+                border: `1px solid ${COLORS.borderLt}`,
+                flexShrink: 0,
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt=""
+                loading="lazy"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </div>
+          ))}
+          {part.photos.length > 4 && (
+            <span style={{ alignSelf: 'center', fontSize: 11, color: COLORS.muted, marginLeft: 4 }}>
+              +{part.photos.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+      <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+          {part.index} | {part.czesc}
+        </div>
+        {part.typ && (
+          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
+            {part.typ}
+          </div>
+        )}
+      </div>
+      <span
+        style={{
+          background: COLORS.mutedLt,
+          color: COLORS.muted,
+          border: `1px solid ${COLORS.borderLt}`,
+          borderRadius: 999,
+          padding: '4px 10px',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          textTransform: 'uppercase',
+          flexShrink: 0,
+        }}
+      >
+        Bez kosztu
       </span>
     </div>
   );
