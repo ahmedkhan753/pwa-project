@@ -91,6 +91,8 @@ class MacadamDataIn(BaseModel):
     # Order-level cost-engine parameters.
     labour_rate_pln_per_h: Optional[float] = None
     depreciation_pct:      Optional[float] = None   # 0..100
+    # Material + small parts — single manual figure, NOT depreciated.
+    koszt_materialu_pln:   Optional[float] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -116,6 +118,7 @@ def _empty_skeleton(deal_id: int) -> Dict[str, Any]:
         "totals": None,
         "labour_rate_pln_per_h": None,
         "depreciation_pct":      None,
+        "koszt_materialu_pln":   None,
     }
 
 
@@ -198,6 +201,14 @@ def _recompute(data: Dict[str, Any]) -> Dict[str, Any]:
         total_k += c["koszty_naprawy_pln"]
         total_a += c["koszt_amortyzacji_pln"]
         total_n += c["koszt_netto_pln"]
+
+    # Material + small parts — single manual figure added after the
+    # per-part sum, with NO depreciation. Flows straight into net (and
+    # therefore VAT). Also rolled into koszty_naprawy_pln so the
+    # "total cost" headline matches netto + amortyzacja accounting.
+    material = float(data.get("koszt_materialu_pln") or 0.0)
+    total_n += material
+    total_k += material
 
     data["totals"] = {
         "koszty_naprawy_pln": _r2(total_k),
@@ -310,6 +321,7 @@ async def get_costs(
             "totals":  saved.get("totals"),
             "labour_rate_pln_per_h": saved.get("labour_rate_pln_per_h"),
             "depreciation_pct":     saved.get("depreciation_pct"),
+            "koszt_materialu_pln":  saved.get("koszt_materialu_pln"),
             "available_damages":    available_damages,
         }
 

@@ -66,4 +66,8 @@ export interface MacadamData {
   // Order-level cost-engine parameters.
   labour_rate_pln_per_h: number | null;
   depreciation_pct:      number | null;   // 0..100
+
+  // Material + small parts (single manual figure, NOT depreciated —
+  // flows straight into the net total, then VAT).
+  koszt_materialu_pln:   number | null;
 }

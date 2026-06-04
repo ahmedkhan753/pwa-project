@@ -355,8 +355,9 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
             fontVariantNumeric: 'tabular-nums',
           };
+          const material  = costs.koszt_materialu_pln ?? 0;
           const sumNetto  = costs.totals?.netto_pln
-            ?? aboveNorm.reduce((s, p) => s + (p.koszt_netto_pln ?? 0), 0);
+            ?? (aboveNorm.reduce((s, p) => s + (p.koszt_netto_pln ?? 0), 0) + material);
           const sumGross  = costs.totals?.gross_pln ?? sumNetto * 1.23;
           const sumVat    = sumGross - sumNetto;
           const onPhoto   = (photos: string[], start: number) => setLightbox({ photos, start });
@@ -383,9 +384,34 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                     />
                   ))}
 
+                  {/* Material + small parts — single value, not depreciated;
+                      shown right above the summary so it visibly contributes
+                      to Suma netto. Hidden when zero so legacy kosztorysy
+                      without this field stay clean. */}
+                  {material > 0 && (
+                    <div style={{
+                      marginTop: 28,
+                      padding: '14px 20px',
+                      borderRadius: 12,
+                      background: '#fff',
+                      border: `1px solid ${COLORS.borderLt}`,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      gap: 16,
+                    }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>
+                        Koszt materiału i części drobnych
+                      </span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, ...monoNum }}>
+                        {fmtPLN(material)}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Cost summary — netto + VAT 23% + brutto */}
                   <div style={{
-                    marginTop: 28,
+                    marginTop: material > 0 ? 12 : 28,
                     padding: '20px 24px',
                     borderRadius: 12,
                     background: COLORS.mutedLt,

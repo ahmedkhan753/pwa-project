@@ -120,7 +120,12 @@ function computePartCosts(
   return { koszty_naprawy_pln: 0, koszt_amortyzacji_pln: 0, koszt_netto_pln: 0 }
 }
 
-function computeTotals(parts: MacadamPart[], rate: number | null, deprPct: number | null) {
+function computeTotals(
+  parts: MacadamPart[],
+  rate: number | null,
+  deprPct: number | null,
+  materialCost: number | null,
+) {
   let k = 0, a = 0, n = 0
   for (const p of parts) {
     const c = computePartCosts(p, rate, deprPct)
@@ -128,6 +133,11 @@ function computeTotals(parts: MacadamPart[], rate: number | null, deprPct: numbe
     a += c.koszt_amortyzacji_pln
     n += c.koszt_netto_pln
   }
+  // Material + small parts — added straight to net (and koszty_naprawy
+  // headline). NOT depreciated. Mirrors backend _recompute.
+  const mat = materialCost ?? 0
+  n += mat
+  k += mat
   return {
     koszty_naprawy_pln: r2(k),
     amortyzacja_pln:    r2(a),
@@ -157,6 +167,7 @@ export default function AdminMacadamEditPage({
   const [available, setAvailable] = useState<AvailableDamage[]>([])
   const [labourRate, setLabourRate] = useState<number | null>(null)
   const [deprPct, setDeprPct] = useState<number | null>(null)
+  const [materialCost, setMaterialCost] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{
@@ -187,6 +198,7 @@ export default function AdminMacadamEditPage({
       setAvailable(json.available_damages ?? [])
       setLabourRate(json.labour_rate_pln_per_h ?? null)
       setDeprPct(json.depreciation_pct ?? null)
+      setMaterialCost(json.koszt_materialu_pln ?? null)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setToast({ kind: "err", msg: `Nie udało się wczytać: ${msg}` })
@@ -307,9 +319,10 @@ export default function AdminMacadamEditPage({
     const payload: MacadamData = {
       vehicle,
       parts: cleanParts,
-      totals: computeTotals(cleanParts, labourRate, deprPct),
+      totals: computeTotals(cleanParts, labourRate, deprPct, materialCost),
       labour_rate_pln_per_h: labourRate,
       depreciation_pct:      deprPct,
+      koszt_materialu_pln:   materialCost,
     }
     setSaving(true)
     try {
@@ -435,7 +448,7 @@ export default function AdminMacadamEditPage({
         {/* Order-level cost-engine parameters */}
         <Section
           title="Parametry zlecenia"
-          subtitle="Stawka roboczogodzinowa i procent amortyzacji — wpływają na wszystkie pozycje"
+          subtitle="Stawka, amortyzacja i koszt materiału — wpływają na wszystkie pozycje"
         >
           <div
             style={{
@@ -453,6 +466,11 @@ export default function AdminMacadamEditPage({
               label="Amortyzacja (%)"
               value={deprPct}
               onChange={setDeprPct}
+            />
+            <NumberField
+              label="Koszt materiału i części drobnych (PLN)"
+              value={materialCost}
+              onChange={setMaterialCost}
             />
           </div>
         </Section>
@@ -657,7 +675,7 @@ export default function AdminMacadamEditPage({
             <span>
               netto{" "}
               <strong style={{ color: "#16A34A" }}>
-                {computeTotals(parts, labourRate, deprPct).netto_pln.toLocaleString("pl-PL", {
+                {computeTotals(parts, labourRate, deprPct, materialCost).netto_pln.toLocaleString("pl-PL", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}{" "}
@@ -667,7 +685,7 @@ export default function AdminMacadamEditPage({
             <span>
               brutto{" "}
               <strong style={{ color: "#1D1D1F" }}>
-                {computeTotals(parts, labourRate, deprPct).gross_pln.toLocaleString("pl-PL", {
+                {computeTotals(parts, labourRate, deprPct, materialCost).gross_pln.toLocaleString("pl-PL", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}{" "}
