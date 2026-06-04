@@ -168,6 +168,16 @@ export default function AdminMacadamEditPage({
   const [labourRate, setLabourRate] = useState<number | null>(null)
   const [deprPct, setDeprPct] = useState<number | null>(null)
   const [materialCost, setMaterialCost] = useState<number | null>(null)
+
+  // Read-only subtotal: sum of per-part koszt_netto_pln across above-norm
+  // parts only (excludes akceptowalne, which have 0 cost by rule). Derived
+  // live from the same engine the per-part cells and save-bar totals use —
+  // never sent in the payload, never editable.
+  const partsNetto = useMemo(() => {
+    return parts
+      .filter(p => p.qualification !== "akceptowalne")
+      .reduce((s, p) => s + computePartCosts(p, labourRate, deprPct).koszt_netto_pln, 0)
+  }, [parts, labourRate, deprPct])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{
@@ -471,6 +481,10 @@ export default function AdminMacadamEditPage({
               label="Koszt materiału i części drobnych (PLN)"
               value={materialCost}
               onChange={setMaterialCost}
+            />
+            <ComputedField
+              label="Razem netto części (uszkodzenia)"
+              value={partsNetto}
             />
           </div>
         </Section>

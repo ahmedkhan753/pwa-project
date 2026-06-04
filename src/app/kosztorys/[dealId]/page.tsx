@@ -1182,6 +1182,10 @@ const SHARED_CSS = `
   table.data-table tr:hover td { background:#FAFAFA; }
   table.data-table .total-row td { font-weight:700; border-top:2px solid #E5E7EB; background:#F9FAFB; }
   .amt { text-align:right; font-variant-numeric:tabular-nums; color:#1D1D1F; }
+  /* Higher specificity than 'table.data-table th { text-align:left }' so the
+     numeric column HEADERS line up over their right-aligned cells on desktop. */
+  table.data-table th.amt,
+  table.data-table td.amt { text-align:right; }
 
   /* Horizontal scroll with visible affordance */
   .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }

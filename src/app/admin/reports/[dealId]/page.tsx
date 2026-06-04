@@ -721,20 +721,37 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
                 </p>
               )}
             </div>
-            <a
-              href="/admin/reports"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors"
-              style={{
-                minHeight: 44,
-                borderRadius: 10,
-                background: "#F5F5F7",
-                color: "#1D1D1F",
-                border: "1px solid #E8E8ED",
-              }}
-            >
-              <i className="fa-solid fa-arrow-left" style={{ fontSize: 12 }} />
-              Lista
-            </a>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <a
+                href={`/report/${dealId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors"
+                style={{
+                  minHeight: 44,
+                  borderRadius: 10,
+                  background: "#fff",
+                  color: "#16A34A",
+                  border: "1px solid #16A34A",
+                }}
+              >
+                Otwórz raport ↗
+              </a>
+              <a
+                href="/admin/reports"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors"
+                style={{
+                  minHeight: 44,
+                  borderRadius: 10,
+                  background: "#F5F5F7",
+                  color: "#1D1D1F",
+                  border: "1px solid #E8E8ED",
+                }}
+              >
+                <i className="fa-solid fa-arrow-left" style={{ fontSize: 12 }} />
+                Lista
+              </a>
+            </div>
           </div>
         </header>
 

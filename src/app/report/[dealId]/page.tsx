@@ -712,6 +712,16 @@ function KomentarzBlock({ text }: { text: string }) {
   );
 }
 
+// Guard for <img src={signature_url}> — the backend sometimes returns an
+// empty string (legacy rows) which would otherwise render a broken-image
+// icon. Accept only a real http(s) / data: URL after trimming.
+function isValidSignatureUrl(v: unknown): v is string {
+  if (typeof v !== 'string') return false;
+  const s = v.trim();
+  if (!s) return false;
+  return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/') || s.startsWith('data:');
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function ReportPage({ params }: { params: { dealId: string } }) {
@@ -1988,9 +1998,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16 }}>
               {data.signatures?.inspector && (
                 <div style={{ textAlign:'center' }}>
-                  {data.signatures.inspector.signature_url && (
+                  {isValidSignatureUrl(data.signatures.inspector.signature_url) && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={data.signatures.inspector.signature_url} alt="Podpis inspektora" style={{ maxHeight:80,maxWidth:200,marginBottom:8 }}/>
+                    <img src={data.signatures.inspector.signature_url as string} alt="Podpis inspektora" style={{ maxHeight:80,maxWidth:200,marginBottom:8 }}/>
                   )}
                   <div style={{ borderTop:'2px solid #E8E8ED',paddingTop:8,fontSize:13,fontWeight:600 }}>
                     Inspektor: {data.signatures.inspector.name}
@@ -1999,9 +2009,9 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               )}
               {data.signatures?.client && (
                 <div style={{ textAlign:'center' }}>
-                  {data.signatures.client.signature_url && (
+                  {isValidSignatureUrl(data.signatures.client.signature_url) && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={data.signatures.client.signature_url} alt="Podpis klienta" style={{ maxHeight:80,maxWidth:200,marginBottom:8 }}/>
+                    <img src={data.signatures.client.signature_url as string} alt="Podpis klienta" style={{ maxHeight:80,maxWidth:200,marginBottom:8 }}/>
                   )}
                   <div style={{ borderTop:'2px solid #E8E8ED',paddingTop:8,fontSize:13,fontWeight:600 }}>
                     Klient: {data.signatures.client.name}
