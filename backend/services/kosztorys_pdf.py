@@ -306,6 +306,23 @@ def _section_order_params(costs: Dict[str, Any]) -> List[Any]:
     return [_section_header("2. Parametry zlecenia"), sp(0.15), t, sp(0.5)]
 
 
+# Damage-card width budget (A4 portrait, CONTENT_W = 180mm = ~510pt).
+# Padding values stay raw points (reportlab convention); column widths
+# stay in mm so the math is human-readable. Earlier fractional widths
+# (0.40 / 0.60 × CONTENT_W) put the 2×2 photo grid wider than its column
+# → photos spilled onto the label text and the labels rendered half-
+# hidden behind the thumbnails.
+_DAMAGE_PAD_LR        = 8                            # outer cell padding (pt, L+R each)
+_DAMAGE_THUMB_W       = 30 * mm                      # thumbnail max width
+_DAMAGE_THUMB_H       = 24 * mm                      # thumbnail max height
+_DAMAGE_GRID_GUTTER   = 4                            # grid cell extra width vs thumb (pt)
+_DAMAGE_PHOTO_COL     = 72 * mm                      # outer left column (fixed mm)
+_DAMAGE_TEXT_COL      = CONTENT_W - _DAMAGE_PHOTO_COL  # outer right column
+_DAMAGE_TEXT_INNER    = _DAMAGE_TEXT_COL - 2 * _DAMAGE_PAD_LR  # text cell content area
+_DAMAGE_LABEL_COL     = _DAMAGE_TEXT_INNER * 0.45
+_DAMAGE_VALUE_COL     = _DAMAGE_TEXT_INNER - _DAMAGE_LABEL_COL
+
+
 def _damage_card(
     part: Dict[str, Any],
     idx: int,
@@ -314,26 +331,28 @@ def _damage_card(
     """One above-norm damage rendered as a 2-col block: photos (left) +
     label/value rows (right). KeepTogether so a damage doesn't split
     across a page break. Photos come from the pre-fetched cache so this
-    function does NO HTTP I/O — keeps render time predictable."""
+    function does NO HTTP I/O — keeps render time predictable.
+
+    Widths use the _DAMAGE_* constants above so the grid + info table
+    always fit inside their parent cells (no photo/text overlap)."""
     fn, fnb = _fn()
 
     # ── Left column: up to 4 photo thumbnails arranged in a 2x2 grid.
     photos = part.get("photos") or []
     photo_cell: Any
     if photos:
-        thumb_max_w = 38 * mm
-        thumb_max_h = 28 * mm
         imgs = []
         for src in photos[:4]:
             data = photo_cache.get(src) if isinstance(src, str) else None
-            img = load_image(data, thumb_max_w, thumb_max_h) if data else None
+            img = load_image(data, _DAMAGE_THUMB_W, _DAMAGE_THUMB_H) if data else None
             imgs.append(img if img is not None else p("—", _style("_ph_miss", fontSize=8, textColor=GRAY_MUTED)))
         # Pad to 4 cells so the 2x2 grid is rectangular.
         while len(imgs) < 4:
             imgs.append(p("", _style("_ph_empty")))
         grid = Table(
             [[imgs[0], imgs[1]], [imgs[2], imgs[3]]],
-            colWidths=[thumb_max_w + 4, thumb_max_w + 4],
+            colWidths=[_DAMAGE_THUMB_W + _DAMAGE_GRID_GUTTER,
+                       _DAMAGE_THUMB_W + _DAMAGE_GRID_GUTTER],
         )
         grid.setStyle(TableStyle([
             ("LEFTPADDING",   (0, 0), (-1, -1), 2),
@@ -374,7 +393,7 @@ def _damage_card(
         [p("KOSZT NETTO (bez VAT)", _style("_drnl", fontName=fnb, fontSize=10, leading=13, textColor=NAVY)),
          p(netto, netto_style)],
     ]
-    info_tbl = Table(info_rows, colWidths=[CONTENT_W * 0.30, CONTENT_W * 0.30])
+    info_tbl = Table(info_rows, colWidths=[_DAMAGE_LABEL_COL, _DAMAGE_VALUE_COL])
     info_tbl.setStyle(TableStyle([
         ("LINEBELOW",     (0, 0), (-1, -2), 0.25, GRAY_BORDER),
         ("LEFTPADDING",   (0, 0), (-1, -1), 4),
@@ -387,7 +406,7 @@ def _damage_card(
 
     right_col = Table(
         [[title], [info_tbl]],
-        colWidths=[CONTENT_W * 0.60],
+        colWidths=[_DAMAGE_TEXT_INNER],
     )
     right_col.setStyle(TableStyle([
         ("LEFTPADDING",   (0, 0), (-1, -1), 0),
@@ -399,12 +418,12 @@ def _damage_card(
 
     outer = Table(
         [[photo_cell, right_col]],
-        colWidths=[CONTENT_W * 0.40, CONTENT_W * 0.60],
+        colWidths=[_DAMAGE_PHOTO_COL, _DAMAGE_TEXT_COL],
     )
     outer.setStyle(TableStyle([
         ("BOX",           (0, 0), (-1, -1), 0.5, GRAY_BORDER),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+        ("LEFTPADDING",   (0, 0), (-1, -1), _DAMAGE_PAD_LR),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), _DAMAGE_PAD_LR),
         ("TOPPADDING",    (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("VALIGN",        (0, 0), (-1, -1), "TOP"),
