@@ -27,6 +27,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -383,3 +384,45 @@ async def put_costs(
         f"{len(serialised)} bytes)"
     )
     return data
+
+
+# ─── PDF download — public (no auth) ──────────────────────────────────────────
+
+@router.get("/{deal_id}/pdf")
+async def get_costs_pdf(deal_id: int, db: Session = Depends(get_db)):
+    """Render the saved KosztorysCost row as a downloadable A4 PDF.
+    404 if no costs have been saved for this deal yet."""
+    row = db.query(KosztorysCost).filter(KosztorysCost.deal_id == deal_id).first()
+    if row is None or not row.data_json:
+        raise HTTPException(status_code=404, detail="Brak zapisanego kosztorysu")
+    try:
+        saved = json.loads(row.data_json)
+    except (TypeError, ValueError) as e:
+        logger.error(f"[kosztorys-costs] deal {deal_id}: stored JSON unparseable ({e})")
+        raise HTTPException(status_code=500, detail="Stored kosztorys JSON unparseable")
+    if not isinstance(saved, dict):
+        raise HTTPException(status_code=500, detail="Stored kosztorys is not an object")
+
+    # Inject deal_id so the PDF header / filename can use it.
+    saved["deal_id"] = deal_id
+
+    # Lazy import — avoids pulling reportlab into module-load cost when
+    # the PDF endpoint isn't hit.
+    from services.kosztorys_pdf import build_kosztorys_pdf
+    try:
+        pdf_bytes = build_kosztorys_pdf(saved)
+    except Exception as e:
+        logger.error(f"[kosztorys-costs] deal {deal_id}: PDF build failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF build failed: {e}")
+
+    logger.info(
+        f"[kosztorys-costs] deal {deal_id}: served PDF ({len(pdf_bytes)} bytes)"
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="kosztorys_{deal_id}.pdf"',
+            "Cache-Control": "no-cache, must-revalidate",
+        },
+    )

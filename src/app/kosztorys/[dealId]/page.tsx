@@ -199,6 +199,23 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
               </a>
             ))}
           </div>
+          {costs?.parts && costs.parts.length > 0 && (
+            <a
+              href={`/api/kosztorys-costs/${dealId}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="no-print print-btn"
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: '1.5px solid #B71C1C', background: '#fff',
+                color: '#B71C1C', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                textDecoration: 'none',
+              }}
+            >
+              <i className="fas fa-file-pdf" style={{ fontSize: 13 }} />
+              <span className="print-label">Pobierz PDF</span>
+            </a>
+          )}
           <button onClick={() => window.print()} className="no-print print-btn" style={{
             padding: '8px 16px', borderRadius: 8, border: '1.5px solid #D1D5DB', background: '#fff',
             color: '#374151', fontSize: 12, fontWeight: 700, cursor: 'pointer',
