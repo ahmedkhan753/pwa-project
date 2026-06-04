@@ -25,10 +25,11 @@ Usage
 """
 from __future__ import annotations
 
+import base64
 import io
+import json
 import logging
-import os
-from concurrent.futures import ThreadPoolExecutor
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -50,19 +51,17 @@ from services.protokol_wycena_pdf import (
     _section_header, _data_ts, _draw_page_frame,
 )
 from services.pdf_generator import _fn, load_image, load_image_from_source
+from database import SessionLocal
+from models.inspector import InspectionPhoto, InspectionRecord
 
 logger = logging.getLogger("services.kosztorys_pdf")
 
 
-# ─── Photo fetch — short timeout, parallel ───────────────────────────────────
-
-# Talk to our own backend in-process via localhost so the server isn't
-# forced through nginx + the public hostname to fetch its own gallery
-# bytes (that round-trip caused the 504 — see the photo-load PR).
-_INTERNAL_BASE  = os.getenv("INTERNAL_APP_BASE", "http://localhost:8000").rstrip("/")
-_PUBLIC_BASE    = os.getenv("PUBLIC_APP_BASE",   "https://app.zaufajrzeczoznawcy.pl").rstrip("/")
-_PHOTO_TIMEOUT  = httpx.Timeout(4.0, connect=2.0)
-_PHOTO_WORKERS  = 8
+# Short timeout for the rare case a non-gallery photo URL (genuine
+# external http/https) is encountered. Our own gallery photos go
+# straight through SQLAlchemy — no HTTP — so this timeout doesn't
+# affect them.
+_EXTERNAL_PHOTO_TIMEOUT = httpx.Timeout(4.0, connect=2.0)
 
 
 # ─── Money + value formatting ────────────────────────────────────────────────
@@ -81,53 +80,125 @@ def _fmt_pln(v: Any) -> str:
     return raw.replace(",", " ").replace(".", ",").replace(" ", " ") + " PLN"
 
 
-def _internal_photo_url(url: Optional[str]) -> str:
-    """Resolve a saved photo URL into an INTERNAL fetch URL the server
-    can hit without going through nginx + the public host. Saved URLs
-    look like /api/gallery/{deal_id}/damage/... — nginx strips the
-    /api on the public path, so the backend route is actually
-    /gallery/... (see routers.report L23 — no prefix on the report
-    router). We mirror that here when building the localhost URL.
+# ─── Photo loaders — direct DB read, no HTTP ─────────────────────────────────
+#
+# The httpx-to-localhost approach deadlocks: when build_kosztorys_pdf
+# runs inside the same uvicorn worker that's serving the kosztorys
+# PDF request, an in-process HTTP call back to /gallery on the same
+# server can't be served until the current request returns → request
+# times out (504). The gallery handler reads from SQLAlchemy anyway,
+# so we mirror its query directly and skip HTTP entirely.
+#
+# The two saved-URL shapes we recognise (mirroring routers.report):
+#   /(api/)?gallery/{deal_id}/damage/{ext|int}/{dmg_idx}/{photo_idx}
+#   /(api/)?gallery/{deal_id}/media/{slot_id}
+# Anything else (real external http/https, data: URI) falls back to
+# load_image_from_source so genuinely-external photos still work.
 
-    Pass-through:
-      * Already-absolute http(s) / data: URIs are returned unchanged so
-        external photos still work.
-    Local app:
-      * /api/<rest>   →   {INTERNAL_BASE}/<rest>     (strip /api/)
-      * /<rest>       →   {INTERNAL_BASE}/<rest>
-    """
-    if not url:
-        return ""
-    if url.startswith(("http://", "https://", "data:")):
-        return url
-    path = url if url.startswith("/") else f"/{url}"
-    if path.startswith("/api/"):
-        path = path[len("/api"):]  # → "/gallery/..." (or "/<other-route>/...")
-    return f"{_INTERNAL_BASE}{path}"
+_DAMAGE_PHOTO_RE = re.compile(
+    r"^/(?:api/)?gallery/(\d+)/damage/(ext|int)/(\d+)/(\d+)/?$"
+)
+_MEDIA_PHOTO_RE = re.compile(
+    r"^/(?:api/)?gallery/(\d+)/media/([^/?#]+)/?$"
+)
 
 
-def _public_photo_url(url: Optional[str]) -> str:
-    """Public fallback URL — used only if the internal fetch fails (so
-    a misconfigured INTERNAL_APP_BASE doesn't break PDFs that the
-    public host could still serve)."""
-    if not url:
-        return ""
-    if url.startswith(("http://", "https://", "data:")):
-        return url
-    path = url if url.startswith("/") else f"/{url}"
-    return f"{_PUBLIC_BASE}{path}"
+def _load_damage_photo_from_db(
+    deal_id: int, source: str, dmg_idx: int, photo_idx: int,
+) -> bytes:
+    """Mirrors routers.report.get_gallery_damage_photo's lookup —
+    InspectionRecord.{exterior|interior}_damage_json → damages[i]
+    ["photos"][j] (base64 string, optionally prefixed with
+    'data:image/...;base64,') → decoded bytes."""
+    if source not in ("ext", "int"):
+        return b""
+    db = SessionLocal()
+    try:
+        rec = db.query(InspectionRecord).filter(
+            InspectionRecord.deal_id == deal_id,
+        ).first()
+        if rec is None:
+            return b""
+        raw_json = rec.exterior_damage_json if source == "ext" else rec.interior_damage_json
+        if not raw_json:
+            return b""
+        damages = json.loads(raw_json)
+        if dmg_idx >= len(damages) or not isinstance(damages[dmg_idx], dict):
+            return b""
+        photos = damages[dmg_idx].get("photos") or []
+        if photo_idx >= len(photos):
+            return b""
+        b64_str = photos[photo_idx] or ""
+        if "," in b64_str:
+            b64_str = b64_str.split(",", 1)[1]
+        return base64.b64decode(b64_str)
+    except Exception as e:
+        logger.warning(
+            f"[Kosztorys PDF] DB damage photo deal={deal_id} {source}[{dmg_idx}][{photo_idx}] failed: {e}"
+        )
+        return b""
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _load_media_photo_from_db(deal_id: int, slot_id: str) -> bytes:
+    """Mirrors routers.report.get_gallery_media's lookup —
+    InspectionPhoto.photo_bytes for (deal_id, slot_id)."""
+    db = SessionLocal()
+    try:
+        row = db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == deal_id,
+            InspectionPhoto.slot_id == slot_id,
+        ).first()
+        if row is None or not row.photo_bytes:
+            return b""
+        return row.photo_bytes
+    except Exception as e:
+        logger.warning(
+            f"[Kosztorys PDF] DB media photo deal={deal_id} slot={slot_id} failed: {e}"
+        )
+        return b""
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _load_photo_bytes(saved_url: str) -> bytes:
+    """Resolve a saved photo reference to bytes. Local /gallery URLs go
+    straight to SQLAlchemy (no HTTP — avoids the in-process self-call
+    deadlock that caused the 504). External http(s) / data: URIs fall
+    back to the existing HTTP loader."""
+    if not saved_url or not isinstance(saved_url, str):
+        return b""
+
+    m = _DAMAGE_PHOTO_RE.match(saved_url)
+    if m:
+        return _load_damage_photo_from_db(
+            int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4)),
+        )
+
+    m = _MEDIA_PHOTO_RE.match(saved_url)
+    if m:
+        return _load_media_photo_from_db(int(m.group(1)), m.group(2))
+
+    if saved_url.startswith(("http://", "https://", "data:")):
+        return load_image_from_source(saved_url, timeout=_EXTERNAL_PHOTO_TIMEOUT) or b""
+
+    return b""
 
 
 def _prefetch_photos(parts: List[Dict[str, Any]]) -> Dict[str, bytes]:
-    """Fetch every unique photo URL referenced by the above-norm cards
-    in parallel using ThreadPoolExecutor. Returns {original_saved_url:
-    bytes_or_empty}. Failures are non-fatal — missing photos render as
-    a "—" placeholder in the card.
+    """Sequential DB-backed prefetch of every unique above-norm photo
+    URL. DB reads are milliseconds each — a ThreadPoolExecutor adds no
+    real benefit and complicates session lifetimes.
 
-    Tries the internal host first (fast localhost) with a short
-    timeout, falls back to the public host once if the internal fetch
-    came back empty (covers running outside Docker / weird env).
-    """
+    Returns {original_saved_url: bytes_or_empty}. Failures are
+    non-fatal — missing photos render as the "—" placeholder."""
     urls: List[str] = []
     seen = set()
     for part in parts:
@@ -136,30 +207,12 @@ def _prefetch_photos(parts: List[Dict[str, Any]]) -> Dict[str, bytes]:
                 seen.add(u)
                 urls.append(u)
 
-    if not urls:
-        return {}
-
-    def _fetch(saved_url: str) -> tuple[str, bytes]:
-        data = load_image_from_source(
-            _internal_photo_url(saved_url), timeout=_PHOTO_TIMEOUT,
-        )
-        if not data:
-            # Tolerate a misconfigured INTERNAL_APP_BASE — try the
-            # public URL once as a fallback. This won't help in the
-            # 504 case (server can't reach itself externally), but it
-            # does help local dev / single-process deploys where
-            # localhost isn't where the gallery lives.
-            data = load_image_from_source(
-                _public_photo_url(saved_url), timeout=_PHOTO_TIMEOUT,
-            )
-        return saved_url, data or b""
-
     out: Dict[str, bytes] = {}
-    with ThreadPoolExecutor(max_workers=_PHOTO_WORKERS) as pool:
-        for saved_url, data in pool.map(_fetch, urls):
-            out[saved_url] = data
+    for saved_url in urls:
+        out[saved_url] = _load_photo_bytes(saved_url)
     n_ok = sum(1 for b in out.values() if b)
-    logger.info(f"[Kosztorys PDF] prefetched {n_ok}/{len(urls)} photos")
+    if urls:
+        logger.info(f"[Kosztorys PDF] prefetched {n_ok}/{len(urls)} photos (DB)")
     return out
 
 
