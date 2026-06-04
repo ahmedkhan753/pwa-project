@@ -160,14 +160,22 @@ def section_header(title, w):
 
 
 # ─── Image Loader ─────────────────────────────────────────────
-def load_image_from_source(src: str) -> bytes:
-    """Load raw image bytes from a base64 data URI or HTTP URL."""
+def load_image_from_source(src: str, timeout=10) -> bytes:
+    """Load raw image bytes from a base64 data URI or HTTP URL.
+
+    `timeout` is the httpx timeout for the fetch (float seconds OR an
+    httpx.Timeout object). Default 10s preserves the long-standing
+    behavior used by the wycena / inspection PDF generators. Callers
+    that talk to a fast internal host (e.g. http://localhost:8000)
+    should pass something short like httpx.Timeout(4.0, connect=2.0)
+    so a missing photo fails fast.
+    """
     if src.startswith("data:"):
         return base64.b64decode(src.split(",", 1)[1])
     elif src.startswith("http"):
         try:
             import httpx
-            response = httpx.get(src, timeout=10, follow_redirects=True)
+            response = httpx.get(src, timeout=timeout, follow_redirects=True)
             ct = response.headers.get("content-type", "")
             logger.info(f"[PDF img] {src[:100]} → {response.status_code}, content-type={ct}, size={len(response.content)}B")
             if response.status_code == 200 and "image" in ct:
@@ -179,11 +187,16 @@ def load_image_from_source(src: str) -> bytes:
     return b""
 
 
-def load_image(src, max_w, max_h):
-    """Load image from URL, base64 data URI, bytes, or file path."""
+def load_image(src, max_w, max_h, timeout=10):
+    """Load image from URL, base64 data URI, bytes, or file path.
+
+    `timeout` is forwarded to load_image_from_source when src is an
+    http(s) URL; ignored for data URIs / bytes / file paths. Default
+    10s keeps the previous wycena/inspection behavior unchanged.
+    """
     try:
         if isinstance(src, str) and (src.startswith("http") or src.startswith("data:")):
-            data = load_image_from_source(src)
+            data = load_image_from_source(src, timeout=timeout)
             if not data:
                 return None
         elif isinstance(src, (bytes, bytearray)):

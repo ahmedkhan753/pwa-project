@@ -28,8 +28,10 @@ from __future__ import annotations
 import io
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
+import httpx
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm, mm
@@ -47,9 +49,20 @@ from services.protokol_wycena_pdf import (
     _style, p, pb, pc, sp, _str, _or_dash,
     _section_header, _data_ts, _draw_page_frame,
 )
-from services.pdf_generator import _fn, load_image
+from services.pdf_generator import _fn, load_image, load_image_from_source
 
 logger = logging.getLogger("services.kosztorys_pdf")
+
+
+# ─── Photo fetch — short timeout, parallel ───────────────────────────────────
+
+# Talk to our own backend in-process via localhost so the server isn't
+# forced through nginx + the public hostname to fetch its own gallery
+# bytes (that round-trip caused the 504 — see the photo-load PR).
+_INTERNAL_BASE  = os.getenv("INTERNAL_APP_BASE", "http://localhost:8000").rstrip("/")
+_PUBLIC_BASE    = os.getenv("PUBLIC_APP_BASE",   "https://app.zaufajrzeczoznawcy.pl").rstrip("/")
+_PHOTO_TIMEOUT  = httpx.Timeout(4.0, connect=2.0)
+_PHOTO_WORKERS  = 8
 
 
 # ─── Money + value formatting ────────────────────────────────────────────────
@@ -68,15 +81,86 @@ def _fmt_pln(v: Any) -> str:
     return raw.replace(",", " ").replace(".", ",").replace(" ", " ") + " PLN"
 
 
-def _abs_photo_url(url: Optional[str]) -> str:
-    """Make a /api/... path absolute so load_image() can httpx-fetch it.
-    Already-absolute URLs (data: / http(s):) pass through unchanged."""
+def _internal_photo_url(url: Optional[str]) -> str:
+    """Resolve a saved photo URL into an INTERNAL fetch URL the server
+    can hit without going through nginx + the public host. Saved URLs
+    look like /api/gallery/{deal_id}/damage/... — nginx strips the
+    /api on the public path, so the backend route is actually
+    /gallery/... (see routers.report L23 — no prefix on the report
+    router). We mirror that here when building the localhost URL.
+
+    Pass-through:
+      * Already-absolute http(s) / data: URIs are returned unchanged so
+        external photos still work.
+    Local app:
+      * /api/<rest>   →   {INTERNAL_BASE}/<rest>     (strip /api/)
+      * /<rest>       →   {INTERNAL_BASE}/<rest>
+    """
     if not url:
         return ""
     if url.startswith(("http://", "https://", "data:")):
         return url
-    base = os.getenv("PUBLIC_APP_BASE", "https://app.zaufajrzeczoznawcy.pl").rstrip("/")
-    return f"{base}{url if url.startswith('/') else '/' + url}"
+    path = url if url.startswith("/") else f"/{url}"
+    if path.startswith("/api/"):
+        path = path[len("/api"):]  # → "/gallery/..." (or "/<other-route>/...")
+    return f"{_INTERNAL_BASE}{path}"
+
+
+def _public_photo_url(url: Optional[str]) -> str:
+    """Public fallback URL — used only if the internal fetch fails (so
+    a misconfigured INTERNAL_APP_BASE doesn't break PDFs that the
+    public host could still serve)."""
+    if not url:
+        return ""
+    if url.startswith(("http://", "https://", "data:")):
+        return url
+    path = url if url.startswith("/") else f"/{url}"
+    return f"{_PUBLIC_BASE}{path}"
+
+
+def _prefetch_photos(parts: List[Dict[str, Any]]) -> Dict[str, bytes]:
+    """Fetch every unique photo URL referenced by the above-norm cards
+    in parallel using ThreadPoolExecutor. Returns {original_saved_url:
+    bytes_or_empty}. Failures are non-fatal — missing photos render as
+    a "—" placeholder in the card.
+
+    Tries the internal host first (fast localhost) with a short
+    timeout, falls back to the public host once if the internal fetch
+    came back empty (covers running outside Docker / weird env).
+    """
+    urls: List[str] = []
+    seen = set()
+    for part in parts:
+        for u in (part.get("photos") or [])[:4]:
+            if isinstance(u, str) and u and u not in seen:
+                seen.add(u)
+                urls.append(u)
+
+    if not urls:
+        return {}
+
+    def _fetch(saved_url: str) -> tuple[str, bytes]:
+        data = load_image_from_source(
+            _internal_photo_url(saved_url), timeout=_PHOTO_TIMEOUT,
+        )
+        if not data:
+            # Tolerate a misconfigured INTERNAL_APP_BASE — try the
+            # public URL once as a fallback. This won't help in the
+            # 504 case (server can't reach itself externally), but it
+            # does help local dev / single-process deploys where
+            # localhost isn't where the gallery lives.
+            data = load_image_from_source(
+                _public_photo_url(saved_url), timeout=_PHOTO_TIMEOUT,
+            )
+        return saved_url, data or b""
+
+    out: Dict[str, bytes] = {}
+    with ThreadPoolExecutor(max_workers=_PHOTO_WORKERS) as pool:
+        for saved_url, data in pool.map(_fetch, urls):
+            out[saved_url] = data
+    n_ok = sum(1 for b in out.values() if b)
+    logger.info(f"[Kosztorys PDF] prefetched {n_ok}/{len(urls)} photos")
+    return out
 
 
 # ─── Section builders ────────────────────────────────────────────────────────
@@ -169,10 +253,15 @@ def _section_order_params(costs: Dict[str, Any]) -> List[Any]:
     return [_section_header("2. Parametry zlecenia"), sp(0.15), t, sp(0.5)]
 
 
-def _damage_card(part: Dict[str, Any], idx: int) -> KeepTogether:
+def _damage_card(
+    part: Dict[str, Any],
+    idx: int,
+    photo_cache: Dict[str, bytes],
+) -> KeepTogether:
     """One above-norm damage rendered as a 2-col block: photos (left) +
     label/value rows (right). KeepTogether so a damage doesn't split
-    across a page break."""
+    across a page break. Photos come from the pre-fetched cache so this
+    function does NO HTTP I/O — keeps render time predictable."""
     fn, fnb = _fn()
 
     # ── Left column: up to 4 photo thumbnails arranged in a 2x2 grid.
@@ -183,7 +272,8 @@ def _damage_card(part: Dict[str, Any], idx: int) -> KeepTogether:
         thumb_max_h = 28 * mm
         imgs = []
         for src in photos[:4]:
-            img = load_image(_abs_photo_url(src), thumb_max_w, thumb_max_h)
+            data = photo_cache.get(src) if isinstance(src, str) else None
+            img = load_image(data, thumb_max_w, thumb_max_h) if data else None
             imgs.append(img if img is not None else p("—", _style("_ph_miss", fontSize=8, textColor=GRAY_MUTED)))
         # Pad to 4 cells so the 2x2 grid is rectangular.
         while len(imgs) < 4:
@@ -270,7 +360,10 @@ def _damage_card(part: Dict[str, Any], idx: int) -> KeepTogether:
     return KeepTogether([outer, sp(0.2)])
 
 
-def _section_above_norm(parts: List[Dict[str, Any]]) -> List[Any]:
+def _section_above_norm(
+    parts: List[Dict[str, Any]],
+    photo_cache: Dict[str, bytes],
+) -> List[Any]:
     """USZKODZENIA PONADNORMATYWNE — full damage cards. Empty group is
     skipped entirely (no header, no placeholder)."""
     if not parts:
@@ -282,7 +375,7 @@ def _section_above_norm(parts: List[Dict[str, Any]]) -> List[Any]:
     for i, part in enumerate(parts, 1):
         # Use saved index when present, else our running counter.
         idx = part.get("index") or i
-        out.append(_damage_card(part, int(idx)))
+        out.append(_damage_card(part, int(idx), photo_cache))
     out.append(sp(0.2))
     return out
 
@@ -502,10 +595,15 @@ def build_kosztorys_pdf(costs: Dict[str, Any], eurotax: Optional[Dict[str, Any]]
     story.append(summary_tbl)
     story.append(sp(0.5))
 
+    # ── Pre-fetch every photo in parallel via the internal localhost
+    # base BEFORE assembling the story. Sequential per-card fetches
+    # against the public URL previously stacked to 2+ minutes (504).
+    photo_cache = _prefetch_photos(above_norm)
+
     # ── Sections.
     story.extend(_section_vehicle(costs))
     story.extend(_section_order_params(costs))
-    story.extend(_section_above_norm(above_norm))
+    story.extend(_section_above_norm(above_norm, photo_cache))
     story.extend(_section_material_row(material))
     story.extend(_section_summary(netto, vat, gross))
     story.extend(_section_acceptable(acceptable))
