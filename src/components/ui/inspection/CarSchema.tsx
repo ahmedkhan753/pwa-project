@@ -86,13 +86,11 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
         setActiveZone(zoneId);
     };
 
-    const saveAndNext = () => {
+    // Move the modal on to the next zone in sequence (or close it if the
+    // active zone is the last one). Shared by saveAndNext + the
+    // "Brak danych" path so both produce identical UI feedback.
+    const advanceToNext = () => {
         if (!activeZone) return;
-        
-        // Save current
-        onZoneUpdate(activeZone, { value: modalValue, status: modalStatus });
-        
-        // Find next zone in sequence
         const currentIndex = ZONES.findIndex(z => z.id === activeZone);
         if (currentIndex < ZONES.length - 1) {
             const nextZone = ZONES[currentIndex + 1];
@@ -100,7 +98,6 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
             const nextValue = nextZoneData.value || '';
             setModalValue(nextValue);
             setModalStatus(nextZoneData.status || '');
-            // Populate custom input if next zone has a non-range value
             if (nextValue && !PAINT_RANGES.includes(nextValue)) {
                 setCustomInput(nextValue.replace('µm', '').trim());
             } else {
@@ -110,6 +107,25 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
         } else {
             setActiveZone(null);
         }
+    };
+
+    const saveAndNext = () => {
+        if (!activeZone) return;
+        onZoneUpdate(activeZone, { value: modalValue, status: modalStatus });
+        advanceToNext();
+    };
+
+    // "Brak danych" — persist the panel as explicitly not measured AND
+    // advance, mirroring saveAndNext. Empty {value:'', status:''} is the
+    // app-wide "no data" convention: routers.report.py treats a blank
+    // panel as an intentional "no data" reading (status:"unknown" → the
+    // report renders "Brak danych"), and getZoneColor()'s first guard
+    // (!zone.value) already paints these tiles in the neutral surface
+    // colour instead of green. So no new status literal is needed.
+    const saveNoDataAndNext = () => {
+        if (!activeZone) return;
+        onZoneUpdate(activeZone, { value: '', status: '' });
+        advanceToNext();
     };
 
     const activeLabel = ZONES.find(z => z.id === activeZone)?.label || '';
@@ -265,13 +281,14 @@ export function CarSchema({ paint, onZoneUpdate }: CarSchemaProps) {
                                 ))}
                             </div>
 
-                            {/* No-data option — explicitly mark panel as not measured */}
+                            {/* No-data option — saves the panel as {value:'', status:''}
+                                (app-wide "no data" convention) AND advances to the next
+                                zone, so the user gets the same feedback as a normal
+                                save. Independent of the disabled-when-empty "Zapisz i
+                                Dalej" button. */}
                             <button
-                                onClick={() => {
-                                    setModalValue('');
-                                    setCustomInput('');
-                                    setModalStatus('');
-                                }}
+                                type="button"
+                                onClick={saveNoDataAndNext}
                                 className={cn(
                                     "w-full py-4 rounded-2xl text-sm font-black transition-all border-2 flex items-center justify-center gap-2",
                                     (!modalValue && !customInput)
