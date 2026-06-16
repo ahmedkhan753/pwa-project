@@ -306,21 +306,26 @@ def _section_order_params(costs: Dict[str, Any]) -> List[Any]:
     return [_section_header("2. Parametry zlecenia"), sp(0.15), t, sp(0.5)]
 
 
-# Damage-card width budget (A4 portrait, CONTENT_W = 180mm = ~510pt).
-# Padding values stay raw points (reportlab convention); column widths
-# stay in mm so the math is human-readable. Earlier fractional widths
-# (0.40 / 0.60 × CONTENT_W) put the 2×2 photo grid wider than its column
-# → photos spilled onto the label text and the labels rendered half-
-# hidden behind the thumbnails.
-_DAMAGE_PAD_LR        = 8                            # outer cell padding (pt, L+R each)
-_DAMAGE_THUMB_W       = 30 * mm                      # thumbnail max width
-_DAMAGE_THUMB_H       = 24 * mm                      # thumbnail max height
-_DAMAGE_GRID_GUTTER   = 4                            # grid cell extra width vs thumb (pt)
-_DAMAGE_PHOTO_COL     = 72 * mm                      # outer left column (fixed mm)
-_DAMAGE_TEXT_COL      = CONTENT_W - _DAMAGE_PHOTO_COL  # outer right column
-_DAMAGE_TEXT_INNER    = _DAMAGE_TEXT_COL - 2 * _DAMAGE_PAD_LR  # text cell content area
-_DAMAGE_LABEL_COL     = _DAMAGE_TEXT_INNER * 0.45
-_DAMAGE_VALUE_COL     = _DAMAGE_TEXT_INNER - _DAMAGE_LABEL_COL
+# Damage-card layout — STACKED vertical, single-column.
+#
+# Earlier the card was a 2-col Table [photos | text] but the photo
+# grid kept overflowing onto the text column. Switching to a vertical
+# stack (title → info table → photo strip below) makes overlap
+# structurally impossible: there is no second column for photos to
+# escape into.
+#
+# A4 portrait, CONTENT_W ≈ 180mm = ~510pt.
+#   _CARD_PAD_LR  outer card L/R padding (pt)
+#   _CARD_INNER   width inside the BOX border = CONTENT_W − 2·pad
+#   info_tbl colWidths sum = _CARD_INNER (label 40% / value 60%)
+#   photo strip cell width = _CARD_INNER / 4; up to 4 thumbnails
+#     across (extra slots simply aren't rendered when fewer photos).
+_CARD_PAD_LR    = 10                             # outer card L/R padding (pt)
+_CARD_INNER     = CONTENT_W - 2 * _CARD_PAD_LR   # content width inside the BOX
+_STRIP_CELLS    = 4
+_STRIP_CELL_W   = _CARD_INNER / _STRIP_CELLS
+_STRIP_THUMB_W  = 38 * mm                        # thumbnail max width (≈108pt)
+_STRIP_THUMB_H  = 30 * mm                        # thumbnail max height
 
 
 def _damage_card(
@@ -328,50 +333,25 @@ def _damage_card(
     idx: int,
     photo_cache: Dict[str, bytes],
 ) -> KeepTogether:
-    """One above-norm damage rendered as a 2-col block: photos (left) +
-    label/value rows (right). KeepTogether so a damage doesn't split
-    across a page break. Photos come from the pre-fetched cache so this
-    function does NO HTTP I/O — keeps render time predictable.
-
-    Widths use the _DAMAGE_* constants above so the grid + info table
-    always fit inside their parent cells (no photo/text overlap)."""
+    """One above-norm damage rendered as a VERTICAL stack:
+        1. title row ({idx} | {czesc})
+        2. info table (Typ / Tryb / Kwalifikacja / costs / KOSZT NETTO)
+        3. photo strip (up to 4 thumbnails across, BELOW the text)
+    KeepTogether so the card stays atomic across page breaks. The
+    photo strip can't overlap the text any more — there's no second
+    column for it to bleed into."""
     fn, fnb = _fn()
 
-    # ── Left column: up to 4 photo thumbnails arranged in a 2x2 grid.
-    photos = part.get("photos") or []
-    photo_cell: Any
-    if photos:
-        imgs = []
-        for src in photos[:4]:
-            data = photo_cache.get(src) if isinstance(src, str) else None
-            img = load_image(data, _DAMAGE_THUMB_W, _DAMAGE_THUMB_H) if data else None
-            imgs.append(img if img is not None else p("—", _style("_ph_miss", fontSize=8, textColor=GRAY_MUTED)))
-        # Pad to 4 cells so the 2x2 grid is rectangular.
-        while len(imgs) < 4:
-            imgs.append(p("", _style("_ph_empty")))
-        grid = Table(
-            [[imgs[0], imgs[1]], [imgs[2], imgs[3]]],
-            colWidths=[_DAMAGE_THUMB_W + _DAMAGE_GRID_GUTTER,
-                       _DAMAGE_THUMB_W + _DAMAGE_GRID_GUTTER],
-        )
-        grid.setStyle(TableStyle([
-            ("LEFTPADDING",   (0, 0), (-1, -1), 2),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 2),
-            ("TOPPADDING",    (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
-        ]))
-        photo_cell = grid
-    else:
-        photo_cell = p("Brak zdjęć", _style("_ph_none", fontSize=8, textColor=GRAY_MUTED))
-
-    # ── Right column: title + label/value rows. No repair times.
+    # ── Row 1: title — full-width navy heading.
     czesc = _or_dash(part.get("czesc"))
     title = p(
         f"{idx} &nbsp;|&nbsp; {czesc}",
-        _style("_dh", fontName=fnb, fontSize=10, leading=12, textColor=NAVY),
+        _style("_dh", fontName=fnb, fontSize=11, leading=13, textColor=NAVY),
     )
+
+    # ── Row 2: info table — label/value rows, value column right-
+    # aligned. Same content + green KOSZT NETTO as before; only the
+    # width changes (full _CARD_INNER, 40/60 split).
     typ            = _or_dash(part.get("typ"))
     tryb           = _or_dash(part.get("tryb_naprawy"))
     qualification  = _or_dash(part.get("qualification"))
@@ -379,57 +359,75 @@ def _damage_card(
     amortyzacja    = _fmt_pln(part.get("koszt_amortyzacji_pln"))
     netto          = _fmt_pln(part.get("koszt_netto_pln"))
 
-    lbl_style = _style("_drl", fontName=fn, textColor=GRAY_MUTED, fontSize=8.5, leading=11)
-    val_style = _style("_drv", fontName=fn, fontSize=9.5, leading=12)
-    money_style = _style("_drm", fontName=fn, fontSize=9.5, leading=12)
-    netto_style = _style("_drn", fontName=fnb, fontSize=11, leading=13, textColor=GREEN_OK)
+    lbl_style    = _style("_drl",  fontName=fn,  textColor=GRAY_MUTED, fontSize=9,  leading=12)
+    val_style    = _style("_drv",  fontName=fn,                       fontSize=9.5, leading=12)
+    money_style  = _style("_drm",  fontName=fn,                       fontSize=9.5, leading=12)
+    netto_style  = _style("_drn",  fontName=fnb, textColor=GREEN_OK,  fontSize=11,  leading=13)
+    netto_lbl_st = _style("_drnl", fontName=fnb, textColor=NAVY,      fontSize=10,  leading=13)
 
     info_rows = [
-        [p("Typ uszkodzenia",    lbl_style), p(typ,            val_style)],
-        [p("Tryb naprawy",       lbl_style), p(tryb,           val_style)],
-        [p("Kwalifikacja",       lbl_style), p(qualification,  val_style)],
-        [p("Koszty naprawy",     lbl_style), p(naprawy,        money_style)],
-        [p("Koszt amortyzacji",  lbl_style), p(amortyzacja,    money_style)],
-        [p("KOSZT NETTO (bez VAT)", _style("_drnl", fontName=fnb, fontSize=10, leading=13, textColor=NAVY)),
-         p(netto, netto_style)],
+        [p("Typ uszkodzenia",       lbl_style),    p(typ,           val_style)],
+        [p("Tryb naprawy",          lbl_style),    p(tryb,          val_style)],
+        [p("Kwalifikacja",          lbl_style),    p(qualification, val_style)],
+        [p("Koszty naprawy",        lbl_style),    p(naprawy,       money_style)],
+        [p("Koszt amortyzacji",     lbl_style),    p(amortyzacja,   money_style)],
+        [p("KOSZT NETTO (bez VAT)", netto_lbl_st), p(netto,         netto_style)],
     ]
-    info_tbl = Table(info_rows, colWidths=[_DAMAGE_LABEL_COL, _DAMAGE_VALUE_COL])
+    info_tbl = Table(
+        info_rows,
+        colWidths=[_CARD_INNER * 0.40, _CARD_INNER * 0.60],
+    )
     info_tbl.setStyle(TableStyle([
         ("LINEBELOW",     (0, 0), (-1, -2), 0.25, GRAY_BORDER),
         ("LEFTPADDING",   (0, 0), (-1, -1), 4),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
-        ("TOPPADDING",    (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN",         (1, 0), (1, -1), "RIGHT"),
     ]))
 
-    right_col = Table(
-        [[title], [info_tbl]],
-        colWidths=[_DAMAGE_TEXT_INNER],
-    )
-    right_col.setStyle(TableStyle([
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-        ("TOPPADDING",    (0, 0), (0, 0), 0),
-        ("BOTTOMPADDING", (0, 0), (0, 0), 4),
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-    ]))
+    # ── Row 3: photo strip — up to 4 thumbnails across, beneath the
+    # text. When fewer than 4 photos are present we only emit that
+    # many cells (no padding cells, per spec).
+    photos = part.get("photos") or []
+    photo_strip: Any = None
+    if photos:
+        cells: List[Any] = []
+        for src in photos[:_STRIP_CELLS]:
+            data = photo_cache.get(src) if isinstance(src, str) else None
+            img = load_image(data, _STRIP_THUMB_W, _STRIP_THUMB_H) if data else None
+            cells.append(
+                img if img is not None
+                else p("—", _style("_ph_miss", fontSize=8, textColor=GRAY_MUTED))
+            )
+        photo_strip = Table([cells], colWidths=[_STRIP_CELL_W] * len(cells))
+        photo_strip.setStyle(TableStyle([
+            ("LEFTPADDING",   (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 3),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN",         (0, 0), (-1, -1), "LEFT"),
+        ]))
 
-    outer = Table(
-        [[photo_cell, right_col]],
-        colWidths=[_DAMAGE_PHOTO_COL, _DAMAGE_TEXT_COL],
-    )
-    outer.setStyle(TableStyle([
+    # ── Wrap title + info + (optional) photo strip in ONE outer Table
+    # so the BOX border and KeepTogether apply to the whole card. The
+    # outer cell width is CONTENT_W; inner content width after the
+    # _CARD_PAD_LR padding = _CARD_INNER, matching every child above.
+    card_rows: List[List[Any]] = [[title], [info_tbl]]
+    if photo_strip is not None:
+        card_rows.append([photo_strip])
+    card = Table(card_rows, colWidths=[CONTENT_W])
+    card.setStyle(TableStyle([
         ("BOX",           (0, 0), (-1, -1), 0.5, GRAY_BORDER),
-        ("LEFTPADDING",   (0, 0), (-1, -1), _DAMAGE_PAD_LR),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), _DAMAGE_PAD_LR),
+        ("LEFTPADDING",   (0, 0), (-1, -1), _CARD_PAD_LR),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), _CARD_PAD_LR),
         ("TOPPADDING",    (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("LINEAFTER",     (0, 0), (0, -1), 0.25, GRAY_BORDER),
     ]))
-    return KeepTogether([outer, sp(0.2)])
+    return KeepTogether([card, sp(0.2)])
 
 
 def _section_above_norm(
