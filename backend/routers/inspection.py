@@ -253,6 +253,69 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         except Exception as wycena_err:
             logger.warning(f"[BG] Protokół Wycena upload failed for deal {deal_id} (non-fatal): {wycena_err}", exc_info=True)
 
+        # 6c. Upload appraiser/client signatures to Bitrix deal file fields.
+        # The PWA's submit body carries them as base64 PNGs (possibly with a
+        # "data:image/png;base64,…" prefix) on finalSummary.signature{Appraiser,
+        # Client}. The report endpoint reads them back from the SAME field IDs
+        # (routers/report.py L1711: _SIGNATURE_FIELDS) and streams them via
+        # /api/signature/{deal_id}/{kind} so the report can render the image.
+        #
+        # Note on signatureYard: mapping_overrides.json maps signatureYard to
+        # UF_CRM_1772190199297 — the same field as signatureClient (probable
+        # stale mapping; no distinct Bitrix field exists for the yard
+        # signature). We don't upload it here, since writing it to the client
+        # field would clobber the client signature. Wire yard to a distinct
+        # UF_CRM_* in a separate change once one is confirmed.
+        try:
+            import re as _re
+            summary = body.get("finalSummary") or {}
+            sig_uploads = [
+                ("signatureAppraiser", "UF_CRM_1772801573",   f"podpis_inspektor_{deal_id}.png", "inspector"),
+                ("signatureClient",    "UF_CRM_1772190199297", f"podpis_klient_{deal_id}.png",    "client"),
+            ]
+            for body_key, field_id, filename, kind in sig_uploads:
+                raw_sig = summary.get(body_key)
+                if not isinstance(raw_sig, str) or not raw_sig.strip():
+                    continue
+                stripped = raw_sig.strip()
+                # Strip any "data:image/...;base64," prefix to leave raw b64.
+                if stripped.lower().startswith("data:") and "," in stripped:
+                    stripped = stripped.split(",", 1)[1].strip()
+                # Drop incidental whitespace / newlines inside the b64 body
+                # so the regex check below sees a clean payload.
+                stripped = "".join(stripped.split())
+                # Reject sentinel text like "Podpis niemożliwy - Dysponent
+                # nieobecny" — those aren't images. Real base64 contains only
+                # [A-Za-z0-9+/=]; anything else means we'd be writing
+                # garbage as a PNG, so we skip and leave the field empty
+                # (the report falls back to the name-only path).
+                if not stripped or not _re.fullmatch(r"[A-Za-z0-9+/=]+", stripped):
+                    logger.info(
+                        f"[BG] Signature {kind} for deal {deal_id} is not base64 "
+                        f"(likely sentinel text) — skipping upload"
+                    )
+                    continue
+                try:
+                    await gateway.call("crm.deal.update", {
+                        "ID": deal_id,
+                        "fields": {field_id: {"fileData": [filename, stripped]}},
+                    })
+                    logger.info(
+                        f"[BG] Signature uploaded to Bitrix deal {deal_id} "
+                        f"({kind} → {field_id})"
+                    )
+                except Exception as sig_upload_err:
+                    logger.warning(
+                        f"[BG] Signature upload to Bitrix failed for deal {deal_id} "
+                        f"({kind}, non-fatal): {sig_upload_err}"
+                    )
+        except Exception as sig_outer:
+            # Outer guard so a parsing slip doesn't derail the report-URL
+            # and gallery-URL writes that follow.
+            logger.warning(
+                f"[BG] Signature upload block failed for deal {deal_id} (non-fatal): {sig_outer}"
+            )
+
         # 7. Write public report URL to Bitrix field UF_CRM_1775247032324
         # Non-blocking: failure here must never abort the core submit flow
         try:
