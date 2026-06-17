@@ -178,10 +178,6 @@ async def send_assignment_email(
             </div>
           </div>
 
-          <div class="cta">
-            <a href="https://app.zaufajrzeczoznawcy.pl">Otwórz aplikację PWA</a>
-          </div>
-
           <p style="color:#888; font-size:13px; text-align:center;">
             Zaloguj się używając swojego numeru telefonu i PIN-u aby zobaczyć szczegóły zlecenia.
           </p>
