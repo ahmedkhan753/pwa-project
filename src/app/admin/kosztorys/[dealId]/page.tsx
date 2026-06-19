@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import type {
   MacadamData,
@@ -20,6 +20,37 @@ const VAT_RATE = 1.23
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+// Downscale + JPEG-compress a data-URI so admin-added phone photos don't bloat
+// the saved JSON. Caps the longest edge and re-encodes as JPEG. Robust: on any
+// failure (load/canvas error) it falls back to the original data URL.
+async function compressImageDataUrl(
+  dataUrl: string,
+  maxEdge = 1600,
+  quality = 0.8,
+): Promise<string> {
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image()
+      im.onload = () => resolve(im)
+      im.onerror = reject
+      im.src = dataUrl
+    })
+    const longest = Math.max(img.width, img.height)
+    const scale = longest > maxEdge ? maxEdge / longest : 1
+    const w = Math.max(1, Math.round(img.width * scale))
+    const h = Math.max(1, Math.round(img.height * scale))
+    const canvas = document.createElement("canvas")
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return dataUrl
+    ctx.drawImage(img, 0, 0, w, h)
+    return canvas.toDataURL("image/jpeg", quality)
+  } catch {
+    return dataUrl
+  }
+}
 
 interface AvailableDamage {
   source: "ext" | "int"
@@ -293,6 +324,19 @@ export default function AdminMacadamEditPage({
     )
   }
 
+  // Append an admin-added photo (data-URI string) to a part, preserving the
+  // existing report-pulled photos. They are all just strings in the same array,
+  // so removePhotoFromPart removes them identically.
+  const addPhotoToPart = (partId: string, dataUri: string) => {
+    setParts(prev =>
+      prev.map(p =>
+        p.id === partId
+          ? { ...p, photos: [...p.photos, dataUri] }
+          : p
+      )
+    )
+  }
+
   const onSave = async () => {
     if (!token) return
     // Strip the non-enumerable _src_key off the parts before sending,
@@ -477,10 +521,13 @@ export default function AdminMacadamEditPage({
               value={deprPct}
               onChange={setDeprPct}
             />
-            <NumberField
+            {/* Locked per client request — value still loaded from json
+                .koszt_materialu_pln, flows through computeTotals, and is
+                sent back in the PUT payload. Only the edit affordance is
+                gone. */}
+            <ComputedField
               label="Koszt materiału i części drobnych (PLN)"
-              value={materialCost}
-              onChange={setMaterialCost}
+              value={materialCost ?? 0}
             />
             <ComputedField
               label="Razem netto części (uszkodzenia)"
@@ -547,6 +594,7 @@ export default function AdminMacadamEditPage({
                   onChange={patch => updatePart(p.id, patch)}
                   onRemove={() => removePart(p.id)}
                   onRemovePhoto={i => removePhotoFromPart(p.id, i)}
+                  onAddPhoto={uri => addPhotoToPart(p.id, uri)}
                 />
               ))}
             </div>
@@ -868,6 +916,7 @@ function PartEditor({
   onChange,
   onRemove,
   onRemovePhoto,
+  onAddPhoto,
 }: {
   part: MacadamPart
   labourRate: number | null
@@ -875,10 +924,29 @@ function PartEditor({
   onChange: (patch: Partial<MacadamPart>) => void
   onRemove: () => void
   onRemovePhoto: (idx: number) => void
+  onAddPhoto: (dataUri: string) => void
 }) {
   const computed = computePartCosts(part, labourRate, deprPct)
   const showPartsCost = part.is_manual || part.qualification === "wymiana"
   const partsCostLabel = part.is_manual ? "Koszt (PLN)" : "Koszt części (PLN)"
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const onPickPhotos = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader()
+        reader.onload = async () => {
+          const raw = typeof reader.result === "string" ? reader.result : ""
+          if (!raw) return
+          onAddPhoto(await compressImageDataUrl(raw))
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+    // reset so picking the same file again still fires onChange
+    e.target.value = ""
+  }
   return (
     <div
       style={{
@@ -1015,8 +1083,7 @@ function PartEditor({
         <ComputedField label="Netto (PLN)"          value={computed.koszt_netto_pln} accent />
       </div>
 
-      {part.photos.length > 0 && (
-        <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 12 }}>
           <div
             style={{
               fontSize: 11,
@@ -1084,9 +1151,42 @@ function PartEditor({
                 </button>
               </div>
             ))}
+            {/* Add-photo tile — opens the hidden file input. Admin-added photos
+                are appended as data-URI strings, indistinguishable in the grid
+                from report-pulled ones and removable with the same × button. */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Dodaj zdjęcie"
+              style={{
+                aspectRatio: "4 / 3",
+                borderRadius: 6,
+                border: "1px dashed #C7C7CC",
+                background: "#FAFAFC",
+                color: "#0071E3",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                padding: 8,
+              }}
+            >
+              + Dodaj zdjęcie
+            </button>
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={onPickPhotos}
+            style={{ display: "none" }}
+          />
         </div>
-      )}
     </div>
   )
 }
