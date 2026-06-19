@@ -30,8 +30,8 @@ SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
 echo "✅ Backup saved: $BACKUP_FILE ($SIZE)"
 
 # Keep only the 10 most recent backups
-EXCESS=$(ls -t "$BACKUP_DIR"/backup_*.sql 2>/dev/null | tail -n +11)
+EXCESS=$(ls -t "$BACKUP_DIR"/backup_*.sql 2>/dev/null | tail -n +5)
 if [ -n "$EXCESS" ]; then
     echo "$EXCESS" | xargs rm -f
-    echo "🗑️  Old backups pruned (kept 10 most recent)"
+    echo "🗑️  Old backups pruned (kept 4 most recent)"
 fi
