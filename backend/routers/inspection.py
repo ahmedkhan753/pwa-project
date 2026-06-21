@@ -339,6 +339,18 @@ async def _background_submit(gateway, deal_id: int, body: dict):
         except Exception as gallery_err:
             logger.warning(f"[BG] Could not save gallery URL to Bitrix deal {deal_id} (non-fatal): {gallery_err}")
 
+        # 9. Write kosztorys (cost-estimate) URL to Bitrix field UF_CRM_1780059814919
+        #    Hybrid: filled on every submit, independent of whether a Eurotax PDF exists.
+        try:
+            kosztorys_url = f"https://app.zaufajrzeczoznawcy.pl/kosztorys/{deal_id}"
+            await gateway.call("crm.deal.update", {
+                "ID": deal_id,
+                "fields": {"UF_CRM_1780059814919": kosztorys_url}
+            })
+            logger.info(f"[BG] Kosztorys URL saved to Bitrix deal {deal_id}: {kosztorys_url}")
+        except Exception as kosztorys_err:
+            logger.warning(f"[BG] Could not save kosztorys URL to Bitrix deal {deal_id} (non-fatal): {kosztorys_err}")
+
         _update_status('done')
         logger.info(f"[BG] ✅ Background submission complete for deal {deal_id}")
 
