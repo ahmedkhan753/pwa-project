@@ -229,34 +229,6 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
 
       <div className="page-container">
 
-        {/* Banner: Eurotax loading or not available */}
-        {!hasEurotax && (
-          loadingK ? (
-            <div style={{
-              margin: '0 0 20px', padding: '14px 18px', borderRadius: 10,
-              background: '#EFF6FF', border: '1px solid #BFDBFE',
-              display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              <i className="fas fa-spinner fa-spin" style={{ color: '#1E40AF', fontSize: 18 }} />
-              <div style={{ fontSize: 13, color: '#1E40AF' }}>
-                <strong>Ładowanie danych Eurotax…</strong>
-              </div>
-            </div>
-          ) : (
-            <div style={{
-              margin: '0 0 20px', padding: '14px 18px', borderRadius: 10,
-              background: '#FEF3C7', border: '1px solid #FBBF24',
-              display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              <i className="fas fa-info-circle" style={{ color: '#92400E', fontSize: 18 }} />
-              <div style={{ fontSize: 13, color: '#92400E' }}>
-                <strong>Eurotax PDF jeszcze nie został przesłany dla tego zlecenia.</strong>
-                {' '}Sekcje kosztów, części i podsumowania będą widoczne po przesłaniu PDF do Bitrix24.
-              </div>
-            </div>
-          )
-        )}
-
         {/* ═══ EXPERTISE — vehicle header ═══════════════════════════════ */}
         <section id="expertise" className="kosz-card">
           <div style={{
@@ -925,8 +897,14 @@ function DamageCard({
       }}
     >
       {part.photos.length > 0 && (
-        <div style={{ flex: '1 1 0', maxWidth: '45%', minWidth: 0 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+        <div style={{ flex: '1 1 0', maxWidth: '52%', minWidth: 0 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: part.photos.length === 1
+              ? '1fr'
+              : 'repeat(auto-fit, minmax(120px, 1fr))',
+            gap: 6,
+          }}>
             {part.photos.map((src, pi) => (
               <div
                 key={`${part.id}-${pi}`}
