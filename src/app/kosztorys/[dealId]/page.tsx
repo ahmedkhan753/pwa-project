@@ -339,6 +339,12 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             operations follow at the end of the report. */}
         {costs?.parts && costs.parts.length > 0 && (() => {
           const aboveNorm = costs.parts.filter(p => p.qualification !== 'akceptowalne');
+          // Group above-norm damages by location for display only (totals are
+          // unaffected — they still use the full aboveNorm/material values).
+          // Legacy parts with empty/unknown location fall into the exterior
+          // group so none are dropped: exterior + interior === aboveNorm.
+          const interior  = aboveNorm.filter(p => p.location === 'interior');
+          const exterior  = aboveNorm.filter(p => p.location !== 'interior');
           const accept    = costs.parts.filter(p => p.qualification === 'akceptowalne');
           const monoNum: React.CSSProperties = {
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
@@ -364,14 +370,46 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                   }}>
                     Uszkodzenia ponadnormatywne
                   </h3>
-                  {aboveNorm.map((p, i) => (
-                    <DamageCard
-                      key={p.id}
-                      part={p}
-                      isLast={i === aboveNorm.length - 1}
-                      onPhotoClick={onPhoto}
-                    />
-                  ))}
+
+                  {exterior.length > 0 && (
+                    <>
+                      <h4 style={{
+                        fontSize: 12, fontWeight: 700, color: COLORS.muted,
+                        textTransform: 'uppercase', letterSpacing: 0.6,
+                        margin: '0 0 12px',
+                      }}>
+                        Uszkodzenia zewnętrzne
+                      </h4>
+                      {exterior.map((p, i) => (
+                        <DamageCard
+                          key={p.id}
+                          part={p}
+                          isLast={i === exterior.length - 1}
+                          onPhotoClick={onPhoto}
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  {interior.length > 0 && (
+                    <>
+                      <h4 style={{
+                        fontSize: 12, fontWeight: 700, color: COLORS.muted,
+                        textTransform: 'uppercase', letterSpacing: 0.6,
+                        margin: exterior.length > 0 ? '24px 0 12px' : '0 0 12px',
+                      }}>
+                        Uszkodzenia wewnętrzne
+                      </h4>
+                      {interior.map((p, i) => (
+                        <DamageCard
+                          key={p.id}
+                          part={p}
+                          isLast={i === interior.length - 1}
+                          onPhotoClick={onPhoto}
+                        />
+                      ))}
+                    </>
+                  )}
 
                   {/* Material + small parts — single value, not depreciated;
                       shown right above the summary so it visibly contributes
