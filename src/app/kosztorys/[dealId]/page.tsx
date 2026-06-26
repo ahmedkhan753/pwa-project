@@ -578,24 +578,55 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                 </table>
               </div>
 
-              {/* VAT breakdown — equal-height cards, grand-total emphasized */}
-              <div className="summary-cards">
-                <div className="summary-card">
-                  <div className="label">KOSZT BEZ VAT</div>
-                  <div className="value">{fmtPLN(kosztorys.summary?.subtotal_no_vat)}</div>
-                </div>
-                <div className="summary-card">
-                  <div className="label">VAT ({fmtPct(kosztorys.summary?.vat_pct)})</div>
-                  <div className="value">{fmtPLN(kosztorys.summary?.vat_amount)}</div>
-                </div>
-                <div className="summary-card grand-total">
-                  <div className="label">KOSZT Z VAT</div>
-                  <div className="value">{fmtPLN(kosztorys.summary?.total_with_vat_pln)}</div>
-                  {kosztorys.summary?.total_eur !== null && (
-                    <div className="sub">≈ {fmtEUR(kosztorys.summary?.total_eur)}</div>
-                  )}
-                </div>
-              </div>
+              {/* VAT breakdown — equal-height cards, grand-total emphasized.
+                  DISPLAY-only: the nr34 Eurotax format has no VAT line, so the
+                  parser leaves the vat fields as null/equal-to-net. When that
+                  happens we show the combined VAT at the Polish standard 23%
+                  (0.23 / 1.23, matching the cost engine + PDF). We never mutate
+                  kosztorys.summary, and respect a real parsed VAT line when
+                  present. */}
+              {(() => {
+                const s = kosztorys.summary
+                const netNoVat = s?.subtotal_no_vat
+                const hasParsedVat =
+                  s?.vat_amount !== null && s?.vat_amount !== undefined &&
+                  s?.vat_pct !== null && s?.vat_pct !== undefined
+                let vatPct: number | null
+                let vatAmount: number | null
+                let totalWithVat: number | null
+                if (hasParsedVat) {
+                  vatPct = s!.vat_pct
+                  vatAmount = s!.vat_amount
+                  totalWithVat = s!.total_with_vat_pln
+                } else if (netNoVat !== null && netNoVat !== undefined) {
+                  vatPct = 23
+                  vatAmount = netNoVat * 0.23
+                  totalWithVat = netNoVat * 1.23
+                } else {
+                  vatPct = null
+                  vatAmount = null
+                  totalWithVat = null
+                }
+                return (
+                  <div className="summary-cards">
+                    <div className="summary-card">
+                      <div className="label">KOSZT BEZ VAT</div>
+                      <div className="value">{fmtPLN(netNoVat)}</div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="label">VAT ({fmtPct(vatPct)})</div>
+                      <div className="value">{fmtPLN(vatAmount)}</div>
+                    </div>
+                    <div className="summary-card grand-total">
+                      <div className="label">KOSZT Z VAT</div>
+                      <div className="value">{fmtPLN(totalWithVat)}</div>
+                      {kosztorys.summary?.total_eur !== null && (
+                        <div className="sub">≈ {fmtEUR(kosztorys.summary?.total_eur)}</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Indices */}
               {(kosztorys.indices?.indeks_mat_lak_pct !== null

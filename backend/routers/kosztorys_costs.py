@@ -69,6 +69,9 @@ class MacadamPartIn(BaseModel):
     repair_time_h:         Optional[float] = None
     parts_cost_pln:        Optional[float] = None
     is_manual:             bool = False
+    # Per-part depreciation toggle. Default True so older saved parts without
+    # the field depreciate exactly as before; False ⇒ this part gets NO depreciation.
+    apply_depreciation:    bool = True
 
     # Computed (recomputed server-side on PUT — client values ignored).
     koszty_naprawy_pln:    Optional[float] = None
@@ -148,7 +151,9 @@ def _compute_part_costs(
     Missing inputs default to 0 (no fabrication).
     """
     rate = float(rate_per_h or 0.0)
-    d    = float(depr_pct or 0.0) / 100.0
+    # Per-part toggle: apply_depreciation False ⇒ no depreciation for this part
+    # (mirrors frontend computePartCosts effD). Default/absent ⇒ ON.
+    d    = 0.0 if part.get("apply_depreciation") is False else float(depr_pct or 0.0) / 100.0
     time = float(part.get("repair_time_h") or 0.0)
     parts_cost = float(part.get("parts_cost_pln") or 0.0)
     is_manual  = bool(part.get("is_manual"))

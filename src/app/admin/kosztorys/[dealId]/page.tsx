@@ -103,6 +103,7 @@ function normalisePart(p: Partial<MacadamPart> & { id?: string; index?: number }
     repair_time_h:         p.repair_time_h ?? null,
     parts_cost_pln:        p.parts_cost_pln ?? null,
     is_manual:             p.is_manual ?? false,
+    apply_depreciation:    p.apply_depreciation ?? true,
     koszty_naprawy_pln:    p.koszty_naprawy_pln ?? null,
     koszt_amortyzacji_pln: p.koszt_amortyzacji_pln ?? null,
     koszt_netto_pln:       p.koszt_netto_pln ?? null,
@@ -114,20 +115,22 @@ function normalisePart(p: Partial<MacadamPart> & { id?: string; index?: number }
 // Backend recomputes on PUT (source of truth); this version drives the live
 // preview while the appraiser types.
 function computePartCosts(
-  part: Pick<MacadamPart, "qualification" | "repair_time_h" | "parts_cost_pln" | "is_manual">,
+  part: Pick<MacadamPart, "qualification" | "repair_time_h" | "parts_cost_pln" | "is_manual" | "apply_depreciation">,
   rate: number | null,
   deprPct: number | null,
 ): { koszty_naprawy_pln: number; koszt_amortyzacji_pln: number; koszt_netto_pln: number } {
   const r = rate ?? 0
-  const d = (deprPct ?? 0) / 100
+  // Per-part toggle: when apply_depreciation is explicitly false, this part
+  // gets NO depreciation (amort 0, net = full). Default/undefined ⇒ ON.
+  const effD = part.apply_depreciation === false ? 0 : (deprPct ?? 0) / 100
   const time = part.repair_time_h ?? 0
   const parts = part.parts_cost_pln ?? 0
 
   if (part.is_manual) {
     return {
       koszty_naprawy_pln:    r2(parts),
-      koszt_amortyzacji_pln: r2(parts * d),
-      koszt_netto_pln:       r2(parts * (1 - d)),
+      koszt_amortyzacji_pln: r2(parts * effD),
+      koszt_netto_pln:       r2(parts * (1 - effD)),
     }
   }
   if (part.qualification === "akceptowalne") {
@@ -137,15 +140,15 @@ function computePartCosts(
   if (part.qualification === "wymiana") {
     return {
       koszty_naprawy_pln:    r2(labour + parts),
-      koszt_amortyzacji_pln: r2(labour * d),
-      koszt_netto_pln:       r2(labour * (1 - d) + parts),
+      koszt_amortyzacji_pln: r2(labour * effD),
+      koszt_netto_pln:       r2(labour * (1 - effD) + parts),
     }
   }
   if (part.qualification === "naprawa" || part.qualification === "lakierowanie") {
     return {
       koszty_naprawy_pln:    r2(labour),
-      koszt_amortyzacji_pln: r2(labour * d),
-      koszt_netto_pln:       r2(labour * (1 - d)),
+      koszt_amortyzacji_pln: r2(labour * effD),
+      koszt_netto_pln:       r2(labour * (1 - effD)),
     }
   }
   return { koszty_naprawy_pln: 0, koszt_amortyzacji_pln: 0, koszt_netto_pln: 0 }
@@ -274,6 +277,7 @@ export default function AdminMacadamEditPage({
       repair_time_h: null,
       parts_cost_pln: null,
       is_manual: false,
+      apply_depreciation: true,
       koszty_naprawy_pln: null,
       koszt_amortyzacji_pln: null,
       koszt_netto_pln: null,
@@ -298,6 +302,7 @@ export default function AdminMacadamEditPage({
       repair_time_h: null,
       parts_cost_pln: null,
       is_manual: true,
+      apply_depreciation: true,
       koszty_naprawy_pln: null,
       koszt_amortyzacji_pln: null,
       koszt_netto_pln: null,
@@ -356,6 +361,7 @@ export default function AdminMacadamEditPage({
         repair_time_h:         p.repair_time_h,
         parts_cost_pln:        p.parts_cost_pln,
         is_manual:             p.is_manual,
+        apply_depreciation:    p.apply_depreciation,
         koszty_naprawy_pln:    c.koszty_naprawy_pln,
         koszt_amortyzacji_pln: c.koszt_amortyzacji_pln,
         koszt_netto_pln:       c.koszt_netto_pln,
@@ -1077,6 +1083,48 @@ function PartEditor({
             value={part.parts_cost_pln}
             onChange={n => onChange({ parts_cost_pln: n })}
           />
+        )}
+        {part.qualification !== "akceptowalne" && (
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              justifyContent: "flex-start",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                color: "#86868B",
+                fontWeight: 600,
+                letterSpacing: 0.4,
+                textTransform: "uppercase",
+              }}
+            >
+              Amortyzacja
+            </span>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#fff",
+                border: "1px solid #E8E8ED",
+                borderRadius: 6,
+                padding: "8px 10px",
+                fontSize: 13,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={part.apply_depreciation !== false}
+                onChange={e => onChange({ apply_depreciation: e.target.checked })}
+                style={{ width: 16, height: 16, cursor: "pointer" }}
+              />
+              Uwzględnij amortyzację
+            </span>
+          </label>
         )}
         <ComputedField label="Koszty naprawy (PLN)" value={computed.koszty_naprawy_pln} />
         <ComputedField label="Amortyzacja (PLN)"   value={computed.koszt_amortyzacji_pln} />

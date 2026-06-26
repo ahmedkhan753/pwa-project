@@ -42,6 +42,7 @@ export interface MacadamPart {
   repair_time_h:         number | null;
   parts_cost_pln:        number | null;   // wymiana: parts price; is_manual: fixed sum
   is_manual:             boolean;
+  apply_depreciation:    boolean;          // default true; false ⇒ this part gets NO depreciation
 
   // Computed (recomputed server-side on PUT). Null = nothing entered yet.
   koszty_naprawy_pln:    number | null;
