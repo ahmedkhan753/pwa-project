@@ -294,6 +294,31 @@ def _validate_change(path: str, value: Any, schema_entry: Optional[Dict[str, Any
                 detail=f"{path}: must be a JSON object or array",
             )
 
+    elif t == "json":
+        # Freeform list-of-objects override (e.g. notes.mechanicalOverride).
+        # Sanity-check shape without enforcing a fixed key set: must be a list
+        # of objects whose string fields are strings within the length cap.
+        if not isinstance(value, list):
+            raise HTTPException(status_code=400, detail=f"{path}: must be a list")
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise HTTPException(
+                    status_code=400, detail=f"{path}[{i}]: each item must be an object",
+                )
+            for k, fv in item.items():
+                if fv is None:
+                    continue
+                if not isinstance(fv, str):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"{path}[{i}].{k}: must be a string",
+                    )
+                if len(fv) > MAX_TEXT_LEN:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"{path}[{i}].{k}: text exceeds {MAX_TEXT_LEN} chars",
+                    )
+
     # Unknown type — fall through (treat permissively).
 
 
@@ -786,6 +811,14 @@ def _build_schema() -> Dict[str, Dict[str, Any]]:
     schema["mechanical.testDriveComment"]        = {"type": "text", "label": "Komentarz - jazda próbna"}
     schema["mechanical.testDriveImpossibleText"] = {"type": "text", "label": "Powód braku jazdy próbnej"}
 
+    # Mechanical-condition OVERRIDE — a dynamic admin-managed list stored in
+    # notes_json["mechanicalOverride"] (root "notes" → notes_json). Pure
+    # display data: the CR report prefers it over the fixed mechanical_json
+    # rows. mechanical_json itself is never mutated. Written via a standalone
+    # path-PUT (like vehicle.heroPhotoSlot); validated as a list of
+    # {element, condition} string objects by _validate_change's "json" branch.
+    schema["notes.mechanicalOverride"] = {"type": "json", "label": "Stan mechaniczny (override)"}
+
     # Tires (tires_json — dict keyed by position: frontLeft/frontRight/
     # rearLeft/rearRight). 4 positions × 9 fields = 36 entries.
     for pos_key, pos_label in TIRE_POSITIONS:
@@ -1081,6 +1114,9 @@ async def get_report_edit(
         "notes":            _strip_photos_recursive(_load_json(rec.notes_json, {})),
         "equipment":        _strip_photos_recursive(_load_json(rec.equipment_json, {})),
         "full_equipment":   _strip_photos_recursive(_load_json(rec.full_equipment_json, {})),
+        # Admin mechanical-condition override (notes_json["mechanicalOverride"]).
+        # None when unset → editor prefills from "mechanical" on first open.
+        "mechanical_override": (_load_json(rec.notes_json, {}) or {}).get("mechanicalOverride"),
         "schema":           _schema_for_rec(rec),
     }
 

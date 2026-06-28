@@ -75,6 +75,7 @@ interface ReportData {
 
   interior_damages?: Array<{ index: number; type: string; location: string; size?: string; description?: string; photo_url?: string | null; photo_urls?: string[] }>;
   mechanical?: { engine_start?: string; ac_working?: boolean; warning_lights?: string; [key: string]: unknown };
+  mechanical_override?: Array<{ element?: string; condition?: string }> | null;
   notes?: string;
   signatures?: {
     inspector?: { name: string; signature_url?: string };
@@ -1914,12 +1915,33 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
             (mech as Record<string, unknown>).warningLights ?? ''
           ).trim();
           const testDriveComment = String((mech as Record<string, unknown>).testDriveComment ?? '').trim();
+          // Admin override: when a non-empty mechanicalOverride list exists, it
+          // REPLACES the fixed ROWS. Each item is { element, condition }; the
+          // condition text is shown verbatim and coloured by the same labelFor
+          // free-text logic (fitness mode is a no-op for free text). The two
+          // extra rows (testDriveComment / warningLights) still come from mech.
+          const overrideItems = Array.isArray(data.mechanical_override)
+            ? data.mechanical_override : [];
+          const useOverride = overrideItems.length > 0;
+          const bodyRows: Array<{ key: string; label: string; text: string; color: string }> =
+            useOverride
+              ? overrideItems.map((it, i) => {
+                  const cond = String(it?.condition ?? '').trim();
+                  return {
+                    key: `ov-${i}`,
+                    label: String(it?.element ?? '').trim(),
+                    text: cond || '-',
+                    color: labelFor(cond, 'fitness').color,
+                  };
+                })
+              : visibleRows.map(r => ({ key: r.key, label: r.label, text: r.text, color: r.color }));
           // Inspector who skipped Step 9 of the wizard leaves every key
           // null, so visibleRows is empty and both extra rows are blank.
           // Render a muted placeholder rather than hiding the whole section
           // — the client should see that Stan mechaniczny was skipped, not
-          // assume the report has no such section at all.
-          const noData = visibleRows.length === 0 && !warningLights && !testDriveComment;
+          // assume the report has no such section at all. An override always
+          // counts as data.
+          const noData = !useOverride && visibleRows.length === 0 && !warningLights && !testDriveComment;
           return (
             <>
               <div style={{ width:'90%',maxWidth:1080,height:1,background:'#E8E8ED',margin:'24px auto' }}/>
@@ -1942,8 +1964,8 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {visibleRows.map((r, i) => (
-                          <tr key={r.key} style={{ borderBottom: i < visibleRows.length - 1 ? '1px solid #F0F0F2' : undefined }}>
+                        {bodyRows.map((r, i) => (
+                          <tr key={r.key} style={{ borderBottom: i < bodyRows.length - 1 ? '1px solid #F0F0F2' : undefined }}>
                             <td style={{ padding:'10px 14px',color:'#1D1D1F',fontWeight:500 }}>{r.label}</td>
                             <td style={{ padding:'10px 14px',fontWeight:700,color:r.color }}>{r.text}</td>
                           </tr>

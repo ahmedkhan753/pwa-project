@@ -10,6 +10,11 @@ interface SchemaEntry {
   max?: number
 }
 
+interface MechItem {
+  element: string
+  condition: string
+}
+
 interface EditPayload {
   deal_id: number
   title: string
@@ -18,6 +23,9 @@ interface EditPayload {
   bitrix_extras: Record<string, string>
   schema: Record<string, SchemaEntry>
   updated_at?: string | null
+  // Mechanical-condition prefill source + saved override (see backend GET).
+  mechanical?: Record<string, unknown>
+  mechanical_override?: MechItem[] | null
 }
 
 interface SaveResponse {
@@ -137,6 +145,70 @@ const coerceForApi = (raw: string, type: SchemaEntry["type"]): unknown => {
     return Number.isFinite(n) ? n : raw
   }
   return raw
+}
+
+// Mechanical-condition prefill — key/label/mode mirror the CR report's ROWS
+// (src/app/report/[dealId]/page.tsx) so the prefilled list matches what the
+// client already sees. mechValueToText reproduces the report's labelFor text
+// mapping (TAK/NIE → readable per mode, free-text passed through title-cased).
+type MechMode = "fitness" | "fluid" | "presence" | "good_bad" | "yesno"
+const MECH_ROWS: Array<[string, string, MechMode]> = [
+  ["engineCondition",  "Stan silnika",               "good_bad"],
+  ["engineOilLevel",   "Poziom oleju",               "fluid"],
+  ["coolantLevel",     "Poziom płynu chłodniczego",  "fluid"],
+  ["engineNoises",     "Hałasy silnika",             "presence"],
+  ["engineSmoke",      "Dymienie silnika",           "presence"],
+  ["transmission",     "Skrzynia biegów",            "fitness"],
+  ["clutch",           "Sprzęgło",                   "fitness"],
+  ["driveShaft",       "Wał napędowy",               "fitness"],
+  ["frontSuspension",  "Zawieszenie przednie",       "fitness"],
+  ["rearSuspension",   "Zawieszenie tylne",          "fitness"],
+  ["shockAbsorbers",   "Amortyzatory",               "fitness"],
+  ["frontBrakes",      "Hamulce przednie",           "fitness"],
+  ["rearBrakes",       "Hamulce tylne",              "fitness"],
+  ["handbrake",        "Hamulec ręczny",             "fitness"],
+  ["steeringPlay",     "Luz kierownicy",             "presence"],
+  ["steeringPump",     "Wspomaganie kierownicy",     "fitness"],
+  ["exhaustSystem",    "Układ wydechowy",            "fitness"],
+  ["airConditioning",  "Klimatyzacja",               "fitness"],
+  ["heatingSystem",    "Ogrzewanie",                 "fitness"],
+  ["electricalSystem", "Instalacja elektryczna",     "fitness"],
+  ["batteryCondition", "Akumulator",                 "good_bad"],
+  ["lightsAll",        "Oświetlenie",                "fitness"],
+  ["wipers",           "Wycieraczki",                "fitness"],
+]
+
+const mechValueToText = (raw: unknown, mode: MechMode): string => {
+  const v = raw == null ? "" : String(raw).trim().toUpperCase()
+  if (!v) return ""
+  if (v === "TRUE" || v === "TAK" || v === "YES" || v === "1") {
+    if (mode === "fitness")  return "Sprawny"
+    if (mode === "fluid")    return "OK"
+    if (mode === "presence") return "Brak"
+    if (mode === "good_bad") return "Dobry"
+    return "Tak"
+  }
+  if (v === "FALSE" || v === "NIE" || v === "NO" || v === "0") {
+    if (mode === "fitness")  return "Niesprawny"
+    if (mode === "fluid")    return "Niski"
+    if (mode === "presence") return "Występują"
+    if (mode === "good_bad") return "Zły"
+    return "Nie"
+  }
+  // Free-text (incl. ND) — title-case for readability, same as labelFor.
+  return v.length > 1 ? v[0] + v.slice(1).toLowerCase() : v
+}
+
+// Build the prefill list from the mechanical_json blob (only keys with a value).
+const prefillMechItems = (mech: Record<string, unknown> | undefined): MechItem[] => {
+  if (!mech) return []
+  const out: MechItem[] = []
+  for (const [key, label, mode] of MECH_ROWS) {
+    const raw = mech[key]
+    if (raw == null || String(raw).trim() === "") continue
+    out.push({ element: label, condition: mechValueToText(raw, mode) })
+  }
+  return out
 }
 
 const wantsTextarea = (path: string, value: unknown): boolean => {
@@ -425,6 +497,72 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
     return () => clearTimeout(h)
   }, [toast])
 
+  // ── Mechanical-condition override ────────────────────────────────────────
+  // Full admin control (add / remove / edit). Initialised from the saved
+  // override when present, else prefilled from the inspection mechanical blob
+  // (so the admin starts from what the client already sees). Saved via a
+  // standalone path-PUT to notes.mechanicalOverride — mechanical_json is never
+  // touched.
+  const [mechItems, setMechItems] = useState<MechItem[]>([])
+  const [mechSaving, setMechSaving] = useState(false)
+
+  useEffect(() => {
+    if (!data) return
+    const saved = data.mechanical_override
+    if (Array.isArray(saved) && saved.length > 0) {
+      setMechItems(saved.map(it => ({
+        element: String(it?.element ?? ""),
+        condition: String(it?.condition ?? ""),
+      })))
+    } else {
+      setMechItems(prefillMechItems(data.mechanical))
+    }
+  }, [data])
+
+  const updateMechItem = (idx: number, patch: Partial<MechItem>) => {
+    setMechItems(prev => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)))
+  }
+  const removeMechItem = (idx: number) => {
+    setMechItems(prev => prev.filter((_, i) => i !== idx))
+  }
+  const addMechItem = () => {
+    setMechItems(prev => [...prev, { element: "", condition: "" }])
+  }
+
+  const saveMechanical = async () => {
+    if (!token) return
+    // Drop fully-empty rows before saving.
+    const cleaned = mechItems
+      .map(it => ({ element: it.element.trim(), condition: it.condition.trim() }))
+      .filter(it => it.element || it.condition)
+    setMechSaving(true)
+    try {
+      const res = await fetch(`${API_BASE}/admin/reports/${dealId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          changes: [{ path: "notes.mechanicalOverride", value: cleaned }],
+        }),
+      })
+      if (res.status === 401) {
+        sessionStorage.removeItem("admin_token")
+        router.push("/admin")
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setMechItems(cleaned)
+      setToast({ kind: "ok", msg: "Zapisano stan mechaniczny" })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setToast({ kind: "err", msg: `Nie udało się zapisać: ${msg}` })
+    } finally {
+      setMechSaving(false)
+    }
+  }
+
   // Paint panel display order — mirrors backend PAINT_PANEL_KEYS /
   // report.py PAINT_PANELS_19 / inspector wizard order. Keeps the admin
   // edit list aligned with the Condition Report instead of alphabetical.
@@ -438,7 +576,7 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
   // Schema entries that are written through a dedicated UI (not the generic
   // form), so they must NOT render as text inputs. The schema entry still
   // exists for PUT validation; the GET response still surfaces the value.
-  const HIDDEN_SCHEMA_PATHS = new Set(["vehicle.heroPhotoSlot"])
+  const HIDDEN_SCHEMA_PATHS = new Set(["vehicle.heroPhotoSlot", "notes.mechanicalOverride"])
 
   const schemaPaths = useMemo(() => {
     const keys = Object.keys(data?.schema || {}).filter(p => !HIDDEN_SCHEMA_PATHS.has(p))
@@ -927,6 +1065,125 @@ export default function AdminReportEditPage({ params }: { params: { dealId: stri
             </section>
           )
         })}
+
+        {/* Stan mechaniczny — dynamic override (add / remove / edit). Saved to
+            notes.mechanicalOverride; overrides the CR report's fixed rows. */}
+        {data && (
+          <section
+            className="bg-white relative overflow-hidden"
+            style={{
+              borderRadius: 12,
+              border: "1px solid #E8E8ED",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+            }}
+          >
+            <span
+              aria-hidden
+              className="absolute left-0 top-0 bottom-0"
+              style={{ width: 3, background: "#B71C1C", borderRadius: "0 3px 3px 0" }}
+            />
+            <div className="px-5 sm:px-7 py-4 sm:py-5 flex items-start gap-3">
+              <div
+                className="flex items-center justify-center flex-shrink-0"
+                style={{
+                  width: 42, height: 42, borderRadius: 8,
+                  background: "#FEF2F2", color: "#B71C1C", fontSize: 17,
+                }}
+              >
+                <i className="fa-solid fa-cogs" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div
+                  className="font-bold uppercase"
+                  style={{ fontSize: 11, color: "#B71C1C", letterSpacing: 2, marginBottom: 2 }}
+                >
+                  09 / Stan mechaniczny
+                </div>
+                <div className="font-bold" style={{ fontSize: 19, color: "#1D1D1F", lineHeight: 1.3 }}>
+                  Stan mechaniczny
+                </div>
+                <div className="text-xs sm:text-sm mt-1" style={{ color: "#86868B" }}>
+                  Dodawaj, usuwaj i edytuj pozycje. Zapis nadpisuje sekcję 09 na raporcie. Dane inspekcji pozostają bez zmian.
+                </div>
+              </div>
+            </div>
+            <div className="px-5 sm:px-7 pb-5 sm:pb-6 pt-4" style={{ borderTop: "1px solid #E8E8ED" }}>
+              <div className="flex flex-col gap-2">
+                {mechItems.length === 0 && (
+                  <div className="text-sm" style={{ color: "#86868B" }}>
+                    Brak pozycji. Dodaj pierwszą poniżej.
+                  </div>
+                )}
+                {mechItems.map((it, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={it.element}
+                      onChange={e => updateMechItem(i, { element: e.target.value })}
+                      placeholder="Element (np. Stan silnika)"
+                      style={{
+                        flex: 1, minWidth: 0,
+                        border: "1px solid #E8E8ED", borderRadius: 8,
+                        padding: "8px 10px", fontSize: 13, background: "#fff",
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={it.condition}
+                      onChange={e => updateMechItem(i, { condition: e.target.value })}
+                      placeholder="Stan (np. Sprawny)"
+                      style={{
+                        flex: 1, minWidth: 0,
+                        border: "1px solid #E8E8ED", borderRadius: 8,
+                        padding: "8px 10px", fontSize: 13, background: "#fff",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMechItem(i)}
+                      aria-label="Usuń pozycję"
+                      style={{
+                        flexShrink: 0,
+                        width: 36, height: 36, borderRadius: 8,
+                        border: "1px solid #B71C1C", background: "#fff",
+                        color: "#B71C1C", fontSize: 16, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={addMechItem}
+                  style={{
+                    background: "#fff", border: "1px dashed #B71C1C", color: "#B71C1C",
+                    borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  ＋ Dodaj pozycję
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMechanical}
+                  disabled={mechSaving}
+                  style={{
+                    marginLeft: "auto",
+                    background: mechSaving ? "#F5F5F7" : "#B71C1C",
+                    color: mechSaving ? "#AEAEB2" : "#fff",
+                    border: "none", borderRadius: 8, padding: "8px 18px",
+                    fontSize: 13, fontWeight: 700,
+                    cursor: mechSaving ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {mechSaving ? "Zapisywanie…" : "Zapisz stan mechaniczny"}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Zdjęcia — photo management (list / replace / delete) */}
         <section

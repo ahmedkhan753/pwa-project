@@ -1367,6 +1367,11 @@ async def get_report(deal_id: int, request: Request):
             ),
         },
 
+        # Admin display override for the mechanical section (notes_json
+        # ["mechanicalOverride"]). None when unset → report renders the fixed
+        # mechanical_json rows exactly as before. mechanical_json is untouched.
+        "mechanical_override": (insp_rec_notes or {}).get("mechanicalOverride"),
+
         "notes": notes,
 
         "signatures": {
