@@ -172,6 +172,17 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
   const hasEurotax = !!kosztorys;
   const hasReport  = !!report;
 
+  // Admin display overrides from the kosztorys-costs record take precedence over
+  // the live inspection values; fall back to /api/report when no override saved.
+  const reportTires: ReportTire[] =
+    costs?.tires_override && costs.tires_override.length > 0
+      ? (costs.tires_override as unknown as ReportTire[])
+      : (report?.tires ?? []);
+  const reportDocuments: ReportDocumentItem[] =
+    costs?.documents_override && costs.documents_override.length > 0
+      ? (costs.documents_override as unknown as ReportDocumentItem[])
+      : (report?.documents_check ?? []);
+
   return (
     <div style={{ overflowX: 'hidden', width: '100%', maxWidth: '100vw' }}>
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
@@ -758,7 +769,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             )}
 
             {/* Tires */}
-            {(report?.tires && report.tires.length > 0) && (
+            {(reportTires && reportTires.length > 0) && (
               <>
                 <section className="kosz-card">
                   <div className="section-title">OPONY</div>
@@ -774,7 +785,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                         </tr>
                       </thead>
                       <tbody>
-                        {report.tires.map((t, i) => {
+                        {reportTires.map((t, i) => {
                           const treadStr =
                             typeof t.tread_mm === 'number' && Number.isFinite(t.tread_mm)
                               ? `${t.tread_mm} mm`
@@ -815,14 +826,14 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
             )}
 
             {/* Documents */}
-            {(report?.documents_check && report.documents_check.length > 0) && (
+            {(reportDocuments && reportDocuments.length > 0) && (
               <>
                 <section className="kosz-card">
                   <div className="section-title">WYKAZ DOKUMENTÓW</div>
                   <div className="docs-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12,
                   }}>
-                    {report.documents_check.map((doc, i) => {
+                    {reportDocuments.map((doc, i) => {
                       const clr = doc.status_type === 'green' ? COLORS.green
                                 : doc.status_type === 'red'   ? COLORS.red
                                 : COLORS.text;

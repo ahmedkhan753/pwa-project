@@ -71,4 +71,33 @@ export interface MacadamData {
   // Material + small parts (single manual figure, NOT depreciated —
   // flows straight into the net total, then VAT).
   koszt_materialu_pln:   number | null;
+
+  // Pure pass-through DISPLAY overrides for the kosztorys report (admin-edited
+  // copies of the inspection tires / documents). Absent ⇒ report uses the live
+  // inspection values. Never touched by the cost engine.
+  tires_override?:     MacadamTireOverride[] | null;
+  documents_override?: MacadamDocOverride[] | null;
+}
+
+// Admin-editable tire row (mirrors the /api/report tire shape; identity fields
+// position/code are read-only, the rest are editable display values).
+export interface MacadamTireOverride {
+  position?:    string | null;
+  code?:        string | null;
+  brand?:       string | null;
+  model?:       string | null;
+  size?:        string | null;
+  type?:        string | null;   // season: summer | winter | all-season | ''
+  tread_mm?:    number | null;
+  dot?:         string | null;
+  load_index?:  string | null;
+  speed_index?: string | null;
+  status?:      string | null;   // derived from tread_mm
+}
+
+// Admin-editable documents-checklist row.
+export interface MacadamDocOverride {
+  name:         string;
+  status:       string;          // Tak | Nie | Elektroniczna | Brak
+  status_type:  string;          // green | red | blue
 }

@@ -98,6 +98,13 @@ class MacadamDataIn(BaseModel):
     # Material + small parts — single manual figure, NOT depreciated.
     koszt_materialu_pln:   Optional[float] = None
 
+    # Pure pass-through DISPLAY overrides for the kosztorys report — admin-edited
+    # copies of the inspection tires / documents checklist. Stored verbatim in
+    # data_json; NEVER fed to _recompute or any cost math. None ⇒ no override
+    # (report falls back to the live /api/report inspection values).
+    tires_override:     Optional[List[Dict[str, Any]]] = None
+    documents_override: Optional[List[Dict[str, Any]]] = None
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -317,10 +324,15 @@ async def get_costs(
 
     report = await _fetch_report(deal_id, request)
     available_damages = _available_damages_from_report(report) if report else []
+    # Inspection tires / documents (the live source-of-truth fallback).
+    insp_tires = list(report.get("tires") or []) if report else []
+    insp_documents = list(report.get("documents_check") or []) if report else []
 
     if saved is not None:
         # Always pair saved data with fresh available_damages so the editor
         # can keep adding selections after the first save.
+        tires_override = saved.get("tires_override")
+        documents_override = saved.get("documents_override")
         return {
             "vehicle": saved.get("vehicle") or _empty_skeleton(deal_id)["vehicle"],
             "parts":   saved.get("parts") or [],
@@ -329,12 +341,24 @@ async def get_costs(
             "depreciation_pct":     saved.get("depreciation_pct"),
             "koszt_materialu_pln":  saved.get("koszt_materialu_pln"),
             "available_damages":    available_damages,
+            # Editor always gets a populated list to edit: the saved override
+            # if present, else the inspection values.
+            "tires":     tires_override if tires_override else insp_tires,
+            "documents": documents_override if documents_override else insp_documents,
+            # Raw overrides (None when unset) so the report page can prefer them.
+            "tires_override":     tires_override,
+            "documents_override": documents_override,
         }
 
     skeleton = _empty_skeleton(deal_id)
     if report:
         skeleton["vehicle"] = _vehicle_from_report(report)
     skeleton["available_damages"] = available_damages
+    # First open (nothing saved yet): editor prefills from inspection; no override.
+    skeleton["tires"] = insp_tires
+    skeleton["documents"] = insp_documents
+    skeleton["tires_override"] = None
+    skeleton["documents_override"] = None
     return skeleton
 
 

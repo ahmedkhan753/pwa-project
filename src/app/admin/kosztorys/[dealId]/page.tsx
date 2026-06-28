@@ -5,6 +5,8 @@ import type {
   MacadamData,
   MacadamPart,
   MacadamVehicleHeader,
+  MacadamTireOverride,
+  MacadamDocOverride,
   Qualification,
 } from "@/types/kosztorysMacadam"
 
@@ -64,6 +66,9 @@ interface AvailableDamage {
 
 interface MacadamGetResponse extends MacadamData {
   available_damages: AvailableDamage[]
+  // Populated lists for the editor: saved override if present, else inspection.
+  tires?: MacadamTireOverride[]
+  documents?: MacadamDocOverride[]
 }
 
 const emptyVehicle = (): MacadamVehicleHeader => ({
@@ -187,6 +192,31 @@ function parseNumberOrNull(raw: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+// Mirror backend report.py _tire_status so the derived status stays consistent
+// with what the inspection would produce.
+function deriveTireStatus(treadMm: number | null | undefined): string {
+  if (treadMm === null || treadMm === undefined || !Number.isFinite(treadMm)) return "unknown"
+  if (treadMm >= 4.0) return "good"
+  if (treadMm >= 1.6) return "warn"
+  return "danger"
+}
+
+// Season select options (display label ↔ stored raw value used by the report).
+const SEASON_OPTIONS: { value: string; label: string }[] = [
+  { value: "",            label: "— brak —" },
+  { value: "summer",      label: "Letnie" },
+  { value: "winter",      label: "Zimowe" },
+  { value: "all-season",  label: "Całoroczne" },
+]
+
+// Documents status → status_type colour map (matches report.py + report render).
+const DOC_STATUS_OPTIONS = ["Tak", "Nie", "Elektroniczna", "Brak"]
+function docStatusType(status: string): string {
+  if (status === "Tak") return "green"
+  if (status === "Elektroniczna") return "blue"
+  return "red" // Nie | Brak
+}
+
 export default function AdminMacadamEditPage({
   params,
 }: {
@@ -202,6 +232,9 @@ export default function AdminMacadamEditPage({
   const [labourRate, setLabourRate] = useState<number | null>(null)
   const [deprPct, setDeprPct] = useState<number | null>(null)
   const [materialCost, setMaterialCost] = useState<number | null>(null)
+  // Pass-through display overrides (tires + documents checklist).
+  const [tires, setTires] = useState<MacadamTireOverride[]>([])
+  const [documents, setDocuments] = useState<MacadamDocOverride[]>([])
 
   // Read-only subtotal: sum of per-part koszt_netto_pln across above-norm
   // parts only (excludes akceptowalne, which have 0 cost by rule). Derived
@@ -243,6 +276,8 @@ export default function AdminMacadamEditPage({
       setLabourRate(json.labour_rate_pln_per_h ?? null)
       setDeprPct(json.depreciation_pct ?? null)
       setMaterialCost(json.koszt_materialu_pln ?? null)
+      setTires(json.tires ?? [])
+      setDocuments(json.documents ?? [])
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setToast({ kind: "err", msg: `Nie udało się wczytać: ${msg}` })
@@ -342,6 +377,19 @@ export default function AdminMacadamEditPage({
     )
   }
 
+  // Tires/documents are display overrides — edited immutably, sent verbatim.
+  const updateTire = (idx: number, patch: Partial<MacadamTireOverride>) => {
+    setTires(prev => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)))
+  }
+
+  const updateDocStatus = (idx: number, status: string) => {
+    setDocuments(prev =>
+      prev.map((d, i) =>
+        i === idx ? { ...d, status, status_type: docStatusType(status) } : d
+      )
+    )
+  }
+
   const onSave = async () => {
     if (!token) return
     // Strip the non-enumerable _src_key off the parts before sending,
@@ -383,6 +431,10 @@ export default function AdminMacadamEditPage({
       labour_rate_pln_per_h: labourRate,
       depreciation_pct:      deprPct,
       koszt_materialu_pln:   materialCost,
+      // Display overrides — re-derive each tire's status from its tread so the
+      // report colour stays consistent. Sent verbatim; never recomputed.
+      tires_override: tires.map(t => ({ ...t, status: deriveTireStatus(t.tread_mm) })),
+      documents_override: documents,
     }
     setSaving(true)
     try {
@@ -710,6 +762,145 @@ export default function AdminMacadamEditPage({
                   </div>
                 )
               })}
+            </div>
+          )}
+        </Section>
+
+        {/* Tires override — display-only, overrides inspection on the report */}
+        <Section
+          title="Opony"
+          subtitle="Edytowane wartości nadpisują dane z inspekcji na raporcie kosztorysu"
+        >
+          {tires.length === 0 ? (
+            <div style={{ color: "#86868B", fontSize: 13 }}>
+              Brak danych o oponach w inspekcji.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {tires.map((t, i) => (
+                <div
+                  key={t.code || t.position || i}
+                  style={{
+                    border: "1px solid #E8E8ED",
+                    borderRadius: 10,
+                    padding: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#1D1D1F",
+                      textTransform: "uppercase",
+                      letterSpacing: 0.6,
+                    }}
+                  >
+                    {t.position || t.code || `Koło ${i + 1}`}
+                  </div>
+                  <Field
+                    label="Marka"
+                    value={t.brand ?? ""}
+                    onChange={v => updateTire(i, { brand: v })}
+                  />
+                  <Field
+                    label="Model"
+                    value={t.model ?? ""}
+                    onChange={v => updateTire(i, { model: v })}
+                  />
+                  <Field
+                    label="Rozmiar"
+                    value={t.size ?? ""}
+                    onChange={v => updateTire(i, { size: v })}
+                  />
+                  <NumberField
+                    label="Bieżnik (mm)"
+                    value={t.tread_mm ?? null}
+                    onChange={n => updateTire(i, { tread_mm: n })}
+                  />
+                  <EnumField
+                    label="Sezon"
+                    value={t.type ?? ""}
+                    options={SEASON_OPTIONS}
+                    onChange={v => updateTire(i, { type: v || null })}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        {/* Documents checklist override — display-only */}
+        <Section
+          title="Wykaz dokumentów"
+          subtitle="Status nadpisuje dane z inspekcji na raporcie kosztorysu"
+        >
+          {documents.length === 0 ? (
+            <div style={{ color: "#86868B", fontSize: 13 }}>
+              Brak wykazu dokumentów w inspekcji.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {documents.map((d, i) => (
+                <div
+                  key={`${d.name}-${i}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    border: "1px solid #E8E8ED",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 13,
+                      color: "#1D1D1F",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {d.name}
+                  </span>
+                  <select
+                    value={d.status}
+                    onChange={e => updateDocStatus(i, e.target.value)}
+                    style={{
+                      background: "#fff",
+                      border: "1px solid #E8E8ED",
+                      borderRadius: 6,
+                      padding: "6px 8px",
+                      fontSize: 13,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {/* Keep the current value selectable even if non-standard */}
+                    {!DOC_STATUS_OPTIONS.includes(d.status) && d.status && (
+                      <option value={d.status}>{d.status}</option>
+                    )}
+                    {DOC_STATUS_OPTIONS.map(s => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
           )}
         </Section>
