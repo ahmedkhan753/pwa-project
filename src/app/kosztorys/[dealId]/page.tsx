@@ -30,8 +30,14 @@ interface ReportTire {
   position?: string | null;
   brand?: string | null;
   model?: string | null;
-  treadDepth?: string | number | null;
   size?: string | null;
+  dot?: string | null;
+  status?: string | null;
+  // Actual keys returned by /api/report — the page reads these.
+  tread_mm?: number | null;
+  type?: string | null;
+  // Legacy keys kept optional for backward-compat (not rendered).
+  treadDepth?: string | number | null;
   season?: string | null;
 }
 interface ReportData {
@@ -770,9 +776,18 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                       <tbody>
                         {report.tires.map((t, i) => {
                           const treadStr =
-                            t.treadDepth === null || t.treadDepth === undefined || t.treadDepth === ''
-                              ? '—'
-                              : `${t.treadDepth} mm`;
+                            typeof t.tread_mm === 'number' && Number.isFinite(t.tread_mm)
+                              ? `${t.tread_mm} mm`
+                              : '—';
+                          const seasonRaw = (t.type ?? '').toString().trim();
+                          const seasonMap: Record<string, string> = {
+                            'all-season': 'Całoroczne',
+                            'summer': 'Letnie',
+                            'winter': 'Zimowe',
+                          };
+                          const seasonStr = seasonRaw
+                            ? (seasonMap[seasonRaw.toLowerCase()] ?? seasonRaw)
+                            : '—';
                           const brand = (t.brand ?? '').toString().trim();
                           const model = (t.model ?? '').toString().trim();
                           const producerModel = brand && model
@@ -788,7 +803,7 @@ export default function KosztorysDealPage({ params }: { params: { dealId: string
                               <td data-label="Wymiary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
                                 {t.size ?? ''}
                               </td>
-                              <td data-label="Sezon">{t.season ?? '—'}</td>
+                              <td data-label="Sezon">{seasonStr}</td>
                             </tr>
                           );
                         })}
