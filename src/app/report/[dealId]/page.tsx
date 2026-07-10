@@ -1283,8 +1283,6 @@ export default function ReportPage({ params }: { params: { dealId: string } }) {
               { icon:'fas fa-road',          label:'Napęd',               value: v.drive_type },
               { icon:'fas fa-door-open',     label:'Liczba drzwi',        value: v.doors },
               { icon:'fas fa-users',         label:'Liczba miejsc',       value: v.seats },
-              { icon:'fas fa-weight-hanging',label:'Masa własna',         value: v.weight_kg ? `${v.weight_kg} kg` : null },
-              { icon:'fas fa-truck',         label:'Nadwozie',            value: v.body_type },
               { icon:'fas fa-calendar-check',label:'Data pierwszej rejestracji', value: v.first_registration_date },
               { icon:'fas fa-user',          label:'Liczba właścicieli',  value: v.owners_count },
               { icon:'fas fa-star',          label:'Wersja wyposażenia',  value: v.version },
