@@ -1164,8 +1164,7 @@ async def get_report(deal_id: int, request: Request):
     if insp_rec_notes:
         notes_from_rec = (
             _safe_str(insp_rec_notes.get("generalComments")) or
-            _safe_str(insp_rec_notes.get("valuationNotes")) or
-            _safe_str(insp_rec_notes.get("marketComparison")) or ""
+            _safe_str(insp_rec_notes.get("valuationNotes")) or ""
         )
     notes = (
         notes_from_rec or

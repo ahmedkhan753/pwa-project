@@ -283,8 +283,8 @@ def build_dane_pojazdu(d, w):
           "Rodzaj paliwa",          V("fuel_type", "fuelType", "rodzaj_paliwa")),
         r("Skrzynia biegów",        V("gearbox", "skrzynia_biegow", "transmission"),
           "Napęd",                  V("drive", "naped", "driveType")),
-        r("Rodzaj nadwozia",        V("body_type", "rodzaj_nadwozia"),
-          "Liczba drzwi",           V("doors", "liczba_drzwi")),
+        r("Liczba drzwi",           V("doors", "liczba_drzwi"),
+          "", ""),
         r("Ilość miejsc siedz.",    V("seats", "ilosc_miejsc", "seatsCount"),
           "Masa własna (kg)",       V("kerb_weight", "masa_wlasna", "ownWeight")),
         r("Pojemność silnika (cm³)", V("engine_capacity", "pojemnosc", "engineCapacity"),
@@ -703,7 +703,6 @@ def generate_inspection_pdf(deal_info: dict, inspection_data: dict, logo_path: s
         _set("first_registration", vehicle.get("firstRegistration"))
         _set("plates",             vehicle.get("registrationPlates") or vehicle.get("registrationNumber"))
         _set("gearbox",            vehicle.get("gearboxType"))
-        _set("body_type",          vehicle.get("bodyType"))
         _set("doors",              vehicle.get("doorsCount"))
     if basic:
         _set("company_name",       basic.get("companyName"))

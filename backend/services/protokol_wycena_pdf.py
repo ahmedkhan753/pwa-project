@@ -370,7 +370,6 @@ def _section_vehicle(report: Dict[str, Any]) -> List[Any]:
         ("Przebieg (km)",       _or_dash(v.get("mileage"))),
         ("Kolor",               _or_dash(v.get("color"))),
         ("Rodzaj paliwa",       _or_dash(v.get("fuel_type"))),
-        ("Typ nadwozia",        _or_dash(v.get("body_type"))),
         ("Skrzynia biegów",     _or_dash(v.get("transmission"))),
         ("Napęd",               _or_dash(v.get("drive_type"))),
         ("Pojemność silnika (cm³)", _or_dash(v.get("engine_capacity_cc"))),
