@@ -10,7 +10,6 @@ import { api as apiClient } from "@/lib/api";
 import { cn, formatLocaleDate } from "@/lib/utils";
 
 const FUEL_TYPES = ["BENZYNA", "DIESEL", "LPG", "HYBRYDA", "ELEKTRYCZNY", "HYBRYDA PLUG-IN", "HYBRYDA DIESEL", "WODÓR", "NIE DOTYCZY"];
-const BODY_TYPES = ["HATCHBACK", "SEDAN", "KOMBI", "SUV", "COUPE", "CABRIO", "VAN/MINIVAN", "PICKUP", "CROSSOVER"];
 const GEARBOX_TYPES = ["MANUALNA", "AUTOMATYCZNA", "CVT", "DSG/DCT (DWUSPRZĘGŁOWA)"];
 const DRIVE_TYPES = ["4x2 (FWD)", "4x2 (RWD)", "4x4 (AWD)", "4x4 (4WD)"];
 const SEATS_OPTIONS = ["2", "4", "5", "6", "7", "8", "9+"];
@@ -336,14 +335,6 @@ export function VehicleDataStep() {
                         options={metadata?.fuel_types || FUEL_TYPES} 
                         onChange={(val) => handleChange('fuelType', val)} 
                         placeholder="Wybierz paliwo"
-                    />
-
-                    <SmartDropdown 
-                        label="Typ nadwozia" 
-                        value={v.bodyType} 
-                        options={metadata?.body_types || BODY_TYPES} 
-                        onChange={(val) => handleChange('bodyType', val)} 
-                        placeholder="Wybierz nadwozie"
                     />
 
                     <FormField label="Pierwsza rejestracja" value={(v.firstRegistration||'').slice(0,10)} onChange={(val) => handleChange('firstRegistration', val)} placeholder="" type="date" />

@@ -9,6 +9,15 @@ export function mapToBitrix24(data: StepData) {
     const vehicle = data.vehicleData;
     const basicInfo = vehicle.basicInfo;
 
+    // estimatedValue / marketComparison are no longer collected by the form and
+    // must not reach Bitrix. The store still defines the keys, so strip them
+    // from the serialised notesValuation blob. All other keys pass through.
+    const {
+        estimatedValue: _estimatedValue,
+        marketComparison: _marketComparison,
+        ...notesValuationForBitrix
+    } = data.notesValuation;
+
     const payload: Record<string, any> = {
         // System Fields
         TITLE: `Inspekcja: ${vehicle.make} ${vehicle.model} - ${vehicle.registrationPlates}`,
@@ -24,7 +33,6 @@ export function mapToBitrix24(data: StepData) {
         UF_CRM_ENGINE_CAPACITY: vehicle.engineCapacity,
         UF_CRM_ENGINE_POWER: vehicle.enginePower,
         UF_CRM_FUEL_TYPE: vehicle.fuelType,
-        UF_CRM_BODY_TYPE: vehicle.bodyType,
         UF_CRM_GEARBOX: vehicle.gearboxType,
         UF_CRM_DRIVE_TYPE: vehicle.driveType,
         UF_CRM_FIRST_REG: vehicle.firstRegistration,
@@ -76,11 +84,10 @@ export function mapToBitrix24(data: StepData) {
         // Mechanical Checklist (JSON blob)
         UF_CRM_MECHANICAL: JSON.stringify(data.mechanical),
 
-        // Notes & Valuation (JSON blob)
-        UF_CRM_NOTES_VALUATION: JSON.stringify(data.notesValuation),
+        // Notes & Valuation (JSON blob) — estimatedValue / marketComparison stripped
+        UF_CRM_NOTES_VALUATION: JSON.stringify(notesValuationForBitrix),
 
         // Valuation highlights
-        UF_CRM_EST_VALUE: data.notesValuation.estimatedValue,
         UF_CRM_GENERAL_COMMENTS: data.notesValuation.generalComments,
 
         // VIN Confirmation

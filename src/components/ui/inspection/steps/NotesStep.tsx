@@ -117,35 +117,6 @@ export function NotesStep() {
                     rows={4}
                     className="w-full py-3 px-4 rounded-xl border-2 border-border bg-surface text-foreground text-sm resize-none mb-3"
                 />
-
-                <div className="grid grid-cols-2 gap-3">
-                    <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
-                            Szacunkowa wartość (PLN)
-                        </label>
-                        <input
-                            type="text"
-                            value={notes.estimatedValue}
-                            onChange={(e) => updateField('notesValuation', 'estimatedValue', e.target.value)}
-                            placeholder="np. 45 000"
-                            aria-label="Estimated value"
-                            className="w-full py-2.5 px-3 rounded-xl border-2 border-border bg-surface text-foreground text-lg font-bold"
-                        />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-secondary uppercase tracking-wider mb-1 block">
-                            Porównanie rynkowe
-                        </label>
-                        <input
-                            type="text"
-                            value={notes.marketComparison}
-                            onChange={(e) => updateField('notesValuation', 'marketComparison', e.target.value)}
-                            placeholder="np. Otomoto avg"
-                            aria-label="Market comparison"
-                            className="w-full py-2.5 px-3 rounded-xl border-2 border-border bg-surface text-foreground text-sm"
-                        />
-                    </div>
-                </div>
             </div>
         </div>
     );
