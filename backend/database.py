@@ -76,5 +76,25 @@ def migrate_db(engine_instance) -> None:
                     conn.commit()
                     log.info(f"Migration: added column inspection_records.{col_name}")
 
+        # ── valuation_deliveries table ──
+        # The public documents token was added after the table's first cut, so
+        # a dev DB created from the initial version needs the column. On a fresh
+        # DB the table doesn't exist yet → create_all builds it with the column
+        # and this block is a no-op (guarded by the truthiness of vd_cols).
+        try:
+            vd_cols = {col["name"] for col in inspector.get_columns("valuation_deliveries")}
+        except Exception:
+            vd_cols = set()
+
+        vd_pending = {
+            "token": "VARCHAR(64)",
+        }
+        with engine_instance.connect() as conn:
+            for col_name, col_type in vd_pending.items():
+                if vd_cols and col_name not in vd_cols:
+                    conn.execute(text(f"ALTER TABLE valuation_deliveries ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                    log.info(f"Migration: added column valuation_deliveries.{col_name}")
+
     except Exception as e:
         log.error(f"Migration error: {e}")

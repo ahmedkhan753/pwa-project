@@ -290,6 +290,7 @@ from routers import webhook as webhook_router
 from routers import report as report_router
 from routers import kosztorys as kosztorys_router
 from routers import kosztorys_costs as kosztorys_costs_router
+from routers import documents as documents_router
 
 app.include_router(health.router)
 app.include_router(deals.router)
@@ -305,6 +306,8 @@ app.include_router(webhook_router.router)
 app.include_router(report_router.router)
 app.include_router(kosztorys_router.router)
 app.include_router(kosztorys_costs_router.router)
+# Public client-documents endpoints — token-guarded, no auth
+app.include_router(documents_router.router)
 
 
 # ─── QR Debug Endpoint ────────────────────────────────────────

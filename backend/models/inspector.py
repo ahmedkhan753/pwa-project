@@ -76,6 +76,31 @@ class SubmissionJob(Base):
     updated_at = Column(DateTime, server_default=func.now())
 
 
+class ValuationDelivery(Base):
+    """One row per deal whose valuation documents were mailed to the client.
+
+    Written by webhook.send_valuation_to_client when a deal enters the
+    "Wyslij wycene klientowi" stage. The UNIQUE deal_id doubles as the
+    idempotency key: a row with status='sent' means the client already got
+    the email, so re-firing webhooks never re-sends. Non-'sent' rows
+    (skipped_no_email / skipped_no_documents / error) are retried on the
+    next webhook, since those are recoverable once the data is filled in.
+    """
+    __tablename__ = "valuation_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, unique=True, nullable=False, index=True)
+    # sent | skipped_no_email | skipped_no_documents | error
+    status = Column(String(30), nullable=False)
+    recipient = Column(String(255), nullable=True)
+    sent_at = Column(DateTime, server_default=func.now())
+    error = Column(Text, nullable=True)
+    # Unguessable public key for the customer documents page
+    # (/dokumenty/{token}). Generated once per deal and reused on every later
+    # send, so a re-sent email keeps working with the same link.
+    token = Column(String(64), unique=True, nullable=True, index=True)
+
+
 class InspectionRecord(Base):
     """Stores the full inspection payload at submit time for the report endpoint.
 

@@ -9,10 +9,12 @@ Configure in Bitrix24:
   URL: https://YOUR_SERVER/webhook/bitrix
 """
 
+import html
 import logging
 import os
 import re
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -39,6 +41,13 @@ PUBLIC_APP_BASE = os.getenv("PUBLIC_APP_BASE", "https://app.zaufajrzeczoznawcy.p
 # Equipment auto-parse: input Wycena PDF field + output standard-equipment field.
 WYCENA_PDF_FIELD = os.getenv("BITRIX_WYCENA_FIELD", "UF_CRM_1779285905944")
 WYPOSAZENIE_STD_FIELD = "UF_CRM_1778277584327"
+
+# ─── Automatic valuation delivery ─────────────────────────────────────────────
+# Deal stage that triggers mailing the valuation documents to the client
+# ("Wyslij wycenę klientowi"). Env-overridable so the stage can move without
+# a code change. The documents themselves (field ids, resolution, token) live
+# in services.valuation_documents — shared with routers.documents.
+VALUATION_STAGE_ID = os.getenv("BITRIX_VALUATION_STAGE_ID", "UC_DONA6U")
 
 # Local storage for downloaded docs
 DOCS_DIR = Path("/app/data/report_docs")
@@ -262,6 +271,203 @@ async def sync_deal_kosztorys_url(gateway, deal_id: int, deal: dict) -> None:
         logger.info(f"[Kosztorys URL] Wrote {expected_url} to deal {deal_id}")
     except Exception as e:
         logger.warning(f"[Kosztorys URL] Failed for deal {deal_id}: {e}")
+
+
+# ─── Automatic valuation delivery ─────────────────────────────────────────────
+
+def _record_valuation_delivery(
+    deal_id: int,
+    status: str,
+    recipient: Optional[str] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Upsert the valuation_deliveries row for this deal.
+
+    Best-effort: a DB failure here must not break the delivery flow, so it is
+    logged and swallowed. Uses its own short-lived session because background
+    tasks run outside the request's get_db() dependency scope.
+    """
+    from database import SessionLocal
+    from models.inspector import ValuationDelivery
+    db = None
+    try:
+        db = SessionLocal()
+        row = (
+            db.query(ValuationDelivery)
+            .filter(ValuationDelivery.deal_id == deal_id)
+            .first()
+        )
+        if row is None:
+            row = ValuationDelivery(deal_id=deal_id)
+            db.add(row)
+        row.status = status
+        row.recipient = recipient
+        row.error = error
+        row.sent_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        if db is not None:
+            db.rollback()
+        logger.warning(
+            f"[valuation-delivery] deal {deal_id}: could not write delivery row: {e}"
+        )
+    finally:
+        if db is not None:
+            db.close()
+
+
+async def _resolve_client_email(gateway, deal_id: int, deal: dict) -> Optional[str]:
+    """CONTACT_ID → crm.contact.get → EMAIL[0]['VALUE']. None when unavailable."""
+    contact_id = str(deal.get("CONTACT_ID") or "").strip()
+    if not contact_id or contact_id == "0":
+        return None
+    contact = await gateway.call("crm.contact.get", {"ID": contact_id})
+    if not isinstance(contact, dict):
+        return None
+    emails = contact.get("EMAIL") or []
+    if isinstance(emails, dict):          # defensive: single-entry shape
+        emails = [emails]
+    for entry in emails:
+        value = ""
+        if isinstance(entry, dict):
+            value = str(entry.get("VALUE") or "").strip()
+        elif isinstance(entry, str):
+            value = entry.strip()
+        if value:
+            return value
+    return None
+
+
+def _build_valuation_email(deal_id: int, deal: dict, page_url: str) -> str:
+    """Short Polish HTML body carrying ONE link to the documents page.
+
+    Deliberately contains no per-document links: the documents live behind
+    the token-guarded page, so no Bitrix URL, file id or auth token is ever
+    exposed to the customer or their mail provider.
+    """
+    title = str(deal.get("TITLE") or "").strip()
+    identity = (
+        f"<p>Dotyczy: <strong>{html.escape(title)}</strong></p>"
+        if title else ""
+    )
+    safe_url = html.escape(page_url, quote=True)
+    return (
+        '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1D1D1F;'
+        'line-height:1.6;">'
+        "<p>Dzień dobry,</p>"
+        f"<p>dokumenty do zlecenia nr <strong>{deal_id}</strong> są gotowe.</p>"
+        f"{identity}"
+        f'<p style="margin:24px 0;">'
+        f'<a href="{safe_url}" '
+        'style="background:#B71C1C;color:#ffffff;text-decoration:none;'
+        'padding:12px 24px;border-radius:8px;font-weight:bold;'
+        'display:inline-block;">Zobacz dokumenty</a>'
+        "</p>"
+        "<p>Pozdrawiamy,<br/>Zaufaj Rzeczoznawcy</p>"
+        "</div>"
+    )
+
+
+async def send_valuation_to_client(gateway, deal_id: int, deal: dict) -> None:
+    """
+    When a deal enters VALUATION_STAGE_ID, email the client the available
+    valuation documents.
+
+    Idempotent — a valuation_deliveries row with status='sent' short-circuits
+    any later run, so re-firing webhooks never double-sends. Failures are
+    logged but never propagate (called via BackgroundTasks alongside the other
+    webhook handlers — must not derail siblings).
+    """
+    try:
+        # 1. Stage guard — cheapest check first.
+        if str(deal.get("STAGE_ID") or "").strip() != VALUATION_STAGE_ID:
+            return
+
+        # 2. Idempotency: already delivered?
+        from database import SessionLocal
+        from models.inspector import ValuationDelivery
+        db = SessionLocal()
+        try:
+            existing = (
+                db.query(ValuationDelivery)
+                .filter(ValuationDelivery.deal_id == deal_id)
+                .first()
+            )
+        finally:
+            db.close()
+        if existing is not None and existing.status == "sent":
+            logger.info(
+                f"[valuation-delivery] deal {deal_id}: already sent to "
+                f"{existing.recipient} — skipping"
+            )
+            return
+
+        # 3. Recipient.
+        recipient = await _resolve_client_email(gateway, deal_id, deal)
+        if not recipient:
+            logger.warning(
+                f"[valuation-delivery] deal {deal_id}: skipped — no contact email"
+            )
+            _record_valuation_delivery(deal_id, "skipped_no_email")
+            return
+
+        # 4. Documents — only that at least one exists; the page resolves them.
+        from services.valuation_documents import (
+            collect_available_documents, get_or_create_token,
+        )
+        documents = collect_available_documents(deal)
+        if not documents:
+            logger.warning(
+                f"[valuation-delivery] deal {deal_id}: skipped — no documents "
+                f"available to send"
+            )
+            _record_valuation_delivery(deal_id, "skipped_no_documents", recipient)
+            return
+
+        # 5. Mint (or reuse) the public token and send the one-link email.
+        token = get_or_create_token(deal_id)
+        if not token:
+            logger.error(
+                f"[valuation-delivery] deal {deal_id}: could not mint documents "
+                f"token — not sending"
+            )
+            _record_valuation_delivery(
+                deal_id, "error", recipient, "token generation failed"
+            )
+            return
+
+        page_url = f"{PUBLIC_APP_BASE.rstrip('/')}/dokumenty/{token}"
+        from services.email_service import send_email
+        subject = f"Dokumenty do zlecenia nr {deal_id}"
+        body = _build_valuation_email(deal_id, deal, page_url)
+        ok = await send_email(recipient, subject, body)
+
+        # 6. Result logging.
+        if ok:
+            logger.info(
+                f"[valuation-delivery] deal {deal_id}: sent {len(documents)} "
+                f"document link(s) to {recipient}"
+            )
+            _record_valuation_delivery(deal_id, "sent", recipient)
+        else:
+            logger.error(
+                f"[valuation-delivery] deal {deal_id}: send_email returned False "
+                f"for {recipient}"
+            )
+            _record_valuation_delivery(
+                deal_id, "error", recipient, "send_email returned False"
+            )
+
+    # 7. Never propagate into the webhook.
+    except Exception as e:
+        logger.error(
+            f"[valuation-delivery] deal {deal_id}: failed (non-fatal): {e}",
+            exc_info=True,
+        )
+        try:
+            _record_valuation_delivery(deal_id, "error", None, str(e))
+        except Exception:
+            pass
 
 
 # ─── Equipment auto-parse ─────────────────────────────────────────────────────
@@ -491,6 +697,12 @@ async def bitrix_webhook(request: Request, background_tasks: BackgroundTasks, db
         # is attached to UF_CRM_1779285905944. Idempotent (skips when the
         # equipment field is already populated). Independent failure domain.
         background_tasks.add_task(sync_deal_equipment, gateway, int(deal_id), deal)
+
+        # ─── Background: Email the valuation documents to the client when the
+        # deal enters the "Wyślij wycenę klientowi" stage. Idempotent (a
+        # 'sent' delivery row short-circuits re-sends). Independent failure
+        # domain — never breaks the webhook.
+        background_tasks.add_task(send_valuation_to_client, gateway, int(deal_id), deal)
 
         # ─── Email notification logic ─────────────────────────────────
         # Get inspector list ID from deal
