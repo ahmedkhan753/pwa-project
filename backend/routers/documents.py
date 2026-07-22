@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -28,6 +29,34 @@ from services.valuation_documents import (
 
 router = APIRouter(prefix="/documents", tags=["Client Documents"])
 logger = logging.getLogger("routers.documents")
+
+# Polish diacritics → ASCII, so the fallback (latin-1) Content-Disposition
+# filename stays human-readable ("wartości" → "wartosci") instead of dropping
+# characters. The filename* form carries the real UTF-8 name for modern browsers.
+_PL_ASCII = str.maketrans({
+    "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n",
+    "ó": "o", "ś": "s", "ź": "z", "ż": "z",
+    "Ą": "A", "Ć": "C", "Ę": "E", "Ł": "L", "Ń": "N",
+    "Ó": "O", "Ś": "S", "Ź": "Z", "Ż": "Z",
+})
+
+
+def _ascii_filename(label: str, deal_id: int) -> str:
+    """ASCII-only, filesystem-safe fallback filename (latin-1 encodable).
+
+    Transliterates Polish diacritics, drops any remaining non-ASCII, and
+    replaces filename-illegal / whitespace runs with single underscores.
+    """
+    transliterated = label.translate(_PL_ASCII)
+    out = []
+    for ch in transliterated:
+        if ch.isascii() and (ch.isalnum() or ch in "-_"):
+            out.append(ch)
+        else:
+            out.append("_")
+    safe = "_".join(part for part in "".join(out).split("_") if part)
+    safe = safe or "dokument"
+    return f"{safe}_{deal_id}.pdf"
 
 
 async def _load_deal(request: Request, deal_id: int) -> Optional[Dict[str, Any]]:
@@ -161,10 +190,13 @@ async def get_client_document_file(token: str, index: int, request: Request):
         )
         raise HTTPException(status_code=502, detail="Nie udało się pobrać pliku")
 
-    safe_label = "".join(
-        c if (c.isalnum() or c in "-_") else "_" for c in label
-    ).strip("_") or "dokument"
-    filename = f"{safe_label}_{deal_id}.pdf"
+    # RFC 5987 / 6266: an ASCII-safe `filename=` (latin-1 encodable, so
+    # Starlette can put it in the header) plus a UTF-8 percent-encoded
+    # `filename*=` carrying the real Polish name for modern browsers. The
+    # raw label must never reach a header value — Polish diacritics are not
+    # latin-1 encodable and Starlette raises when encoding it.
+    ascii_name = _ascii_filename(label, deal_id)
+    utf8_name = quote(f"{label} {deal_id}.pdf", safe="")
 
     logger.info(
         f"[documents] deal {deal_id}: streamed {field} ({label}) "
@@ -174,7 +206,10 @@ async def get_client_document_file(token: str, index: int, request: Request):
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_name}"; '
+                f"filename*=UTF-8''{utf8_name}"
+            ),
             "Cache-Control": "no-store",
         },
     )
