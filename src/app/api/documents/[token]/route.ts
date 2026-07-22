@@ -18,7 +18,10 @@ export async function GET(
   const { token } = params;
 
   try {
-    const res = await fetch(`${BACKEND}/api/documents/${token}`, {
+    // Backend router prefix is /documents (no /api) — matching the codebase
+    // convention where nginx strips one /api. This proxy talks to the backend
+    // container directly (no nginx), so it must use the real backend path.
+    const res = await fetch(`${BACKEND}/documents/${token}`, {
       cache: 'no-store',
     });
 

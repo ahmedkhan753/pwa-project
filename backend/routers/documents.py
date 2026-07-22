@@ -26,7 +26,7 @@ from services.valuation_documents import (
     resolve_deal_id_by_token,
 )
 
-router = APIRouter(prefix="/api/documents", tags=["Client Documents"])
+router = APIRouter(prefix="/documents", tags=["Client Documents"])
 logger = logging.getLogger("routers.documents")
 
 

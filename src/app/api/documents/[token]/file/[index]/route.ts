@@ -18,8 +18,10 @@ export async function GET(
   const { token, index } = params;
 
   try {
+    // Backend router prefix is /documents (no /api) — this proxy hits the
+    // backend container directly (bypassing nginx), so it uses the real path.
     const res = await fetch(
-      `${BACKEND}/api/documents/${token}/file/${index}`,
+      `${BACKEND}/documents/${token}/file/${index}`,
       { cache: 'no-store' },
     );
 
