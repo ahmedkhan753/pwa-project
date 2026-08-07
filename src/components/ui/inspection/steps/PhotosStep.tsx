@@ -54,6 +54,9 @@ function VideoRecordSlot({
     const [state, setState] = useState<'idle' | 'recording' | 'preview' | 'fallback'>('idle');
     const [countdown, setCountdown] = useState(6);
     const [recordedUrl, setRecordedUrl] = useState<string>('');
+    // True while handleConfirm awaits the blob fetch — disables the confirm
+    // button so a double-tap can't double-submit or race the state change.
+    const [isConfirming, setIsConfirming] = useState(false);
 
     const stopAll = useCallback(() => {
         if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
@@ -145,16 +148,32 @@ function VideoRecordSlot({
         setState('idle');
     };
 
-    const handleConfirm = () => {
-        if (!recordedUrl) return;
+    const handleConfirm = async () => {
+        if (!recordedUrl || isConfirming) return;
         // Hand the raw Blob up — the parent persists it to IndexedDB and
         // also generates a small object-URL preview for the slot. We
         // intentionally avoid FileReader.readAsDataURL here: a 30 MB
         // base64 string in JS memory can OOM iOS Safari.
-        fetch(recordedUrl)
-            .then(r => r.blob())
-            .then(blob => { onCapture(blob); });
-        setState('idle');
+        //
+        // Await the fetch→blob BEFORE any setState: changing state re-runs the
+        // cleanup effect, which revokes recordedUrl. The old code called
+        // setState('idle') synchronously right after kicking off the fetch, so
+        // the blob: URL could be revoked mid-fetch and onCapture would never
+        // fire — the recording was silently lost (deal 2866).
+        setIsConfirming(true);
+        try {
+            const blob = await fetch(recordedUrl).then(r => r.blob());
+            onCapture(blob);
+            setState('idle');
+        } catch (err) {
+            // No .catch() previously — a rejection here dropped the recording
+            // with zero user-visible signal. Surface it and stay in 'preview'
+            // so the inspector knows to retry (Ponów / Zatwierdź still shown).
+            console.error('[VideoRecordSlot] failed to materialize recorded blob:', err);
+            alert('Nie udało się zapisać nagranego filmu — spróbuj ponownie.');
+        } finally {
+            setIsConfirming(false);
+        }
     };
 
     const handleFallbackInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -273,9 +292,10 @@ function VideoRecordSlot({
                         </button>
                         <button
                             onClick={handleConfirm}
-                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all"
+                            disabled={isConfirming}
+                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-60 disabled:active:scale-100"
                         >
-                            <Check size={14} /> Zatwierdź
+                            <Check size={14} /> {isConfirming ? 'Zapisywanie…' : 'Zatwierdź'}
                         </button>
                     </div>
                 </div>
@@ -496,6 +516,9 @@ export function PhotosStep() {
             filename: videoFilenameFor(blob, slotId),
         }).catch((err) => {
             console.error(`[PhotosStep] video enqueue failed for ${slotId}:`, err);
+            // Enqueue failure means the video never reached the upload queue —
+            // tell the inspector so a recording is never lost silently.
+            alert('Nie udało się zapisać filmu do wysyłki — nagraj ponownie.');
         });
     };
 
