@@ -26,6 +26,7 @@ function VideoRecordSlot({
     onFallbackCapture,
     uploadStatus,
     uploadProgress,
+    uploaded,
 }: {
     slot: PhotoSlot;
     onCapture: (blob: Blob) => void;
@@ -37,6 +38,10 @@ function VideoRecordSlot({
     uploadStatus?: 'idle' | 'uploading' | 'uploaded' | 'failed';
     /** 0–100, only meaningful while uploadStatus === 'uploading'. */
     uploadProgress?: number;
+    /** true if the backend DB confirmed this video was already uploaded.
+     *  localStorage strips slot base64 on persist (iOS memory fix), so after
+     *  a refresh this is the only signal the slot is actually filled. */
+    uploaded?: boolean;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -157,12 +162,37 @@ function VideoRecordSlot({
         setState('idle');
     };
 
-    // Already captured — show thumbnail with upload status overlay
-    if (slot.base64) {
+    // Already captured (local blob) OR confirmed uploaded on the server.
+    // base64 is stripped from localStorage on persist, so after a refresh an
+    // uploaded video has no local blob — fall through to the "saved" state
+    // below rather than rendering an empty <video>.
+    if (slot.base64 || uploaded) {
         const isUploading = uploadStatus === 'uploading';
         const isFailed    = uploadStatus === 'failed';
         const pct = Math.max(0, Math.min(100, uploadProgress ?? 0));
         const borderColor = isFailed ? 'border-red-500' : 'border-success';
+
+        // Server has the video but we have no local blob to play (post-refresh).
+        // Show a reassuring "saved" state — same success treatment PhotoUploadSlot
+        // uses — tappable to re-record if the appraiser wants to replace it.
+        if (!slot.base64) {
+            return (
+                <div className="flex flex-col gap-2 col-span-2">
+                    <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
+                    <button
+                        onClick={startRecording}
+                        className="photo-slot w-full flex-col gap-1 border-success/50 bg-success/5 py-6"
+                    >
+                        <CheckCircle2 size={20} className="text-success" />
+                        <span className="text-[10px] font-medium text-secondary text-center leading-tight px-1">
+                            {slot.label}
+                        </span>
+                        <span className="text-[8px] text-success font-bold">ZAPISANO</span>
+                    </button>
+                </div>
+            );
+        }
+
         return (
             <div className="flex flex-col gap-2 col-span-2">
                 <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
@@ -275,6 +305,10 @@ export function PhotosStep() {
     const [deadCount, setDeadCount] = useState(0);
     const [deadSlots, setDeadSlots] = useState<string[]>([]);
     const [uploadedSlots, setUploadedSlots] = useState<Set<string>>(new Set());
+    // False until the mount-time /files/list fetch settles. Gates the
+    // "X missing" counter so a refresh doesn't briefly show already-uploaded
+    // slots as missing before the server list resolves.
+    const [uploadedSlotsLoaded, setUploadedSlotsLoaded] = useState(false);
 
     const requiredSlots = photoSlots.slice(0, 34);
     const optionalSlots = photoSlots.slice(34);
@@ -292,19 +326,27 @@ export function PhotosStep() {
     // This restores the "uploaded" markers after an iOS crash/reload
     // where Zustand base64 was wiped but the backend has the photos.
     useEffect(() => {
-        if (!dealId || !token) return;
+        // No deal/token → nothing to fetch; local base64 is the only truth,
+        // so treat the "server list" as resolved immediately (empty).
+        if (!dealId || !token) { setUploadedSlotsLoaded(true); return; }
         let cancelled = false;
         (async () => {
             try {
                 const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
-                if (!res.ok || cancelled) return;
-                const json = await res.json();
-                const slots: string[] = json.uploaded_slots || [];
-                if (!cancelled) setUploadedSlots(new Set(slots));
+                if (cancelled) return;
+                if (res.ok) {
+                    const json = await res.json();
+                    const slots: string[] = json.uploaded_slots || [];
+                    setUploadedSlots(new Set(slots));
+                }
             } catch {
                 // network error — non-fatal, slots will just show as empty
+            } finally {
+                // Whether it succeeded, failed, or errored, the fetch has
+                // settled — reveal the real counters instead of "loading".
+                if (!cancelled) setUploadedSlotsLoaded(true);
             }
         })();
         return () => { cancelled = true; };
@@ -484,10 +526,21 @@ export function PhotosStep() {
                     </h3>
                 </div>
                 <div className="flex items-center gap-1.5 bg-surface px-3 py-1 rounded-full border border-border">
-                    <CheckCircle2 size={14} className={requiredFilledCount === required.length ? "text-success" : "text-muted"} />
-                    <span className="text-[10px] font-black text-secondary uppercase tracking-widest">
-                        {requiredFilledCount}/{required.length} Wymagane
-                    </span>
+                    {!uploadedSlotsLoaded ? (
+                        <>
+                            <CloudUpload size={14} className="text-muted animate-pulse" />
+                            <span className="text-[10px] font-black text-muted uppercase tracking-widest">
+                                Sprawdzanie…
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <CheckCircle2 size={14} className={requiredFilledCount === required.length ? "text-success" : "text-muted"} />
+                            <span className="text-[10px] font-black text-secondary uppercase tracking-widest">
+                                {requiredFilledCount}/{required.length} Wymagane
+                            </span>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -495,12 +548,14 @@ export function PhotosStep() {
             <div className="bg-surface rounded-2xl p-4 border border-border shadow-sm">
                 <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] font-black text-muted uppercase tracking-widest">Postęp całkowity</span>
-                    <span className="text-xs font-black text-primary">{Math.round((filledCount / photoSlots.length) * 100)}%</span>
+                    <span className="text-xs font-black text-primary">
+                        {uploadedSlotsLoaded ? `${Math.round((filledCount / photoSlots.length) * 100)}%` : '…'}
+                    </span>
                 </div>
                 <div className="w-full bg-surface-raised h-2.5 rounded-full overflow-hidden border border-border/50">
                     <div
                         className="h-full bg-gradient-to-r from-primary to-success rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${(filledCount / photoSlots.length) * 100}%` }}
+                        style={{ width: uploadedSlotsLoaded ? `${(filledCount / photoSlots.length) * 100}%` : '0%' }}
                     />
                 </div>
             </div>
@@ -550,6 +605,7 @@ export function PhotosStep() {
                             onFallbackCapture={(e) => handleVideoCapture(e, slot.id)}
                             uploadStatus={videoUploadStatus[slot.id] || 'idle'}
                             uploadProgress={videoUploadProgress[slot.id]}
+                            uploaded={uploadedSlots.has(slot.id)}
                         />
                     ) : (
                         <PhotoUploadSlot
