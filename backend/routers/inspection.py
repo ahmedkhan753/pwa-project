@@ -316,6 +316,49 @@ async def _background_submit(gateway, deal_id: int, body: dict):
                 f"[BG] Signature upload block failed for deal {deal_id} (non-fatal): {sig_outer}"
             )
 
+        # 6d. Upload engine video to its dedicated Bitrix "Wideo silnika" field.
+        # The video is already stored in inspection_photos (slot "video_engine")
+        # and served in the report/gallery, but was never pushed to its own
+        # UF_CRM field. Mirrors the PDF/signature upload pattern (base64 +
+        # fileData, non-fatal). Loops the slot→field mapping so any future
+        # video slot is handled without another code change.
+        try:
+            from routers.report import VIDEO_FIELD_BY_SLOT, _detect_video_mime
+            video_rows = db.query(InspectionPhoto).filter(
+                InspectionPhoto.deal_id == deal_id,
+                InspectionPhoto.slot_id.in_(list(VIDEO_FIELD_BY_SLOT.keys())),
+            ).all()
+            for vrow in video_rows:
+                field_id = VIDEO_FIELD_BY_SLOT.get(vrow.slot_id)
+                if not field_id or not vrow.photo_bytes:
+                    continue  # no mapping or no bytes → nothing to upload
+                try:
+                    # Match the extension to the stored bytes, same detection
+                    # the gallery uses when serving the video.
+                    ext = "webm" if _detect_video_mime(vrow.photo_bytes[:12]) == "video/webm" else "mp4"
+                    base = "silnika" if vrow.slot_id == "video_engine" else vrow.slot_id.replace("video_", "")
+                    vid_filename = f"Video_{base}_{deal_id}.{ext}"
+                    vid_b64 = b64_module.b64encode(vrow.photo_bytes).decode("utf-8")
+                    await gateway.call("crm.deal.update", {
+                        "ID": deal_id,
+                        "fields": {field_id: {"fileData": [vid_filename, vid_b64]}},
+                    })
+                    logger.info(
+                        f"[BG] Video uploaded to Bitrix deal {deal_id} "
+                        f"({vrow.slot_id} → {field_id}, {len(vrow.photo_bytes)} bytes)"
+                    )
+                except Exception as vid_upload_err:
+                    logger.warning(
+                        f"[BG] Video upload to Bitrix failed for deal {deal_id} "
+                        f"({vrow.slot_id}, non-fatal): {vid_upload_err}"
+                    )
+        except Exception as vid_outer:
+            # No video captured, or a query slip — skip silently (non-fatal),
+            # must not derail the report-URL / gallery-URL writes that follow.
+            logger.warning(
+                f"[BG] Video upload block failed for deal {deal_id} (non-fatal): {vid_outer}"
+            )
+
         # 7. Write public report URL to Bitrix field UF_CRM_1775247032324
         # Non-blocking: failure here must never abort the core submit flow
         try:
