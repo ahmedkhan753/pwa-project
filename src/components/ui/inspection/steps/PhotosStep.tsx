@@ -51,11 +51,20 @@ function VideoRecordSlot({
     const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // The assembled recording itself. This — not the blob: URL — is the source
+    // of truth for confirm. An object URL can be revoked out from under us; a
+    // Blob reference stays valid until it's dropped.
+    const recordedBlobRef = useRef<Blob | null>(null);
+    // Mirror of recordedUrl. Cleanup reads the ref instead of the state value so
+    // the unmount effect doesn't need recordedUrl as a dependency (a dep there
+    // makes the effect re-run — and revoke — on every URL change, not on unmount).
+    const recordedUrlRef = useRef<string>('');
+
     const [state, setState] = useState<'idle' | 'recording' | 'preview' | 'fallback'>('idle');
     const [countdown, setCountdown] = useState(6);
     const [recordedUrl, setRecordedUrl] = useState<string>('');
-    // True while handleConfirm awaits the blob fetch — disables the confirm
-    // button so a double-tap can't double-submit or race the state change.
+    // True while handleConfirm hands the blob to the parent — disables the
+    // confirm button so a double-tap can't double-submit.
     const [isConfirming, setIsConfirming] = useState(false);
 
     const stopAll = useCallback(() => {
@@ -63,6 +72,15 @@ function VideoRecordSlot({
         if (stopTimerRef.current) { clearTimeout(stopTimerRef.current); stopTimerRef.current = null; }
         streamRef.current?.getTracks().forEach(t => t.stop());
         streamRef.current = null;
+    }, []);
+
+    /** Drop the current recording: revoke the preview URL and release the Blob.
+     *  Called ONLY when the user explicitly discards / starts a new recording,
+     *  and on unmount. Never on the confirm path. */
+    const releaseRecording = useCallback(() => {
+        if (recordedUrlRef.current) URL.revokeObjectURL(recordedUrlRef.current);
+        recordedUrlRef.current = '';
+        recordedBlobRef.current = null;
     }, []);
 
     // FIX 1: Black screen — video element doesn't exist until state='recording'.
@@ -74,14 +92,19 @@ function VideoRecordSlot({
         }
     }, [state]);
 
-    // Cleanup on unmount
+    // Cleanup on unmount ONLY. Both deps are stable useCallback([]) identities,
+    // so this never re-runs mid-session — which is what previously revoked the
+    // preview URL as a side-effect of a recordedUrl state change.
     useEffect(() => () => {
         stopAll();
-        if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    }, [stopAll, recordedUrl]);
+        releaseRecording();
+    }, [stopAll, releaseRecording]);
 
     const startRecording = async () => {
         try {
+            // Explicit user action to (re-)record — safe to free the previous take.
+            releaseRecording();
+            setRecordedUrl('');
             // iOS Safari's MediaRecorder is unreliable (empty blobs, no onstop firing).
             // Always use the native file input fallback on iOS — gives better quality and stability.
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -107,7 +130,23 @@ function VideoRecordSlot({
             recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
             recorder.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
+                // Keep the Blob BEFORE minting the object URL. Confirm reads this
+                // ref, so the recording survives even if the URL is revoked.
+                recordedBlobRef.current = blob;
+                console.log('[VideoRecordSlot] onstop blob:', {
+                    size: blob.size,
+                    type: blob.type,
+                    chunks: chunksRef.current.length,
+                });
+                if (blob.size === 0) {
+                    console.error('[VideoRecordSlot] onstop produced an empty blob', {
+                        recorderMimeType: recorder.mimeType,
+                        chunks: chunksRef.current.length,
+                    });
+                }
+                // Object URL is for the <video> preview element only.
                 const url = URL.createObjectURL(blob);
+                recordedUrlRef.current = url;
                 setRecordedUrl(url);
                 setState('preview');
                 stopAll();
@@ -142,34 +181,48 @@ function VideoRecordSlot({
         }
     };
 
+    /** "Ponów" — the user discarded this take. One of the only two places
+     *  allowed to revoke the preview URL (the other is unmount). */
     const handleRetake = () => {
-        if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+        releaseRecording();
         setRecordedUrl('');
         setState('idle');
     };
 
-    const handleConfirm = async () => {
-        if (!recordedUrl || isConfirming) return;
+    const handleConfirm = () => {
+        if (isConfirming) return;
         // Hand the raw Blob up — the parent persists it to IndexedDB and
         // also generates a small object-URL preview for the slot. We
         // intentionally avoid FileReader.readAsDataURL here: a 30 MB
         // base64 string in JS memory can OOM iOS Safari.
         //
-        // Await the fetch→blob BEFORE any setState: changing state re-runs the
-        // cleanup effect, which revokes recordedUrl. The old code called
-        // setState('idle') synchronously right after kicking off the fetch, so
-        // the blob: URL could be revoked mid-fetch and onCapture would never
-        // fire — the recording was silently lost (deal 2866).
+        // Read the Blob straight from the ref. The old code did
+        // fetch(recordedUrl).then(r => r.blob()) instead, which throws on
+        // Android Chrome once the blob: URL has been revoked — and the cleanup
+        // effect revoked it on every recordedUrl change, so the recording was
+        // lost and the inspector just got the failure alert (deal 2866).
+        const blob = recordedBlobRef.current;
+        if (!blob) {
+            console.error('[VideoRecordSlot] confirm with no blob in recordedBlobRef', {
+                state,
+                hasUrl: Boolean(recordedUrlRef.current),
+            });
+            alert('Nie udało się zapisać nagranego filmu — spróbuj ponownie.');
+            return;
+        }
+
         setIsConfirming(true);
         try {
-            const blob = await fetch(recordedUrl).then(r => r.blob());
+            console.log('[VideoRecordSlot] confirm blob:', { size: blob.size, type: blob.type });
+            // onCapture → updateVideoSlot, which enqueues for background upload
+            // and has its own .catch() alert if the enqueue fails.
             onCapture(blob);
+            // Safe to change state now: nothing here revokes the URL or the ref.
             setState('idle');
         } catch (err) {
-            // No .catch() previously — a rejection here dropped the recording
-            // with zero user-visible signal. Surface it and stay in 'preview'
-            // so the inspector knows to retry (Ponów / Zatwierdź still shown).
-            console.error('[VideoRecordSlot] failed to materialize recorded blob:', err);
+            // Stay in 'preview' on a synchronous throw so the inspector can
+            // retry — Ponów / Zatwierdź are both still on screen.
+            console.error('[VideoRecordSlot] onCapture threw during confirm:', err);
             alert('Nie udało się zapisać nagranego filmu — spróbuj ponownie.');
         } finally {
             setIsConfirming(false);
@@ -522,6 +575,53 @@ export function PhotosStep() {
         });
     };
 
+    /** URL the slot can render as an <img>/thumbnail for an already-uploaded
+     *  slot with no local base64. Token goes in the query string because an
+     *  <img src> can't set an Authorization header — get_current_user accepts
+     *  ?token= for exactly this case. undefined when we can't authenticate,
+     *  which makes the slot fall back to the plain ZAPISANO card. */
+    const uploadedUrlFor = (slotId: string): string | undefined =>
+        dealId && token && uploadedSlots.has(slotId)
+            ? `${apiUrl}/files/photo/${dealId}/${slotId}?token=${encodeURIComponent(token)}`
+            : undefined;
+
+    /** Clearing a slot has to remove the server copy too. Without this the DB
+     *  row survives, /files/list keeps reporting the slot as uploaded, and the
+     *  slot snaps back to ZAPISANO on the next reload — local and server state
+     *  drift apart. Local state is cleared ONLY after the server confirms, so
+     *  a failed delete leaves the slot exactly as it was. */
+    const handleClearSlot = async (slotId: string) => {
+        // Never uploaded (or no way to authenticate) → nothing on the server.
+        if (!dealId || !token || !uploadedSlots.has(slotId)) {
+            clearPhotoSlot(slotId);
+            return;
+        }
+        try {
+            const res = await fetch(`${apiUrl}/files/photo/${dealId}/${slotId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            // 404 means it's already gone server-side — that's the state we
+            // wanted, so let the local clear proceed rather than trapping the
+            // inspector with a slot they can't remove.
+            if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+
+            // Drop the marker so the slot goes back to empty/WYMAGANE and the
+            // filled/required counters update immediately.
+            setUploadedSlots((prev) => {
+                const next = new Set(prev);
+                next.delete(slotId);
+                return next;
+            });
+            clearPhotoSlot(slotId);
+        } catch (err) {
+            console.error(`[PhotosStep] server delete failed for ${slotId}:`, err);
+            alert('Nie udało się usunąć zdjęcia z serwera — spróbuj ponownie.');
+            // Deliberately no clearPhotoSlot() here: the server still has the
+            // photo, so wiping it locally would hide a row that still exists.
+        }
+    };
+
     const handleVideoCapture = (e: React.ChangeEvent<HTMLInputElement>, slotId: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -624,7 +724,7 @@ export function PhotosStep() {
                             key={slot.id}
                             slot={slot}
                             onCapture={(blob) => updateVideoSlot(slot.id, blob)}
-                            onClear={() => clearPhotoSlot(slot.id)}
+                            onClear={() => handleClearSlot(slot.id)}
                             onFallbackCapture={(e) => handleVideoCapture(e, slot.id)}
                             uploadStatus={videoUploadStatus[slot.id] || 'idle'}
                             uploadProgress={videoUploadProgress[slot.id]}
@@ -637,8 +737,9 @@ export function PhotosStep() {
                             base64={slot.base64}
                             required={slot.required}
                             uploaded={uploadedSlots.has(slot.id)}
+                            uploadedUrl={uploadedUrlFor(slot.id)}
                             onCapture={(preview, full) => updatePhotoSlot(slot.id, preview, full)}
-                            onClear={() => clearPhotoSlot(slot.id)}
+                            onClear={() => handleClearSlot(slot.id)}
                         />
                     )
                 ))}
@@ -679,8 +780,9 @@ export function PhotosStep() {
                                 base64={slot.base64}
                                 required={false}
                                 uploaded={uploadedSlots.has(slot.id)}
+                                uploadedUrl={uploadedUrlFor(slot.id)}
                                 onCapture={(preview, full) => updatePhotoSlot(slot.id, preview, full)}
-                                onClear={() => clearPhotoSlot(slot.id)}
+                                onClear={() => handleClearSlot(slot.id)}
                             />
                         ))}
                     </div>

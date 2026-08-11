@@ -9,13 +9,15 @@ import asyncio
 import base64
 import logging
 from typing import Dict, List
-from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from starlette.requests import ClientDisconnect
 
 from models.inspection import FileUploadResult, BatchUploadResult
 from models.inspector import InspectionPhoto
 from database import SessionLocal
+from deps import get_current_user
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -516,6 +518,156 @@ async def list_uploaded_slots(deal_id: int):
             db.close()
         except Exception:
             pass
+
+
+def _sniff_media_type(slot_id: str, data: bytes) -> str:
+    """
+    Content-Type for a stored inspection_photos row.
+
+    Slot id is the primary signal — `video_*` slots (e.g. video_engine) always
+    hold video — and magic bytes pick the concrete container. Mirrors the
+    defaults of report._detect_video_mime (webm magic → webm, otherwise mp4)
+    so the same row serves identically through /files and /api/gallery.
+    Falls back to image/jpeg: that's what the PWA compresses photos to.
+    """
+    head = data[:12]
+
+    if slot_id.startswith("video_"):
+        if head[:4] == b"\x1aE\xdf\xa3":
+            return "video/webm"
+        return "video/mp4"
+
+    if head[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if head[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if head[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+
+    # Non-video slot id holding video bytes — possible via the native file-input
+    # fallback path. Sniff rather than mislabel it as an image.
+    if head[:4] == b"\x1aE\xdf\xa3":
+        return "video/webm"
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return "video/mp4"
+
+    return "image/jpeg"
+
+
+@router.get("/photo/{deal_id}/{slot_id}")
+async def get_uploaded_photo(
+    deal_id: int,
+    slot_id: str,
+    _user: dict = Depends(get_current_user),
+):
+    """
+    GET /files/photo/{deal_id}/{slot_id}
+    Stream back the bytes of one already-uploaded slot.
+
+    Companion to /files/list/{deal_id}: that endpoint says *which* slots are in
+    the DB, this one returns the actual image so the wizard can render a real
+    thumbnail after a reload instead of a generic "saved" placeholder.
+
+    Auth uses get_current_user, which also accepts `?token=` — required here
+    because an <img src> cannot send an Authorization header (same reason the
+    PDF links use it).
+    """
+    db = None
+    try:
+        db = SessionLocal()
+        row = db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == int(deal_id),
+            InspectionPhoto.slot_id == slot_id,
+        ).first()
+        if row is None or not row.photo_bytes:
+            raise HTTPException(status_code=404, detail="Photo not found")
+
+        data: bytes = row.photo_bytes
+        return Response(
+            content=data,
+            media_type=_sniff_media_type(slot_id, data),
+            headers={
+                "Content-Length": str(len(data)),
+                # Short and private: a slot can be overwritten by a retake or
+                # removed by the DELETE below, so it must not be cached hard.
+                "Cache-Control": "private, max-age=60",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[files/photo] GET failed deal={deal_id} slot={slot_id}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read photo")
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+
+@router.delete("/photo/{deal_id}/{slot_id}")
+async def delete_uploaded_photo(
+    deal_id: int,
+    slot_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    DELETE /files/photo/{deal_id}/{slot_id}
+    Remove the stored row(s) for this slot so the inspector's "X" actually
+    clears the server copy — previously it only wiped local state and the DB
+    row survived, leaving the slot stuck on ZAPISANO after the next reload.
+
+    Inspector-authed (get_current_user), unlike the read-only /files/list.
+    404 when nothing matched, so the client can tell "already gone" from
+    "delete failed" and avoid clearing local state on a real failure.
+    Bitrix-side cleanup is deliberately not attempted — same call as the
+    admin delete: the DB is what the wizard and the report read first.
+    """
+    db = None
+    try:
+        db = SessionLocal()
+        rows = db.query(InspectionPhoto).filter(
+            InspectionPhoto.deal_id == int(deal_id),
+            InspectionPhoto.slot_id == slot_id,
+        ).all()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Photo not found")
+
+        total_bytes = sum(len(r.photo_bytes) if r.photo_bytes else 0 for r in rows)
+        for r in rows:
+            db.delete(r)
+        db.commit()
+
+        who = current_user.get("name") or current_user.get("phone") or current_user.get("sub") or "?"
+        logger.warning(
+            f"[files/photo] DELETED deal={deal_id} slot={slot_id} "
+            f"rows={len(rows)} size={total_bytes}B by={who}"
+        )
+        return {
+            "success": True,
+            "deal_id": int(deal_id),
+            "slot_id": slot_id,
+            "deleted": len(rows),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        logger.error(f"[files/photo] DELETE failed deal={deal_id} slot={slot_id}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete photo")
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 @router.post("/upload-batch", response_model=BatchUploadResult)
