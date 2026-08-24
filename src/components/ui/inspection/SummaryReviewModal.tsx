@@ -1,7 +1,8 @@
 "use client";
 
 import { useInspectionStore } from "@/store/useInspectionStore";
-import { AlertCircle, Camera, CheckCircle2, Paintbrush, X } from "lucide-react";
+import { useUploadedSlots } from "@/lib/useUploadedSlots";
+import { AlertCircle, Camera, CheckCircle2, CloudUpload, Paintbrush, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SummaryReviewModalProps {
@@ -12,11 +13,19 @@ interface SummaryReviewModalProps {
 
 export function SummaryReviewModal({ isOpen, onClose, onContinue }: SummaryReviewModalProps) {
     const { data } = useInspectionStore();
+    // Same confirmed-upload list PhotosStep / ValidationStep use. Hook call has
+    // to sit above the isOpen early-return (rules of hooks); `isOpen` is passed
+    // as `enabled` so a closed modal doesn't fetch, and an opened one fetches
+    // fresh rather than reusing whatever was true when the parent mounted.
+    const { uploadedSlots, loaded: photosChecked } = useUploadedSlots(isOpen);
 
     if (!isOpen) return null;
 
     // Validation Logic
-    const missingMainPhotos = data.photos.filter(p => p.required && !p.base64);
+    // A slot counts as filled when it has a local preview OR the backend
+    // confirmed the bytes — persist strips base64 on write, so base64 alone
+    // reports every uploaded slot as missing after a reload.
+    const missingMainPhotos = data.photos.filter(p => p.required && !p.base64 && !uploadedSlots.has(p.id));
     const missingPaint = Object.values(data.paintMeasurement).filter(p => !p.value);
 
     const exteriorDamageErrors = data.exteriorDamage.filter(d => d.photos.length < 2);
@@ -26,6 +35,11 @@ export function SummaryReviewModal({ isOpen, onClose, onContinue }: SummaryRevie
         missingPaint.length > 0 ||
         exteriorDamageErrors.length > 0 ||
         interiorDamageErrors.length > 0;
+
+    // Until the server list settles we don't know which photos are really
+    // missing — show that instead of a verdict, and keep "Kontynuuj" closed
+    // rather than waving through a report we haven't finished checking.
+    const checking = !photosChecked;
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in transition-all">
@@ -41,7 +55,13 @@ export function SummaryReviewModal({ isOpen, onClose, onContinue }: SummaryRevie
                 </div>
 
                 <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4 bg-surface">
-                    {!hasErrors ? (
+                    {checking ? (
+                        <div className="text-center py-4">
+                            <CloudUpload size={48} className="mx-auto text-muted animate-pulse mb-2" />
+                            <p className="text-sm text-foreground font-bold">Sprawdzanie zapisanych zdjęć…</p>
+                            <p className="text-xs text-secondary">Sprawdzamy, które zdjęcia są już na serwerze.</p>
+                        </div>
+                    ) : !hasErrors ? (
                         <div className="text-center py-4">
                             <CheckCircle2 size={48} className="mx-auto text-green-500 mb-2" />
                             <p className="text-sm text-foreground font-bold">Wszystko wygląda poprawnie!</p>
@@ -97,11 +117,11 @@ export function SummaryReviewModal({ isOpen, onClose, onContinue }: SummaryRevie
                         onClick={onContinue}
                         className={cn(
                             "flex-1 py-3.5 px-4 font-bold rounded-2xl text-sm transition-all active:scale-95 shadow-lg",
-                            hasErrors
+                            hasErrors || checking
                                 ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                                 : "bg-primary text-white hover:bg-primary-dark"
                         )}
-                        disabled={hasErrors}
+                        disabled={hasErrors || checking}
                     >
                         Kontynuuj
                     </button>

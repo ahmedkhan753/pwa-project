@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useInspectionStore, PhotoSlot } from "@/store/useInspectionStore";
+import { useUploadedSlots } from "@/lib/useUploadedSlots";
 import { PhotoUploadSlot } from "../PhotoUploadSlot";
 import { Camera, CheckCircle2, ChevronDown, Plus, Video, RotateCcw, Check, X, CloudUpload, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ function VideoRecordSlot({
     uploadStatus,
     uploadProgress,
     uploaded,
+    thumbnailUrl,
 }: {
     slot: PhotoSlot;
     onCapture: (blob: Blob) => void;
@@ -42,6 +44,11 @@ function VideoRecordSlot({
      *  localStorage strips slot base64 on persist (iOS memory fix), so after
      *  a refresh this is the only signal the slot is actually filled. */
     uploaded?: boolean;
+    /** GET /files/photo/... for this slot. Only used when the slot is
+     *  `uploaded` but has no local blob (post-reload) — lets the appraiser
+     *  re-watch the saved film instead of staring at a checkmark. Optional:
+     *  undefined when we can't authenticate, which keeps the badge-only card. */
+    thumbnailUrl?: string;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -66,6 +73,12 @@ function VideoRecordSlot({
     // True while handleConfirm hands the blob to the parent — disables the
     // confirm button so a double-tap can't double-submit.
     const [isConfirming, setIsConfirming] = useState(false);
+    // Set if the server copy 404s / fails to load — falls back to the
+    // badge-only ZAPISANO card so a broken player is never shown.
+    const [remoteFailed, setRemoteFailed] = useState(false);
+
+    // A new URL (different deal or a retake) deserves a fresh attempt.
+    useEffect(() => { setRemoteFailed(false); }, [thumbnailUrl]);
 
     const stopAll = useCallback(() => {
         if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
@@ -245,8 +258,51 @@ function VideoRecordSlot({
         const borderColor = isFailed ? 'border-red-500' : 'border-success';
 
         // Server has the video but we have no local blob to play (post-refresh).
-        // Show a reassuring "saved" state — same success treatment PhotoUploadSlot
-        // uses — tappable to re-record if the appraiser wants to replace it.
+        // Stream it back from the DB so the appraiser can actually re-watch the
+        // saved film — same treatment PhotoUploadSlot gives an uploaded photo.
+        if (!slot.base64 && thumbnailUrl && !remoteFailed) {
+            return (
+                <div className="flex flex-col gap-2 col-span-2">
+                    <label className="text-xs font-bold uppercase text-gray-500">{slot.label}</label>
+                    <div className="relative rounded-2xl overflow-hidden border-2 border-success bg-black">
+                        {/* playsInline required on iOS for inline playback.
+                            preload="metadata" keeps a 45 MB film off the wire
+                            until the appraiser actually presses play. */}
+                        <video
+                            src={thumbnailUrl}
+                            controls
+                            playsInline
+                            preload="metadata"
+                            className="w-full rounded-xl"
+                            style={{ maxHeight: '200px' }}
+                            onError={() => setRemoteFailed(true)}
+                        />
+                        <span className="absolute top-2 left-2 bg-success text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
+                            ZAPISANO
+                        </span>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onClear(); }}
+                            className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg"
+                            aria-label={`Usuń ${slot.label}`}
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                    {/* The card itself is no longer tappable (the player owns
+                        those taps), so re-recording gets its own button. */}
+                    <button
+                        onClick={startRecording}
+                        className="flex items-center justify-center gap-2 py-2.5 bg-surface-raised border-2 border-border rounded-xl text-[10px] font-black uppercase text-muted active:scale-95 transition-all"
+                    >
+                        <RotateCcw size={12} /> Nagraj ponownie
+                    </button>
+                </div>
+            );
+        }
+
+        // No local blob and no way to stream the server copy (no token, or the
+        // player errored): the original reassuring "saved" badge, tappable to
+        // re-record if the appraiser wants to replace it.
         if (!slot.base64) {
             return (
                 <div className="flex flex-col gap-2 col-span-2">
@@ -377,11 +433,17 @@ export function PhotosStep() {
     const [pendingCount, setPendingCount] = useState(0);
     const [deadCount, setDeadCount] = useState(0);
     const [deadSlots, setDeadSlots] = useState<string[]>([]);
-    const [uploadedSlots, setUploadedSlots] = useState<Set<string>>(new Set());
-    // False until the mount-time /files/list fetch settles. Gates the
-    // "X missing" counter so a refresh doesn't briefly show already-uploaded
-    // slots as missing before the server list resolves.
-    const [uploadedSlotsLoaded, setUploadedSlotsLoaded] = useState(false);
+    // Confirmed-upload markers live in a shared hook because ValidationStep
+    // needs the same answer and only one step is mounted at a time.
+    // `uploadedSlotsLoaded` is false until the /files/list fetch settles, which
+    // gates the "X missing" counter so a refresh doesn't briefly show
+    // already-uploaded slots as missing before the server list resolves.
+    const {
+        uploadedSlots,
+        setUploadedSlots,
+        loaded: uploadedSlotsLoaded,
+        refresh: refreshUploadedSlots,
+    } = useUploadedSlots();
 
     const requiredSlots = photoSlots.slice(0, 34);
     const optionalSlots = photoSlots.slice(34);
@@ -395,35 +457,9 @@ export function PhotosStep() {
     const token = auth?.token;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-    // ── On mount: fetch which slots are already in the DB ────────────
-    // This restores the "uploaded" markers after an iOS crash/reload
-    // where Zustand base64 was wiped but the backend has the photos.
-    useEffect(() => {
-        // No deal/token → nothing to fetch; local base64 is the only truth,
-        // so treat the "server list" as resolved immediately (empty).
-        if (!dealId || !token) { setUploadedSlotsLoaded(true); return; }
-        let cancelled = false;
-        (async () => {
-            try {
-                const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
-                if (cancelled) return;
-                if (res.ok) {
-                    const json = await res.json();
-                    const slots: string[] = json.uploaded_slots || [];
-                    setUploadedSlots(new Set(slots));
-                }
-            } catch {
-                // network error — non-fatal, slots will just show as empty
-            } finally {
-                // Whether it succeeded, failed, or errored, the fetch has
-                // settled — reveal the real counters instead of "loading".
-                if (!cancelled) setUploadedSlotsLoaded(true);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [dealId, token, apiUrl]);
+    // The mount-time /files/list fetch that used to live here now runs inside
+    // useUploadedSlots — same request, same "settled" gate, shared with
+    // ValidationStep.
 
     // ── Per-video upload status (separate from photo banner) ─────────
     // Banner counts photo uploads only — videos have their own progress
@@ -476,15 +512,7 @@ export function PhotosStep() {
                 // Only re-fetch the backend list when queue shrank (an upload finished)
                 const currentSize = items.length;
                 if (currentSize < prevQueueSize || prevQueueSize === -1) {
-                    try {
-                        const res = await fetch(`${apiUrl}/files/list/${dealId}`, {
-                            headers: { 'Authorization': `Bearer ${token || ''}` },
-                        });
-                        if (res.ok) {
-                            const json = await res.json();
-                            setUploadedSlots(new Set(json.uploaded_slots || []));
-                        }
-                    } catch { /* ignore */ }
+                    await refreshUploadedSlots();
                 }
                 prevQueueSize = currentSize;
             }, 1500);
@@ -493,7 +521,7 @@ export function PhotosStep() {
         refresh();
         const unsub = photoQueue.subscribe(refresh);
         return () => { unsub(); if (timer) clearTimeout(timer); };
-    }, [dealId, token, apiUrl]);
+    }, [dealId, refreshUploadedSlots]);
 
     // ── Subscribe to per-video upload progress events ────────────────
     // Worker reports progress only for the video that's currently in
@@ -729,6 +757,7 @@ export function PhotosStep() {
                             uploadStatus={videoUploadStatus[slot.id] || 'idle'}
                             uploadProgress={videoUploadProgress[slot.id]}
                             uploaded={uploadedSlots.has(slot.id)}
+                            thumbnailUrl={uploadedUrlFor(slot.id)}
                         />
                     ) : (
                         <PhotoUploadSlot

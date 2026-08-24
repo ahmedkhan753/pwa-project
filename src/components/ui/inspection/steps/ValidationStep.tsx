@@ -1,11 +1,16 @@
 "use client";
 
 import { useInspectionStore } from "@/store/useInspectionStore";
-import { AlertTriangle, CheckCircle2, ChevronRight, Camera, FileText, ClipboardList } from "lucide-react";
+import { useUploadedSlots } from "@/lib/useUploadedSlots";
+import { AlertTriangle, CheckCircle2, ChevronRight, Camera, FileText, ClipboardList, CloudUpload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function ValidationStep() {
     const { data, setStep } = useInspectionStore();
+    // Same confirmed-upload list PhotosStep uses. Without it this step counts
+    // a slot as missing whenever base64 is empty — which is every uploaded
+    // slot after a reload, since persist strips base64 on write.
+    const { uploadedSlots, loaded: photosChecked } = useUploadedSlots();
 
     // Validation Logic
     const getValidationErrors = () => {
@@ -24,9 +29,14 @@ export function ValidationStep() {
         const missingTireData = wheels.some(w => !data.tires?.[w]?.brand || !data.tires?.[w]?.size);
         if (missingTireData) errors.push({ step: 5, label: "Brak danych opon (marka/rozmiar)", category: "Opony" });
 
-        // Step 6: Photos (Required only)
-        const requiredPhotosMissing = (data.photos ?? []).filter(p => p?.required && !p?.base64).map(p => p?.label ?? '');
-        if (requiredPhotosMissing.length > 0) {
+        // Step 6: Photos (Required only). A slot counts as filled when it has a
+        // local preview OR the backend confirmed the bytes — mirrors PhotosStep's
+        // requiredFilledCount. Suppressed until the server list has settled so a
+        // reload can't report already-uploaded slots as missing.
+        const requiredPhotosMissing = (data.photos ?? [])
+            .filter(p => p?.required && !p?.base64 && !uploadedSlots.has(p?.id))
+            .map(p => p?.label ?? '');
+        if (photosChecked && requiredPhotosMissing.length > 0) {
             errors.push({ 
                 step: 6, 
                 label: `Brak wymaganych zdjęć (${requiredPhotosMissing.length})`, 
@@ -50,17 +60,23 @@ export function ValidationStep() {
             <div className="text-center space-y-2 mb-8">
                 <div className={cn(
                     "w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-4 transition-all duration-500",
-                    isReady ? "bg-success shadow-lg shadow-success/20" : "bg-warning shadow-lg shadow-warning/20"
+                    !photosChecked
+                        ? "bg-surface-raised border-2 border-border"
+                        : isReady ? "bg-success shadow-lg shadow-success/20" : "bg-warning shadow-lg shadow-warning/20"
                 )}>
-                    {isReady ? <CheckCircle2 size={32} className="text-white" /> : <AlertTriangle size={32} className="text-white" />}
+                    {!photosChecked
+                        ? <CloudUpload size={28} className="text-muted animate-pulse" />
+                        : isReady ? <CheckCircle2 size={32} className="text-white" /> : <AlertTriangle size={32} className="text-white" />}
                 </div>
                 <h3 className="text-2xl font-black text-foreground uppercase tracking-tight">
-                    {isReady ? "Wszystko Gotowe!" : "Wykryto Braki"}
+                    {!photosChecked ? "Sprawdzanie…" : isReady ? "Wszystko Gotowe!" : "Wykryto Braki"}
                 </h3>
                 <p className="text-sm text-muted max-w-[200px] mx-auto font-medium">
-                    {isReady 
-                        ? "Protokół jest kompletny i gotowy do podpisania." 
-                        : "Uzupełnij poniższe dane przed wysłaniem raportu."}
+                    {!photosChecked
+                        ? "Sprawdzamy, które zdjęcia są już zapisane na serwerze."
+                        : isReady
+                            ? "Protokół jest kompletny i gotowy do podpisania."
+                            : "Uzupełnij poniższe dane przed wysłaniem raportu."}
                 </p>
             </div>
 
@@ -83,7 +99,7 @@ export function ValidationStep() {
                     </button>
                 ))}
 
-                {isReady && (
+                {photosChecked && isReady && (
                     <div className="bg-success-light border border-success/20 rounded-3xl p-8 text-center space-y-4">
                         <CheckCircle2 size={40} className="text-success mx-auto" />
                         <p className="text-sm font-bold text-success">
@@ -93,7 +109,7 @@ export function ValidationStep() {
                 )}
             </div>
 
-            {!isReady && (
+            {photosChecked && !isReady && (
                 <div className="p-4 bg-surface-raised rounded-2xl border-2 border-dashed border-border">
                     <p className="text-[10px] text-muted font-bold text-center uppercase leading-normal">
                         Kliknij w brakujący element, aby szybko przejść do odpowiedniego kroku inspekcji.
